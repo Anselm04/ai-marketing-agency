@@ -24,6 +24,7 @@ import ResetPassword from './pages/ResetPassword'
 import Translation from './pages/Translation'
 import LandingPage from './pages/LandingPage'
 import Team from './pages/Team'
+import ProductMarketing from './pages/ProductMarketing'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
 import EmptyState from './components/EmptyState'
 
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="agents" element={<Agents />} />
         <Route path="campaigns" element={<Campaigns />} />
+        <Route path="products" element={<ProductMarketing />} />
         <Route path="social" element={<Social />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="legal" element={<Legal />} />

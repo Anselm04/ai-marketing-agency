@@ -24,6 +24,7 @@ import exportRoutes from './routes/export.js';
 import teamRoutes from './routes/team.js';
 import uploadRoutes from './routes/uploads.js';
 import searchRoutes from './routes/search.js';
+import productRoutes from './routes/products.js';
 import { serveUploads } from './routes/uploads.js';
 
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -107,6 +108,7 @@ app.use('/api/export', exportRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/uploads', authenticate, uploadRoutes);
 app.use('/api/search', authenticate, searchRoutes);
+app.use('/api/products', authenticate, productRoutes);
 
 serveUploads(app);
 
