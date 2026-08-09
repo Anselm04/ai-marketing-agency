@@ -1,8 +1,7 @@
 const requestCounts = new Map();
-const WINDOW_MS = 60 * 1000;
-const MAX_REQUESTS = 100;
+const WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 60 * 1000;
+const MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100;
 
-// Cleanup stale entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [key, timestamps] of requestCounts.entries()) {
