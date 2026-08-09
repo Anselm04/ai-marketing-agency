@@ -1,0 +1,41 @@
+[
+  {
+    "id": "8bcda649-7d3c-4101-8439-b53c55be0374",
+    "name": "test1786274257939@example.com's Team",
+    "ownerId": "0325fcca-3509-4742-96be-652a89446baf",
+    "members": [
+      {
+        "userId": "0325fcca-3509-4742-96be-652a89446baf",
+        "role": "owner",
+        "joinedAt": "2026-08-09T11:17:41.283Z"
+      }
+    ],
+    "createdAt": "2026-08-09T11:17:41.283Z"
+  },
+  {
+    "id": "71d2a9ba-f194-4777-902a-1fe2ff2835cb",
+    "name": "test1786274306944@example.com's Team",
+    "ownerId": "383a03c0-9565-4c03-8b02-b0e592589da9",
+    "members": [
+      {
+        "userId": "383a03c0-9565-4c03-8b02-b0e592589da9",
+        "role": "owner",
+        "joinedAt": "2026-08-09T11:18:30.239Z"
+      }
+    ],
+    "createdAt": "2026-08-09T11:18:30.239Z"
+  },
+  {
+    "id": "9c47bc35-b394-4cd5-a41b-17ff4dd39ec6",
+    "name": "test1786274356134@example.com's Team",
+    "ownerId": "a65d8745-c22a-4aaa-bc95-48d88c933591",
+    "members": [
+      {
+        "userId": "a65d8745-c22a-4aaa-bc95-48d88c933591",
+        "role": "owner",
+        "joinedAt": "2026-08-09T11:19:19.534Z"
+      }
+    ],
+    "createdAt": "2026-08-09T11:19:19.534Z"
+  }
+]

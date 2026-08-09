@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "id": "b90e8939-a939-4d99-b22d-300a94592510",
+    "title": "Test Article",
+    "type": "article",
+    "body": "This is a test article.",
+    "language": "en",
+    "owner": "0325fcca-3509-4742-96be-652a89446baf",
+    "createdAt": "2026-08-09T11:17:41.243Z"
+  },
+  {
+    "id": "3c0f6801-8d01-4b76-9867-2c9d5d009678",
+    "title": "Test Article",
+    "type": "article",
+    "body": "This is a test article.",
+    "language": "en",
+    "owner": "383a03c0-9565-4c03-8b02-b0e592589da9",
+    "createdAt": "2026-08-09T11:18:30.144Z"
+  },
+  {
+    "id": "59c2120d-3e00-4369-853b-73662e311c70",
+    "title": "Test Article",
+    "type": "article",
+    "body": "This is a test article.",
+    "language": "en",
+    "owner": "a65d8745-c22a-4aaa-bc95-48d88c933591",
+    "createdAt": "2026-08-09T11:19:19.445Z"
+  }
+]
