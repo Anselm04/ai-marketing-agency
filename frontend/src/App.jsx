@@ -1,4 +1,5 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Agents from './pages/Agents'
@@ -6,19 +7,54 @@ import Campaigns from './pages/Campaigns'
 import Analytics from './pages/Analytics'
 import Legal from './pages/Legal'
 import Social from './pages/Social'
+import ContentStudio from './pages/ContentStudio'
+import VideoStudio from './pages/VideoStudio'
+import CRM from './pages/CRM'
+import Billing from './pages/Billing'
+import Trends from './pages/Trends'
+import Settings from './pages/Settings'
+import Admin from './pages/Admin'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Translation from './pages/Translation'
 
-function App() {
+function ProtectedRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth()
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-500">Loading...</div></div>
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return children
+}
+
+function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Layout />}>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="agents" element={<Agents />} />
         <Route path="campaigns" element={<Campaigns />} />
+        <Route path="social" element={<Social />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="legal" element={<Legal />} />
-        <Route path="social" element={<Social />} />
+        <Route path="content" element={<ContentStudio />} />
+        <Route path="video" element={<VideoStudio />} />
+        <Route path="translation" element={<Translation />} />
+        <Route path="crm" element={<CRM />} />
+        <Route path="billing" element={<Billing />} />
+        <Route path="trends" element={<Trends />} />
+        <Route path="settings" element={<Settings />} />
+        <Route path="admin" element={<Admin />} />
       </Route>
     </Routes>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   )
 }
 

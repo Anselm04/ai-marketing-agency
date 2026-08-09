@@ -1,0 +1,253 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dataDir = path.join(__dirname, '..', '..', 'data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+function loadFile(name, defaultVal = []) {
+  const file = path.join(dataDir, `${name}.json`);
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch { return defaultVal; }
+}
+
+function saveFile(name, data) {
+  fs.writeFileSync(path.join(dataDir, `${name}.json`), JSON.stringify(data, null, 2));
+}
+
+let users = loadFile('users');
+let agents = loadFile('agents');
+let campaigns = loadFile('campaigns');
+let content = loadFile('content');
+let leads = loadFile('leads');
+let legalDocs = loadFile('legalDocs');
+let tasks = loadFile('tasks');
+let subscriptions = loadFile('subscriptions');
+let analytics = loadFile('analytics', {});
+let settings = loadFile('settings', {});
+
+const store = {
+  _save() {
+    saveFile('users', users);
+    saveFile('agents', agents);
+    saveFile('campaigns', campaigns);
+    saveFile('content', content);
+    saveFile('leads', leads);
+    saveFile('legalDocs', legalDocs);
+    saveFile('tasks', tasks);
+    saveFile('subscriptions', subscriptions);
+    saveFile('analytics', analytics);
+    saveFile('settings', settings);
+  },
+
+  _id() { return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2); },
+
+  // Users
+  getUsers() { return users; },
+  async createUser(userData) {
+    const existing = users.find(u => u.email === userData.email);
+    if (existing) throw new Error('User already exists');
+    const hashed = await bcrypt.hash(userData.password, 12);
+    const user = {
+      id: this._id(),
+      email: userData.email,
+      password: hashed,
+      role: userData.role || 'user',
+      profile: userData.profile || {},
+      createdAt: new Date().toISOString(),
+    };
+    users.push(user);
+    this._save();
+    const { password, ...safe } = user;
+    return safe;
+  },
+  async findUserByEmail(email) { return users.find(u => u.email === email); },
+  async findUserById(id) { return users.find(u => u.id === id); },
+  async updateUser(id, updates) {
+    const idx = users.findIndex(u => u.id === id);
+    if (idx === -1) return null;
+    users[idx] = { ...users[idx], ...updates, id: users[idx].id };
+    this._save();
+    const { password, ...safe } = users[idx];
+    return safe;
+  },
+  async comparePassword(password, hash) { return bcrypt.compare(password, hash); },
+  generateToken(userId) { return jwt.sign({ userId }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' }); },
+  verifyToken(token) { return jwt.verify(token, process.env.JWT_SECRET || 'dev-secret'); },
+
+  // Agents
+  getAgents() { return agents; },
+  getAgentById(id) { return agents.find(a => a.id === id || a.agentId === id); },
+  createAgent(agent) {
+    const a = { id: this._id(), ...agent, createdAt: new Date().toISOString() };
+    agents.push(a);
+    this._save();
+    return a;
+  },
+  updateAgent(id, updates) {
+    const idx = agents.findIndex(a => a.id === id || a.agentId === id);
+    if (idx === -1) return null;
+    agents[idx] = { ...agents[idx], ...updates };
+    this._save();
+    return agents[idx];
+  },
+  deleteAgent(id) {
+    const idx = agents.findIndex(a => a.id === id || a.agentId === id);
+    if (idx === -1) return false;
+    agents.splice(idx, 1);
+    this._save();
+    return true;
+  },
+  seedAgents(defaults) {
+    if (agents.length === 0) {
+      agents = defaults.map(a => ({ id: this._id(), ...a, createdAt: new Date().toISOString() }));
+      this._save();
+    }
+  },
+
+  // Campaigns
+  getCampaigns() { return campaigns; },
+  getCampaignById(id) { return campaigns.find(c => c.id === id); },
+  createCampaign(campaign) {
+    const c = { id: this._id(), ...campaign, createdAt: new Date().toISOString() };
+    campaigns.push(c);
+    this._save();
+    return c;
+  },
+  updateCampaign(id, updates) {
+    const idx = campaigns.findIndex(c => c.id === id);
+    if (idx === -1) return null;
+    campaigns[idx] = { ...campaigns[idx], ...updates };
+    this._save();
+    return campaigns[idx];
+  },
+  deleteCampaign(id) {
+    const idx = campaigns.findIndex(c => c.id === id);
+    if (idx === -1) return false;
+    campaigns.splice(idx, 1);
+    this._save();
+    return true;
+  },
+
+  // Content
+  getContent() { return content; },
+  createContent(item) {
+    const c = { id: this._id(), ...item, createdAt: new Date().toISOString() };
+    content.push(c);
+    this._save();
+    return c;
+  },
+  updateContent(id, updates) {
+    const idx = content.findIndex(c => c.id === id);
+    if (idx === -1) return null;
+    content[idx] = { ...content[idx], ...updates };
+    this._save();
+    return content[idx];
+  },
+  deleteContent(id) {
+    const idx = content.findIndex(c => c.id === id);
+    if (idx === -1) return false;
+    content.splice(idx, 1);
+    this._save();
+    return true;
+  },
+
+  // Leads
+  getLeads() { return leads; },
+  createLead(lead) {
+    const l = { id: this._id(), ...lead, createdAt: new Date().toISOString() };
+    leads.push(l);
+    this._save();
+    return l;
+  },
+  updateLead(id, updates) {
+    const idx = leads.findIndex(l => l.id === id);
+    if (idx === -1) return null;
+    leads[idx] = { ...leads[idx], ...updates };
+    this._save();
+    return leads[idx];
+  },
+  deleteLead(id) {
+    const idx = leads.findIndex(l => l.id === id);
+    if (idx === -1) return false;
+    leads.splice(idx, 1);
+    this._save();
+    return true;
+  },
+
+  // Legal
+  getLegalDocs() { return legalDocs; },
+  createLegalDoc(doc) {
+    const d = { id: this._id(), ...doc, createdAt: new Date().toISOString() };
+    legalDocs.push(d);
+    this._save();
+    return d;
+  },
+  updateLegalDoc(id, updates) {
+    const idx = legalDocs.findIndex(d => d.id === id);
+    if (idx === -1) return null;
+    legalDocs[idx] = { ...legalDocs[idx], ...updates };
+    this._save();
+    return legalDocs[idx];
+  },
+  deleteLegalDoc(id) {
+    const idx = legalDocs.findIndex(d => d.id === id);
+    if (idx === -1) return false;
+    legalDocs.splice(idx, 1);
+    this._save();
+    return true;
+  },
+
+  // Tasks
+  getTasks() { return tasks; },
+  createTask(task) {
+    const t = { id: this._id(), ...task, createdAt: new Date().toISOString() };
+    tasks.push(t);
+    this._save();
+    return t;
+  },
+  updateTask(id, updates) {
+    const idx = tasks.findIndex(t => t.id === id);
+    if (idx === -1) return null;
+    tasks[idx] = { ...tasks[idx], ...updates };
+    this._save();
+    return tasks[idx];
+  },
+  deleteTask(id) {
+    const idx = tasks.findIndex(t => t.id === id);
+    if (idx === -1) return false;
+    tasks.splice(idx, 1);
+    this._save();
+    return true;
+  },
+
+  // Subscriptions
+  getSubscriptions() { return subscriptions; },
+  createSubscription(sub) {
+    const s = { id: this._id(), ...sub, createdAt: new Date().toISOString() };
+    subscriptions.push(s);
+    this._save();
+    return s;
+  },
+  updateSubscription(id, updates) {
+    const idx = subscriptions.findIndex(s => s.id === id);
+    if (idx === -1) return null;
+    subscriptions[idx] = { ...subscriptions[idx], ...updates };
+    this._save();
+    return subscriptions[idx];
+  },
+
+  // Analytics
+  getAnalytics() { return analytics; },
+  setAnalytics(key, value) { analytics[key] = value; this._save(); },
+
+  // Settings
+  getSettings() { return settings; },
+  setSettings(key, value) { settings[key] = value; this._save(); },
+};
+
+export default store;

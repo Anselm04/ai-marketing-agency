@@ -1,27 +1,68 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import store from '../utils/store.js';
+import { validateBody } from '../middleware/validate.js';
 
 const router = express.Router();
 
-const users = [];
-
-router.post('/register', async (req, res) => {
-  const { email, password } = req.body;
-  const hashed = await bcrypt.hash(password, 10);
-  const user = { id: users.length + 1, email, password: hashed };
-  users.push(user);
-  res.status(201).json({ id: user.id, email: user.email });
-});
-
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  const user = users.find(u => u.email === email);
-  if (!user || !(await bcrypt.compare(password, user.password))) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+router.post('/register',
+  validateBody({
+    email: { required: true, type: 'string', minLength: 5 },
+    password: { required: true, type: 'string', minLength: 6 },
+    firstName: { required: false, type: 'string' },
+    lastName: { required: false, type: 'string' },
+  }),
+  async (req, res) => {
+    const { email, password, firstName, lastName } = req.body;
+    try {
+      const user = await store.createUser({
+        email: email.toLowerCase(),
+        password,
+        profile: { firstName, lastName },
+      });
+      const token = store.generateToken(user.id);
+      res.status(201).json({ token, user });
+    } catch (err) {
+      res.status(409).json({ error: err.message });
+    }
   }
-  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '24h' });
-  res.json({ token, user: { id: user.id, email: user.email } });
+);
+
+router.post('/login',
+  validateBody({
+    email: { required: true, type: 'string' },
+    password: { required: true, type: 'string' },
+  }),
+  async (req, res) => {
+    const { email, password } = req.body;
+    try {
+      const user = await store.findUserByEmail(email.toLowerCase());
+      if (!user || !(await store.comparePassword(password, user.password))) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      const token = store.generateToken(user.id);
+      const { password: _, ...safe } = user;
+      res.json({ token, user: safe });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+router.get('/me', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing token' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = store.verifyToken(token);
+    const user = await store.findUserById(decoded.userId);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    const { password, ...safe } = user;
+    res.json(safe);
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
 });
 
 export default router;
