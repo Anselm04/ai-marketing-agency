@@ -23,6 +23,9 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Translation from './pages/Translation'
 import LandingPage from './pages/LandingPage'
+import IntegrationHub from './pages/IntegrationHub'
+import ModelSelector from './pages/ModelSelector'
+import RecommendationsPage from './pages/RecommendationsPage'
 import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
@@ -70,7 +73,8 @@ function AppRoutes() {
         <Route path="trends" element={<Trends />} />
         <Route path="settings" element={<Settings />} />
         <Route path="team" element={<Team />} />
-        <Route path="admin" element={<Admin />} />
+        <Route path="integrations" element={<IntegrationHub />} />
+        <Route path="models" element={<ModelSelector />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

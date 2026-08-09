@@ -1,8 +1,11 @@
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import logger from './utils/logger.js';
+import { connectRedis } from './config/redis.js';
+import { connectMongoDB, disconnectMongoDB } from './config/mongodb.js';
+import { securityHeaders, parameterPollution } from './middleware/security.js';
 
 import agentRoutes from './routes/agents.js';
 import campaignRoutes from './routes/campaigns.js';
@@ -25,6 +28,10 @@ import teamRoutes from './routes/team.js';
 import uploadRoutes from './routes/uploads.js';
 import searchRoutes from './routes/search.js';
 import productRoutes from './routes/products.js';
+import integrationRoutes from './routes/integrations.js';
+import recommendationRoutes from './routes/recommendations.js';
+import modelRoutes from './routes/models.js';
+import healthRoutes from './routes/health.js';
 import { serveUploads } from './routes/uploads.js';
 
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -39,10 +46,21 @@ import store from './utils/store.js';
 dotenv.config();
 validateEnv();
 
-store.connectDB();
-
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Initialize services
+async function initialize() {
+  try {
+    await connectRedis();
+    await store.connectDB();
+    logger.info('Services initialized successfully');
+  } catch (err) {
+    logger.error('Service initialization failed', { error: err.message });
+  }
+}
+
+initialize();
 
 // CORS whitelist
 const whitelist = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173').split(',');
@@ -56,7 +74,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-ID'],
 };
 
 store.seedAgents([
@@ -75,19 +93,21 @@ store.seedAgents([
   { agentId: 'harmony-director', name: 'Harmony Director AI', role: 'Ensures maximum synergy and no wasted effort between agents', category: 'meta', status: 'active', lastActive: new Date().toISOString() },
 ]);
 
-app.use(helmet());
+app.use(securityHeaders());
 app.use(cors(corsOptions));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(parameterPollution());
 app.use(sanitizeBody);
 app.use(auditLog);
 app.use(rateLimit);
 
 app.use('/api/auth', authRoutes);
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), db: 'json-store' });
-});
+app.use('/api/health', healthRoutes);
+app.use('/api/integrations', authenticate, integrationRoutes);
+app.use('/api/recommendations', authenticate, recommendationRoutes);
+app.use('/api/models', authenticate, modelRoutes);
 app.use(authenticate);
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);
@@ -106,22 +126,49 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/translation', translationRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/team', teamRoutes);
-app.use('/api/uploads', authenticate, uploadRoutes);
-app.use('/api/search', authenticate, searchRoutes);
-app.use('/api/products', authenticate, productRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/products', productRoutes);
 
 serveUploads(app);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+let server = null;
+
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  server = app.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
     schedulerService.start();
   });
-} else {
-  // In test mode, export app without starting server
 }
+
+// Graceful shutdown
+async function shutdown(signal) {
+  logger.info(`Received ${signal}, starting graceful shutdown...`);
+
+  if (server) {
+    server.close(() => {
+      logger.info('HTTP server closed');
+    });
+  }
+
+  schedulerService.stop?.();
+  await store.disconnectDB();
+  await disconnectMongoDB();
+  logger.info('Graceful shutdown complete');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', { error: err.message, stack: err.stack });
+  shutdown('uncaughtException');
+});
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection', { reason: reason?.message || reason, stack: reason?.stack });
+});
 
 export default app;

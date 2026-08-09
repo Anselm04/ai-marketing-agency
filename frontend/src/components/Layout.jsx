@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import SearchBar from './SearchBar'
 import {
-  LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
-  FileText, Video, Users, CreditCard, TrendingUp, Settings,
+  LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2, Network, Cpu,
+  FileText, Video, Users, CreditCard, TrendingUp, Settings, Sparkles,
   Lock, LogOut, ChevronDown, User, Globe, Sun, Moon, Menu, X, ShoppingCart
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -15,6 +15,9 @@ const navItems = [
   { path: '/dashboard/campaigns', icon: Megaphone, label: 'Campaigns' },
   { path: '/dashboard/products', icon: ShoppingCart, label: 'Product Marketing' },
   { path: '/dashboard/social', icon: Share2, label: 'Social' },
+  { path: '/dashboard/integrations', icon: Network, label: 'Integrations' },
+  { path: '/dashboard/models', icon: Cpu, label: 'AI Models' },
+  { path: '/dashboard/recommendations', icon: Sparkles, label: 'Recommendations' },
   { path: '/dashboard/content', icon: FileText, label: 'Content Studio' },
   { path: '/dashboard/video', icon: Video, label: 'Video Studio' },
   { path: '/dashboard/translation', icon: Globe, label: 'Translation' },

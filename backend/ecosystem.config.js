@@ -1,0 +1,32 @@
+module.exports = {
+  apps: [{
+    name: 'ai-marketing-backend',
+    script: './src/index.js',
+    cwd: './backend',
+    instances: process.env.PM2_INSTANCES || 'max',
+    exec_mode: 'cluster',
+    max_memory_restart: '512M',
+    min_uptime: '10s',
+    max_restarts: 5,
+    restart_delay: 3000,
+    kill_timeout: 5000,
+    listen_timeout: 10000,
+    env: {
+      NODE_ENV: 'production',
+      LOG_LEVEL: 'info',
+      LOG_FORMAT: 'json',
+    },
+    env_development: {
+      NODE_ENV: 'development',
+      LOG_LEVEL: 'debug',
+      LOG_FORMAT: 'pretty',
+      watch: true,
+      ignore_watch: ['node_modules', 'logs', 'data', '__tests__'],
+    },
+    log_file: './logs/combined.log',
+    out_file: './logs/out.log',
+    error_file: './logs/error.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss.SSS',
+    merge_logs: true,
+  }],
+}

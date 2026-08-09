@@ -1,4 +1,4 @@
-import { generateAgentResponse } from './openaiService.js';
+import { generateAgentResponse } from './aiService.js';
 import store from '../utils/store.js';
 
 class ContentStudio {
@@ -47,7 +47,7 @@ class ContentStudio {
         return this.saveContent({
           title: topic,
           type,
-          body: result.content || (result.fallback ? `[Draft] ${topic}` : ''),
+          body: result || `[Draft] ${topic}`,
           platform,
           status: 'draft',
           owner: ownerId,

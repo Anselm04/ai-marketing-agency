@@ -1,4 +1,4 @@
-import { generateAgentResponse } from './openaiService.js';
+import { generateAgentResponse } from './aiService.js';
 
 const LANGUAGES = [
   'English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Dutch',
@@ -15,10 +15,9 @@ class TranslationService {
     const result = await generateAgentResponse('content', `Translate the following text from ${sourceLanguage} to ${targetLanguage}. Maintain the original tone, formatting, and marketing intent. Only return the translated text, no explanations.\n\nText: ${content}`, {});
 
     return {
-      translated: result.content || result.fallback ? `[${targetLanguage}] ${content}` : content,
+      translated: result || `[${targetLanguage}] ${content}`,
       language: targetLanguage,
       auto: true,
-      fallback: result.fallback || false,
     };
   }
 
@@ -31,7 +30,7 @@ class TranslationService {
 
   async detectLanguage(text) {
     const result = await generateAgentResponse('content', `Detect the language of this text and respond with only the language name in English.\n\nText: ${text.slice(0, 200)}`, {});
-    return result.content?.trim() || 'Unknown';
+    return result?.trim() || 'Unknown';
   }
 
   getSupportedLanguages() {

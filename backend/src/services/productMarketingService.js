@@ -1,4 +1,4 @@
-import { generateAgentResponse, generateCampaignStrategy } from './openaiService.js';
+import { generateAgentResponse, generateCampaignStrategy } from './aiService.js';
 import contentStudio from './contentStudio.js';
 import videoStudio from './videoStudio.js';
 import store from '../utils/store.js';
@@ -64,7 +64,7 @@ class ProductMarketingService {
       targetAudience: audience,
       category: category || 'other',
       tone: tone || 'professional',
-      strategy: strategy.fallback ? null : strategy.strategy,
+      strategy,
       photos: photos.map(p => ({ url: p.url, name: p.originalName })),
       status: 'draft',
       owner: ownerId,
@@ -77,7 +77,7 @@ class ProductMarketingService {
       contentItems.push(await store.createContent({
         title: `${productNameFinal} — Product Description`,
         type: 'product_description',
-        body: productDescriptionResult.value.content || productDescriptionResult.value.fallback ? `Product description for ${productNameFinal}.` : '',
+        body: productDescriptionResult.value || `Product description for ${productNameFinal}.`,
         platform: 'website',
         campaignId: campaign.id,
         owner: ownerId,
@@ -141,7 +141,7 @@ class ProductMarketingService {
       contentItems.push(await store.createContent({
         title: `Blog Post: Introducing ${productNameFinal}`,
         type: 'article',
-        body: blogPostResult.value.content || blogPostResult.value.fallback ? `Blog post about ${productNameFinal}.` : '',
+        body: blogPostResult.value || `Blog post about ${productNameFinal}.`,
         platform: 'blog',
         campaignId: campaign.id,
         owner: ownerId,
@@ -149,7 +149,7 @@ class ProductMarketingService {
     }
 
     // Video script
-    const videoScript = videoScriptResult.status === 'fulfilled' ? videoScriptResult.value : { content: `Video ad script for ${productNameFinal}.` };
+    const videoScript = videoScriptResult.status === 'fulfilled' ? videoScriptResult.value : `Video ad script for ${productNameFinal}.`;
 
     // Add a lead record for the product (for CRM tracking)
     await store.createLead({
@@ -168,13 +168,13 @@ class ProductMarketingService {
       campaign,
       contentItems,
       productProfile,
-      strategy: strategy.fallback ? null : strategy.strategy,
-      videoScript: videoScript.content || videoScript,
+      strategy,
+      videoScript: videoScript || videoScript,
       emailSequence: emailSequenceResult.status === 'fulfilled' ? emailSequenceResult.value : null,
       seoKeywords: seoResult.status === 'fulfilled' ? seoResult.value : null,
       socialPosts: socialPostsResults.status === 'fulfilled' ? socialPostsResults.value : null,
       adCopy: adCopyResults.status === 'fulfilled' ? adCopyResults.value : null,
-      productDescription: productDescriptionResult.status === 'fulfilled' ? productDescriptionResult.value.content : null,
+      productDescription: productDescriptionResult.status === 'fulfilled' ? productDescriptionResult.value : null,
     };
   }
 
@@ -202,12 +202,10 @@ Return ONLY a JSON object with this exact structure:
 
     try {
       const result = await generateAgentResponse('chief-strategy', prompt, {});
-      if (result.fallback) {
+      if (result.startsWith('[')) {
         return this._defaultProductProfile(productName, description, category, targetAudience);
       }
-      // Try to parse JSON from the response
-      const content = result.content || '';
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
       }
@@ -243,7 +241,7 @@ Return ONLY a JSON object with this exact structure:
             audience,
             'Shop Now'
           );
-          results[platform] = result.content || result.fallback ? `[Ad copy for ${platform}] ${description.slice(0, 100)}` : '';
+          results[platform] = result || `[Ad copy for ${platform}] ${description.slice(0, 100)}`;
         } catch (err) {
           results[platform] = `[Draft] ${platform} ad for ${productName}`;
         }
@@ -262,7 +260,7 @@ Return ONLY a JSON object with this exact structure:
             `Create a social media post for ${platform} promoting "${productName}". Context: ${description}. Audience: ${audience}. Tone: ${tone || 'professional'}. Include 5-10 relevant hashtags.`,
             {}
           );
-          results[platform] = result.content || result.fallback ? `Excited to share ${productName}! ${description.slice(0, 80)}... #product #new` : '';
+          results[platform] = result || `Excited to share ${productName}! ${description.slice(0, 80)}... #product #new`;
         } catch (err) {
           results[platform] = `[Draft] ${platform} post for ${productName}`;
         }
@@ -284,7 +282,7 @@ Email 3: Urgency/CTA (subject line + body)
 Format each email with clear Subject: and Body: sections.`,
         {}
       );
-      return result.content || result.fallback ? `Email sequence for ${productName}.` : '';
+      return result || `Email sequence for ${productName}.`;
     } catch (err) {
       return `Email sequence for ${productName}.`;
     }
@@ -305,7 +303,7 @@ Return:
 6. 3 blog topic ideas`,
         {}
       );
-      return result.content || result.fallback ? `SEO keywords for ${productName}.` : '';
+      return result || `SEO keywords for ${productName}.`;
     } catch (err) {
       return `SEO keywords for ${productName}.`;
     }
