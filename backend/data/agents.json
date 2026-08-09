@@ -1,0 +1,132 @@
+[
+  {
+    "id": "12ad5645-ed98-48bb-bd70-69e9843ec4a4",
+    "agentId": "chief-strategy",
+    "name": "Chief Strategy Agent",
+    "role": "Oversees all operations and revenue generation priorities",
+    "category": "strategy",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.954Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "8d33f727-015d-4e41-85aa-7423289c27e4",
+    "agentId": "social-media",
+    "name": "Social Media Agent",
+    "role": "Creates, schedules, posts, and auto-responds on social platforms",
+    "category": "creative",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "4e94604d-8aa5-465f-ab77-9557a70164db",
+    "agentId": "content",
+    "name": "Content Agent",
+    "role": "Writes articles, ad copy, SEO text, video scripts",
+    "category": "creative",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "58360a0f-0186-4ac8-9043-db1484d105d4",
+    "agentId": "seo-aeo",
+    "name": "SEO/AEO Agent",
+    "role": "Manages Google rank, app store AEO",
+    "category": "optimization",
+    "status": "idle",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "37c0cb5c-6129-467b-8ad1-ae4954e71a36",
+    "agentId": "video",
+    "name": "Video Agent",
+    "role": "Generates engaging video ads, animations, tutorials",
+    "category": "creative",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "388c3ccb-3f6f-47ba-a3a8-8c728b278d8e",
+    "agentId": "legal-compliance",
+    "name": "Legal Compliance Agent",
+    "role": "Reviews all marketing for platform, privacy, ad law compliance",
+    "category": "compliance",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "908707a7-c65e-4f7a-b27e-e384c6f19644",
+    "agentId": "customer-service",
+    "name": "Customer Service Agent",
+    "role": "Handles inquiries, feedback, FAQs, issues",
+    "category": "operations",
+    "status": "idle",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "27646892-3ce5-45f9-8118-b068465f68b2",
+    "agentId": "ai-trainer",
+    "name": "AI Trainer Agent",
+    "role": "Keeps all agents learning and adapting from user interactions",
+    "category": "meta",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "b869bb73-64df-4232-aa52-8e7dabcd7ac5",
+    "agentId": "performance-optimizer",
+    "name": "Performance Optimizer",
+    "role": "A/B testing, split testing, and data-driven campaign improvements",
+    "category": "optimization",
+    "status": "idle",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "12969446-a3eb-42b9-a74a-5a849efcfdcd",
+    "agentId": "market-research",
+    "name": "Market Research Agent",
+    "role": "Constantly scans trends and market data for new growth opportunities",
+    "category": "strategy",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "612825c9-9691-485b-a2f8-bab1b45079f7",
+    "agentId": "automation-coordinator",
+    "name": "Automation Coordinator",
+    "role": "Ensures all agents act in sync, without conflicts or drift",
+    "category": "operations",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "fdc6ce94-8bb1-4c11-9880-84d6117da827",
+    "agentId": "agent-oversight",
+    "name": "Agent Oversight AI",
+    "role": "Monitors all agents for focus, teamwork, integrity",
+    "category": "meta",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  },
+  {
+    "id": "e3e27908-c3e4-4181-8df7-6904e1fe55c9",
+    "agentId": "harmony-director",
+    "name": "Harmony Director AI",
+    "role": "Ensures maximum synergy and no wasted effort between agents",
+    "category": "meta",
+    "status": "active",
+    "lastActive": "2026-08-09T10:27:03.955Z",
+    "createdAt": "2026-08-09T10:27:03.955Z"
+  }
+]
