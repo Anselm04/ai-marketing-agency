@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './context/ToastContext'
+import { OrchestratorProvider } from './context/OrchestratorContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -25,6 +26,8 @@ import Translation from './pages/Translation'
 import LandingPage from './pages/LandingPage'
 import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
+import AIModels from './pages/AIModels'
+import Connectors from './pages/Connectors'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
 import EmptyState from './components/EmptyState'
 
@@ -71,6 +74,8 @@ function AppRoutes() {
         <Route path="settings" element={<Settings />} />
         <Route path="team" element={<Team />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="ai-models" element={<AIModels />} />
+        <Route path="connectors" element={<Connectors />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -83,7 +88,9 @@ function App() {
       <ThemeProvider>
         <ToastProvider>
           <AuthProvider>
-            <AppRoutes />
+            <OrchestratorProvider>
+              <AppRoutes />
+            </OrchestratorProvider>
           </AuthProvider>
         </ToastProvider>
       </ThemeProvider>

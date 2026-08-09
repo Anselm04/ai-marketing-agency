@@ -6,7 +6,8 @@ import { NotificationBell } from './RealtimeNotifications'
 import {
   LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
   FileText, Video, Users, CreditCard, TrendingUp, Settings,
-  Lock, LogOut, ChevronDown, User, Globe, Sun, Moon, Menu, X, ShoppingCart
+  Lock, LogOut, ChevronDown, User, Globe, Sun, Moon, Menu, X, ShoppingCart,
+  Cpu, Plug
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
@@ -24,6 +25,8 @@ const navItems = [
   { path: '/dashboard/trends', icon: TrendingUp, label: 'Trends' },
   { path: '/dashboard/legal', icon: Shield, label: 'Legal' },
   { path: '/dashboard/billing', icon: CreditCard, label: 'Billing' },
+  { path: '/dashboard/ai-models', icon: Cpu, label: 'AI Models' },
+  { path: '/dashboard/connectors', icon: Plug, label: 'Connectors' },
   { path: '/dashboard/settings', icon: Settings, label: 'Settings' },
   { path: '/dashboard/team', icon: Users, label: 'Team' },
   { path: '/dashboard/admin', icon: Lock, label: 'Admin', adminOnly: true },
