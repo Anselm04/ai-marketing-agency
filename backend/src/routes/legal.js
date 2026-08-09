@@ -1,6 +1,6 @@
 import express from 'express';
 import store from '../utils/store.js';
-import { generateLegalDocument } from '../services/openaiService.js';
+import { generateLegalDocument } from '../services/aiService.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();

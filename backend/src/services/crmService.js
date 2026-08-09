@@ -1,5 +1,5 @@
 import store from '../utils/store.js';
-import { generateAgentResponse } from './openaiService.js';
+import { generateAgentResponse } from './aiService.js';
 
 class CrmService {
   async scoreLead(leadId) {

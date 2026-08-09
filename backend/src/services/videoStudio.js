@@ -1,4 +1,4 @@
-import { generateAgentResponse } from './openaiService.js';
+import { generateAgentResponse } from './aiService.js';
 
 class VideoStudio {
   async generateScript(videoType, topic, duration, platform = 'TikTok') {

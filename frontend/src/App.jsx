@@ -25,7 +25,6 @@ import Translation from './pages/Translation'
 import LandingPage from './pages/LandingPage'
 import IntegrationHub from './pages/IntegrationHub'
 import ModelSelector from './pages/ModelSelector'
-import RecommendationsPage from './pages/RecommendationsPage'
 import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
@@ -75,6 +74,7 @@ function AppRoutes() {
         <Route path="team" element={<Team />} />
         <Route path="integrations" element={<IntegrationHub />} />
         <Route path="models" element={<ModelSelector />} />
+        <Route path="recommendations" element={<RecommendationsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

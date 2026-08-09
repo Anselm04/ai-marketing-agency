@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { generateAgentResponse } from './openaiService.js';
+import { generateAgentResponse } from './aiService.js';
 
 class TrendScanner {
   constructor() {

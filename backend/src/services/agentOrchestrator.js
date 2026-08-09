@@ -1,4 +1,4 @@
-import { generateAgentResponse, generateCampaignStrategy } from './openaiService.js';
+import { generateAgentResponse, generateCampaignStrategy } from './aiService.js';
 
 class AgentOrchestrator {
   constructor() {

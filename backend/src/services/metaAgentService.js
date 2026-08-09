@@ -1,4 +1,4 @@
-import { generateAgentResponse } from './openaiService.js';
+import { generateAgentResponse } from './aiService.js';
 import store from '../utils/store.js';
 
 class MetaAgentService {
