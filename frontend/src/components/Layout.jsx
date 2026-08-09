@@ -1,10 +1,11 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Bot, Megaphone, BarChart3, Shield } from 'lucide-react'
+import { LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2 } from 'lucide-react'
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/agents', icon: Bot, label: 'Agents' },
   { path: '/campaigns', icon: Megaphone, label: 'Campaigns' },
+  { path: '/social', icon: Share2, label: 'Social' },
   { path: '/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/legal', icon: Shield, label: 'Legal' },
 ]

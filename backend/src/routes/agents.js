@@ -1,4 +1,5 @@
 import express from 'express';
+import agentOrchestrator from '../services/agentOrchestrator.js';
 
 const router = express.Router();
 
@@ -19,21 +20,37 @@ const agents = [
 ];
 
 router.get('/', (req, res) => {
-  res.json(agents);
+  res.json(agents.map(a => ({
+    ...a,
+    status: agentOrchestrator.getAgentStatus(a.id) || a.status,
+  })));
+});
+
+router.get('/tasks', (req, res) => {
+  res.json(agentOrchestrator.getRecentTasks(50));
 });
 
 router.get('/:id', (req, res) => {
   const agent = agents.find(a => a.id === req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
-  res.json(agent);
+  res.json({
+    ...agent,
+    status: agentOrchestrator.getAgentStatus(agent.id) || agent.status,
+  });
 });
 
-router.post('/:id/execute', (req, res) => {
+router.post('/:id/execute', async (req, res) => {
   const agent = agents.find(a => a.id === req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
-  agent.status = 'active';
-  agent.lastActive = new Date().toISOString();
-  res.json({ success: true, agent, task: req.body.task || 'default-task' });
+
+  const { task, context } = req.body;
+
+  try {
+    const result = await agentOrchestrator.executeTask(agent.id, task || 'General evaluation', context || {});
+    res.json({ success: true, agent: { ...agent, status: 'active', lastActive: new Date().toISOString() }, task: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

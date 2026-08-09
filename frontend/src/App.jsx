@@ -5,6 +5,7 @@ import Agents from './pages/Agents'
 import Campaigns from './pages/Campaigns'
 import Analytics from './pages/Analytics'
 import Legal from './pages/Legal'
+import Social from './pages/Social'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="legal" element={<Legal />} />
+        <Route path="social" element={<Social />} />
       </Route>
     </Routes>
   )

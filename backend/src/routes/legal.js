@@ -1,4 +1,5 @@
 import express from 'express';
+import { generateLegalDocument } from '../services/openaiService.js';
 
 const router = express.Router();
 
@@ -13,14 +14,21 @@ router.get('/templates', (req, res) => {
   ]);
 });
 
-router.post('/generate', (req, res) => {
+router.post('/generate', async (req, res) => {
   const { type, businessName, jurisdiction } = req.body;
-  res.json({
-    success: true,
-    type,
-    document: `Generated ${type} for ${businessName} (${jurisdiction}). This is a placeholder for AI-generated legal content.`,
-    generatedAt: new Date().toISOString()
-  });
+
+  try {
+    const result = await generateLegalDocument(type, businessName || 'AI Marketing Agency', jurisdiction || 'Global');
+    res.json({
+      success: true,
+      type,
+      document: result.document,
+      fallback: result.fallback,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

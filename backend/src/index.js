@@ -9,6 +9,7 @@ import campaignRoutes from './routes/campaigns.js';
 import analyticsRoutes from './routes/analytics.js';
 import legalRoutes from './routes/legal.js';
 import authRoutes from './routes/auth.js';
+import socialRoutes from './routes/social.js';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.use('/api/campaigns', campaignRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/legal', legalRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/social', socialRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

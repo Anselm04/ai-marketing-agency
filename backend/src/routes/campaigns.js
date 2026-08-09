@@ -1,4 +1,5 @@
 import express from 'express';
+import agentOrchestrator from '../services/agentOrchestrator.js';
 
 const router = express.Router();
 
@@ -21,6 +22,25 @@ router.post('/', (req, res) => {
   };
   campaigns.push(campaign);
   res.status(201).json(campaign);
+});
+
+router.post('/:id/strategy', async (req, res) => {
+  const campaign = campaigns.find(c => c.id === parseInt(req.params.id));
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+  const { product, targetAudience } = req.body;
+
+  try {
+    const strategy = await agentOrchestrator.runCampaignStrategy(
+      product || campaign.name,
+      campaign.budget,
+      [campaign.platform],
+      targetAudience || 'general consumers'
+    );
+    res.json({ campaign, strategy });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.patch('/:id', (req, res) => {
