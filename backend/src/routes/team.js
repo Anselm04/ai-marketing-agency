@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import store from '../utils/store.js';
 import { validateBody } from '../middleware/validate.js';
+import { sendTeamInvite } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -83,6 +84,10 @@ router.post('/invites',
         token,
         expiresAt,
       });
+
+      const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/team/invite?token=${token}`;
+      const inviter = await store.findUserById(req.userId);
+      await sendTeamInvite(req.body.email, org.name, inviteUrl, inviter?.profile?.firstName || inviter?.email || 'A team member');
 
       res.json({ invite, devToken: token });
     } catch (err) {

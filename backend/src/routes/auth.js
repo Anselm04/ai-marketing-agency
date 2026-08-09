@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import store from '../utils/store.js';
 import { validateBody } from '../middleware/validate.js';
+import { sendPasswordReset, sendWelcomeEmail } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -22,6 +23,8 @@ router.post('/register',
         profile: { firstName, lastName },
       });
       const token = store.generateToken(user.id);
+      // Send welcome email asynchronously (don't block registration)
+      sendWelcomeEmail(user.email, user.profile?.firstName).catch(() => {});
       res.status(201).json({ token, user });
     } catch (err) {
       res.status(409).json({ error: err.message });
@@ -79,12 +82,14 @@ router.post('/forgot-password', async (req, res) => {
     const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     await store.updateUser(user.id, { resetToken, resetTokenExpires });
 
-    // TODO: Send actual email via SendGrid/Postmark/AWS SES
-    // For now, return the token in development mode
+    // Send actual email via configured provider (SendGrid/SES/SMTP)
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password`;
+    const emailResult = await sendPasswordReset(email, resetToken, resetUrl);
+
     res.json({
       success: true,
-      message: 'Password reset initiated.',
-      devToken: resetToken, // Remove this in production — send via email instead
+      message: 'If an account exists, a reset link has been sent.',
+      devToken: emailResult.fallback ? resetToken : undefined,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

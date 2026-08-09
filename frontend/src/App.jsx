@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
+import { ToastProvider } from './context/ToastContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -22,10 +24,21 @@ import ResetPassword from './pages/ResetPassword'
 import Translation from './pages/Translation'
 import LandingPage from './pages/LandingPage'
 import Team from './pages/Team'
+import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
+import EmptyState from './components/EmptyState'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900"><div className="text-gray-500 dark:text-gray-400">Loading...</div></div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="w-full max-w-4xl space-y-4">
+        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48 animate-pulse" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <SkeletonMetric /><SkeletonMetric /><SkeletonMetric />
+        </div>
+      </div>
+    </div>
+  )
   if (!isAuthenticated) return <Navigate to="/login" replace />
   return children
 }
@@ -57,7 +70,6 @@ function AppRoutes() {
         <Route path="team" element={<Team />} />
         <Route path="admin" element={<Admin />} />
       </Route>
-      {/* Fallback: redirect unknown paths */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
@@ -66,9 +78,13 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }
