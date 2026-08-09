@@ -2,6 +2,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import SearchBar from './SearchBar'
+import { NotificationBell } from './RealtimeNotifications'
 import {
   LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
   FileText, Video, Users, CreditCard, TrendingUp, Settings,
@@ -151,8 +152,11 @@ export default function Layout() {
             <div className="flex-1 max-w-xl">
               <SearchBar />
             </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              Welcome, {user?.firstName || user?.email || 'User'}
+            <div className="flex items-center gap-3">
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Welcome, {user?.firstName || user?.email || 'User'}
+              </div>
+              <NotificationBell />
             </div>
           </div>
           <Outlet />

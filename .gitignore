@@ -211,6 +211,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Lockfiles — do not commit to version control
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
@@ -226,3 +228,25 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.envrc
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+.nyc_output/
+
+# Docker
+.dockerignore
+
+# CI/CD artifacts
+frontend-dist.zip
+backend-dist.zip

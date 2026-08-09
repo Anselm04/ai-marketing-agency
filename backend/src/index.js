@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
 
 import agentRoutes from './routes/agents.js';
 import campaignRoutes from './routes/campaigns.js';
@@ -25,6 +26,10 @@ import teamRoutes from './routes/team.js';
 import uploadRoutes from './routes/uploads.js';
 import searchRoutes from './routes/search.js';
 import productRoutes from './routes/products.js';
+import realtimeRoutes from './routes/realtime.js';
+import connectorsRoutes from './routes/connectors.js';
+import aiModelsRoutes from './routes/aiModels.js';
+import orchestratorRoutes from './routes/orchestrator.js';
 import { serveUploads } from './routes/uploads.js';
 
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -35,6 +40,15 @@ import { auditLog } from './middleware/auditLog.js';
 import { authenticate } from './middleware/auth.js';
 import schedulerService from './services/schedulerService.js';
 import store from './utils/store.js';
+import { initializeWebSocket, closeWebSocket } from './utils/websocket.js';
+import { mountHealthChecks } from './utils/healthChecks.js';
+import { metricsMiddleware, metricsRouteHandler } from './utils/metrics.js';
+import { closeAllQueues } from './utils/queue.js';
+import { close as closeCache } from './utils/cache.js';
+import { initializeHealthChecks as initializeConnectorHealthChecks } from './services/appConnector.js';
+import { allConnectors } from './services/connectors/index.js';
+import { logger } from './utils/logger.js';
+import compression from 'compression';
 
 dotenv.config();
 validateEnv();
@@ -42,10 +56,17 @@ validateEnv();
 store.connectDB();
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 
+// Initialize WebSocket server
+initializeWebSocket(httpServer);
+
+// Initialize connector health checks
+initializeConnectorHealthChecks(allConnectors);
+
 // CORS whitelist
-const whitelist = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173').split(',');
+const whitelist = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173').split(',').map((s) => s.trim());
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || whitelist.includes(origin)) {
@@ -56,7 +77,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-ID'],
 };
 
 store.seedAgents([
@@ -77,17 +98,28 @@ store.seedAgents([
 
 app.use(helmet());
 app.use(cors(corsOptions));
-app.use(morgan('dev'));
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(compression());
+app.use(morgan('combined'));
+app.use(metricsMiddleware());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeBody);
 app.use(auditLog);
 app.use(rateLimit);
 
+// Health check and metrics endpoints (public)
+mountHealthChecks(app);
+app.get('/metrics', metricsRouteHandler);
+
+// Public routes
 app.use('/api/auth', authRoutes);
+
+// Health check (legacy endpoint, redirects to new health check)
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), db: 'json-store' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), note: 'Use /health for deep checks' });
 });
+
+// Protected routes
 app.use(authenticate);
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);
@@ -106,18 +138,49 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/translation', translationRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/team', teamRoutes);
-app.use('/api/uploads', authenticate, uploadRoutes);
-app.use('/api/search', authenticate, searchRoutes);
-app.use('/api/products', authenticate, productRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/realtime', realtimeRoutes);
+app.use('/api/connectors', connectorsRoutes);
+app.use('/api/ai-models', aiModelsRoutes);
+app.use('/api/orchestrator', orchestratorRoutes);
 
 serveUploads(app);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Graceful shutdown handling
+const gracefulShutdown = async (signal) => {
+  logger.info(`Received ${signal}. Starting graceful shutdown...`);
+  try {
+    await closeWebSocket();
+    await closeAllQueues();
+    await closeCache();
+    httpServer.close(() => {
+      logger.info('Server closed successfully');
+      process.exit(0);
+    });
+  } catch (err) {
+    logger.error('Error during graceful shutdown', { error: err.message });
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', { error: err.message, stack: err.stack });
+  gracefulShutdown('uncaughtException');
+});
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection', { reason, promise });
+});
+
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  httpServer.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT}`, { environment: process.env.NODE_ENV });
     schedulerService.start();
   });
 } else {

@@ -24,6 +24,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "caniuse-lite": "^1.0.30001809"
+    "caniuse-lite": "^1.0.30001809",
+    "compression": "^1.8.1"
   }
 }

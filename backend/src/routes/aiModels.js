@@ -1,0 +1,215 @@
+/**
+ * AI Model Registry Routes
+ * Provides endpoints for listing AI models, providers, and testing connections.
+ */
+
+import express from 'express';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { aiModelRegistry } from '../services/aiModelRegistry.js';
+import { logger } from '../utils/logger.js';
+
+const router = express.Router();
+
+/**
+ * GET /api/ai-models
+ * List all available AI models across all providers.
+ */
+router.get('/', authenticate, (req, res) => {
+  const models = aiModelRegistry.getAllModels();
+  res.json({
+    success: true,
+    models: models.map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: m.providerName,
+      providerId: m.providerId,
+      quality: m.quality,
+      speed: m.speed,
+      cost: m.cost,
+      context: m.context,
+      vision: m.vision,
+      available: aiModelRegistry.isProviderAvailable(m.providerId),
+    })),
+    count: models.length,
+  });
+});
+
+/**
+ * GET /api/ai-models/providers
+ * List all AI providers and their availability status.
+ */
+router.get('/providers', authenticate, (req, res) => {
+  const providers = aiModelRegistry.getAllProviders();
+  res.json({
+    success: true,
+    providers: providers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      available: p.available,
+      modelCount: p.models.length,
+    })),
+  });
+});
+
+/**
+ * GET /api/ai-models/:modelId
+ * Get detailed information about a specific model.
+ */
+router.get('/:modelId', authenticate, (req, res) => {
+  const { modelId } = req.params;
+  const info = aiModelRegistry.getModelInfo(modelId);
+
+  if (!info) {
+    return res.status(404).json({ error: 'Model not found' });
+  }
+
+  const providerId = Object.keys(aiModelRegistry.getAllProviders().find((p) => p.models.find((m) => m.id === modelId))?.id || {});
+
+  res.json({
+    success: true,
+    model: {
+      id: modelId,
+      name: info.name,
+      quality: info.quality,
+      speed: info.speed,
+      cost: info.cost,
+      context: info.context,
+      vision: info.vision,
+      inputPrice: info.inputPrice,
+      outputPrice: info.outputPrice,
+      available: aiModelRegistry.isProviderAvailable(providerId),
+    },
+  });
+});
+
+/**
+ * POST /api/ai-models/test
+ * Test a specific AI model with a simple prompt.
+ */
+router.post('/test', authenticate, requireAdmin, async (req, res) => {
+  const { providerId, modelId, prompt = 'Hello, are you working?' } = req.body;
+
+  if (!providerId || !modelId) {
+    return res.status(400).json({ error: 'providerId and modelId are required' });
+  }
+
+  const provider = aiModelRegistry.getProvider(providerId);
+  if (!provider || !provider.isAvailable()) {
+    return res.status(400).json({ error: 'Provider not available' });
+  }
+
+  try {
+    const start = Date.now();
+    const result = await provider.generateCompletion(prompt, { model: modelId });
+    const duration = Date.now() - start;
+
+    res.json({
+      success: true,
+      provider: providerId,
+      model: modelId,
+      response: result.content,
+      duration,
+      usage: result.usage,
+    });
+  } catch (err) {
+    logger.error('AI model test failed', { error: err.message, providerId, modelId });
+    res.status(500).json({ error: 'Model test failed', detail: err.message });
+  }
+});
+
+/**
+ * POST /api/ai-models/best
+ * Get the best model for a specific task type.
+ */
+router.post('/best', authenticate, async (req, res) => {
+  const { taskType, userPreferences = {} } = req.body;
+
+  if (!taskType) {
+    return res.status(400).json({ error: 'taskType is required' });
+  }
+
+  try {
+    const best = aiModelRegistry.getBestModel(taskType, userPreferences);
+    if (!best) {
+      return res.status(404).json({ error: 'No suitable model found for this task type' });
+    }
+
+    res.json({
+      success: true,
+      taskType,
+      model: {
+        id: best.id,
+        name: best.name,
+        provider: best.providerName,
+        providerId: best.providerId,
+        score: best.score,
+        estimatedCost: aiModelRegistry.estimateCost(best.providerId, best.id, 1000, 1000),
+      },
+    });
+  } catch (err) {
+    logger.error('Failed to select best model', { error: err.message, taskType });
+    res.status(500).json({ error: 'Failed to select model', detail: err.message });
+  }
+});
+
+/**
+ * POST /api/ai-models/chat
+ * Generate a chat completion with the specified model.
+ */
+router.post('/chat', authenticate, async (req, res) => {
+  const { messages, providerId, modelId, options = {} } = req.body;
+
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'messages array is required' });
+  }
+
+  try {
+    const result = await aiModelRegistry.generateChatCompletion(messages, {
+      provider: providerId,
+      model: modelId,
+      ...options,
+    });
+
+    res.json({
+      success: true,
+      content: result.content,
+      usage: result.usage,
+      model: result.model,
+      provider: providerId || 'default',
+      finishReason: result.finishReason,
+    });
+  } catch (err) {
+    logger.error('Chat completion failed', { error: err.message, providerId, modelId });
+    res.status(500).json({ error: 'Chat completion failed', detail: err.message });
+  }
+});
+
+/**
+ * POST /api/ai-models/estimate
+ * Estimate cost for a request.
+ */
+router.post('/estimate', authenticate, (req, res) => {
+  const { providerId, modelId, inputTokens, outputTokens } = req.body;
+
+  if (!providerId || !modelId) {
+    return res.status(400).json({ error: 'providerId and modelId are required' });
+  }
+
+  const cost = aiModelRegistry.estimateCost(providerId, modelId, inputTokens || 1000, outputTokens || 1000);
+
+  if (cost === null) {
+    return res.status(404).json({ error: 'Model not found' });
+  }
+
+  res.json({
+    success: true,
+    providerId,
+    modelId,
+    inputTokens: inputTokens || 1000,
+    outputTokens: outputTokens || 1000,
+    estimatedCost: cost,
+    currency: 'USD',
+  });
+});
+
+export default router;

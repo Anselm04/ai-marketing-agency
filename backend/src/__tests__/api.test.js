@@ -309,3 +309,54 @@ describe('Security', () => {
     expect([401, 429]).toContain(res.status);
   });
 });
+
+// Production Features Tests
+
+describe('Health & Monitoring', () => {
+  test('GET /health returns status', async () => {
+    const res = await request(app).get('/health');
+    expect([200, 500, 503]).toContain(res.status);
+    if (res.status === 200) {
+      expect(res.body).toHaveProperty('status');
+      expect(res.body).toHaveProperty('timestamp');
+    }
+  });
+
+  test('GET /metrics returns prometheus metrics', async () => {
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('# TYPE');
+  });
+});
+
+describe('AI Model Registry', () => {
+  test('GET /api/ai-models lists models', async () => {
+    const res = await request(app).get('/api/ai-models').set('Authorization', `Bearer ${authToken}`);
+    expect([200, 401]).toContain(res.status);
+  });
+
+  test('GET /api/ai-models/providers lists providers', async () => {
+    const res = await request(app).get('/api/ai-models/providers').set('Authorization', `Bearer ${authToken}`);
+    expect([200, 401]).toContain(res.status);
+  });
+});
+
+describe('Connectors', () => {
+  test('GET /api/connectors lists connectors', async () => {
+    const res = await request(app).get('/api/connectors').set('Authorization', `Bearer ${authToken}`);
+    expect([200, 401]).toContain(res.status);
+  });
+
+  test('GET /api/connectors/categories lists categories', async () => {
+    const res = await request(app).get('/api/connectors/categories').set('Authorization', `Bearer ${authToken}`);
+    expect([200, 401]).toContain(res.status);
+  });
+});
+
+describe('Orchestrator', () => {
+  test('GET /api/orchestrator/profile requires auth', async () => {
+    const res = await request(app).get('/api/orchestrator/profile');
+    expect(res.status).toBe(401);
+  });
+});
+

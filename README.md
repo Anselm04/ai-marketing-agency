@@ -1,292 +1,187 @@
-# 🌍 World-Leading AI-Powered Marketing Agency App
+# AI Marketing Agency
+
+An autonomous, full-stack, AI-driven marketing system designed to run your entire business's promotional engine with minimal human intervention. Engineered for maximum scalability, performance, and revenue generation.
+
+## What This App Does
+
+- Autonomously markets iOS and Android apps on App Store and Google Play
+- Runs full-stack advertising, social media, SEO, legal compliance, and revenue optimization
+- Generates and optimizes campaigns across TikTok, Instagram, Facebook, YouTube, LinkedIn, Twitter/X, Reddit, and Google Ads
+- Provides real-time analytics, AI content generation, and automated customer engagement
+
+## Architecture
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18 + Vite + Tailwind CSS + Socket.IO Client |
+| Backend | Node.js + Express + ESM |
+| AI Engine | Multi-Provider Registry (OpenAI, Anthropic, Google, Cohere, Mistral, Groq, Azure, AWS Bedrock, Ollama) + LangChain |
+| Queue | BullMQ + Redis |
+| Cache | Redis with in-memory fallback |
+| Database | MongoDB + File-based store (development) |
+| Real-time | Socket.IO |
+| Monitoring | Prometheus metrics + health checks |
+| DevOps | Docker + Docker Compose + GitHub Actions CI/CD |
+
+## Production Features
+
+### AI Model Registry
+- **9 providers**, **40+ models** with auto-discovery
+- Cost estimation, quality scoring, and fallback chains
+- Streaming support and vision model support
+- Configurable via environment variables
+
+### App Connector Framework
+- **100+ connectors** across social, e-commerce, ads, CRM, and messaging platforms
+- OAuth2 + API key authentication patterns
+- Built-in health checks and retry logic
+- Extensible architecture for new platforms
+
+### Intelligent Orchestrator
+- Contextual task routing to optimal AI models
+- Smart suggestions based on user behavior and campaign data
+- Performance tracking with auto-scoring
+
+### Production Utilities
+- **Queue System**: BullMQ with Redis for background jobs
+- **Caching**: Redis with graceful in-memory fallback
+- **Validation**: Zod schemas for type-safe request validation
+- **WebSockets**: Real-time notifications and agent status updates
+- **Health Checks**: `/live`, `/ready`, `/health` endpoints
+- **Metrics**: Prometheus-compatible metrics at `/metrics`
+- **Logging**: Structured JSON logging with Winston
+- **Security**: Helmet headers, CORS, rate limiting, input sanitization, audit logging
+- **Pagination**: Cursor-based pagination helper
+
+### Real-Time Frontend
+- Live dashboard with Socket.IO integration
+- Real-time notifications and task progress
+- Campaign activity feed
+- Connection status monitoring with auto-reconnect
+
+## Quick Start
+
+### Prerequisites
+- Node.js >= 20
+- Redis (optional, in-memory fallback available)
+- MongoDB (optional, file-based store available for development)
+
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/Anselm04/ai-marketing-agency.git
+cd ai-marketing-agency
+
+# Install dependencies (workspaces)
+npm install
+
+# Environment variables
+cp backend/.env.example backend/.env
+# Edit backend/.env with your API keys
+
+# Development (both frontend and backend)
+npm run dev
+
+# Or separately
+cd backend && npm run dev
+cd frontend && npm run dev
+```
+
+### Docker
+
+```bash
+docker-compose up --build
+```
+
+Services:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:3001
+- Health: http://localhost:3001/health
+- Metrics: http://localhost:3001/metrics
 
-**Version:** Alpha 0.1  
-**Creator:** Anselm Stephen John Perkins  
-**Mission:** To create the most advanced autonomous marketing agency on Earth that markets apps, products, services, and brands — generating millions per app per month, including its own.
+## API Endpoints
 
----
+See `backend/API.md` for full endpoint documentation.
 
-## 🚀 Overview
+Key endpoints:
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - Authentication
+- `GET /api/agents` - List AI agents
+- `POST /api/campaigns` - Create campaign
+- `POST /api/content` - Generate content
+- `GET /api/ai-models` - AI model registry
+- `GET /api/connectors` - App connectors
+- `GET /health` - Health checks
+- `GET /metrics` - Prometheus metrics
 
-This app is not just a marketing platform — it is a self-growing, self-improving **AI-powered ecosystem** that autonomously executes complete advertising, social media, SEO, legal compliance, and revenue optimization cycles.
+## Environment Variables
 
-It is designed to **market your own apps** on the Apple App Store and Google Play Store, **since the app stores do not advertise your apps for you.**
+See `backend/ENV.md` for full environment documentation.
 
-The app’s success in growing its own audience is **its own best advertisement**, proving its capabilities.
+Required:
+- `JWT_SECRET` - Authentication secret
+- `PORT` - Backend port (default: 3001)
 
----
+Optional (for AI providers):
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GOOGLE_AI_API_KEY`
+- `COHERE_API_KEY`
+- `MISTRAL_API_KEY`
+- `GROQ_API_KEY`
+- `AZURE_OPENAI_API_KEY`
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+- `OLLAMA_BASE_URL`
 
-## 🧠 Core Philosophy
+## Testing
 
-> “Teamwork makes the dream work — especially when your entire team is made of self-improving AI agents.”
+```bash
+# Backend tests
+cd backend && npm test
 
----
+# Frontend tests
+cd frontend && npm test
+```
 
-## 📦 Features & Capabilities
+## Deployment
 
-### 🎯 Primary Purpose
-- 📲 **Autonomously markets all apps published to App Store / Google Play**
-- 💰 Aims to generate **millions per app per month** in revenue
-- 📈 Monetizes app visibility through performance-optimized advertising campaigns
+### Docker Compose (Production)
+```bash
+docker-compose -f docker-compose.yml up -d
+```
 
----
+### Manual
+1. Build frontend: `cd frontend && npm run build`
+2. Serve static files via nginx or `npm run preview`
+3. Start backend: `cd backend && npm start`
+4. Configure reverse proxy (see `nginx.conf`)
 
-### 🤖 AI Agent Ecosystem
+## Security
 
-The system contains a **multi-agent architecture**, where every AI agent is autonomous, specialized, and cooperative.
+- Helmet security headers
+- CORS whitelist configuration
+- Rate limiting per endpoint
+- Input sanitization (XSS prevention)
+- JWT authentication with bcrypt
+- Audit logging for sensitive operations
+- File upload validation and size limits
 
-#### 🧩 Agent Roles
+## Documentation
 
-| Agent Name                  | Role                                                                 |
-|----------------------------|----------------------------------------------------------------------|
-| 🧠 `Chief Strategy Agent`    | Oversees all operations and revenue generation priorities           |
-| 📣 `Social Media Agent`      | Creates, schedules, posts, and auto-responds on social platforms     |
-| ✍️ `Content Agent`            | Writes articles, ad copy, SEO text, video scripts                   |
-| 📈 `SEO/AEO Agent`           | Manages Google rank, app store AEO (Algorithmic Experience Opt.)    |
-| 🎥 `Video Agent`             | Generates engaging video ads, animations, tutorials                 |
-| 🧾 `Legal Compliance Agent`  | Reviews all marketing for platform, privacy, ad law compliance      |
-| 💬 `Customer Service Agent`  | Handles inquiries, feedback, FAQs, issues                           |
-| 🧠 `AI Trainer Agent`         | Keeps all agents learning and adapting from user interactions        |
-| 🧪 `Performance Optimizer`   | A/B testing, split testing, and data-driven campaign improvements   |
-| 🧑‍⚖️ `Legal Automation Agent`| Auto-generates contracts, terms, licenses, policy, and dispute docs |
-| 🔍 `Market Research Agent`   | Constantly scans trends and market data for new growth opportunities|
-| 🔁 `Automation Coordinator`  | Ensures all agents act in sync, without conflicts or drift          |
-| 👁️ `Agent Oversight AI`      | Monitors all agents for focus, teamwork, integrity                  |
-| 🤝 `Harmony Director AI`      | Ensures maximum synergy and no wasted effort between agents         |
+- `ARCHITECTURE.md` - System architecture and design decisions
+- `API.md` - Full API endpoint documentation
+- `ENV.md` - Environment variable reference
+- `PLAN.md` - Development roadmap and feature plan
 
----
+## License
 
-### 🧠 Agent Cohesion System
+MIT License
 
-> AI agents self-monitor and correct each other using embedded trust protocols.
+## Developer
 
-- 🔁 Continuous updates across agents
-- ⚙️ Optimization feedback loops
-- 🔒 Fail-safe overrides by master oversight agents
+Built by Anselm Stephen John Perkins
 
----
+## Vision
 
-### 📈 Autonomous Marketing Capabilities
-
-- 🌐 Fully-automated cross-platform ad campaigns (TikTok, YouTube, IG, FB, Twitter/X, LinkedIn, Reddit, Google)
-- 🧠 Auto-generated viral content and hashtags
-- ⏱️ Optimal timing posts (based on algorithmic peak times)
-- 📊 Real-time campaign analytics and self-adjustments
-- 🔄 Retargeting & funnel optimization
-- 🌍 Auto-translation for international reach
-
----
-
-### 🧠 Legal System Automation
-
-- 📄 Auto-generates Terms & Conditions, Privacy Policy, IP Notices
-- 🧑‍⚖️ Legal reply templates for DMCA, GDPR, CCPA, NZ & AU requirements
-- 🔐 Embeds legal compliance into ad content (advertising laws & policies)
-- ⚖️ Prepares automated dispute documentation
-- 📜 Keeps up-to-date with app store legal terms
-
----
-
-### 🔒 AI Security Layer
-
-- 🔐 Agent access permission layers
-- 🧬 Encrypted user token layers for team actions
-- 🧑‍💻 Full admin override with multi-factor master code
-
----
-
-### 💰 Monetization Systems
-
-- 📥 Subscriptions via Stripe / Paddle integration
-- 🔁 Recurring payments system (weekly, monthly, yearly)
-- 🛒 Upsell flows and conversion-boosting landing pages
-- 📤 One-button publishing of marketing content to socials & blogs
-- 💳 Built-in affiliate program with tracked referral growth
-- 🔗 API integrations to PayPal, Gumroad, Shopify, App Store Connect
-
----
-
-### 🧩 Developer Support
-
-- 🧱 Modular architecture (easily extensible microservices)
-- 🧪 Sandbox/test environment included
-- 🚧 Auto-version control and rollback features
-- 🛠️ Connects to your apps via API key
-
----
-
-## 🔧 Coming Soon (Beta Phase)
-
-- 📲 **In-app App Builder Studio** to launch micro-products on the fly
-- 🤖 **No-code agent programming interface**
-- 🎮 **Gamified growth engine** (earn tokens for viral actions)
-
----
-
-## 🧰 Tech Stack
-
-| Layer       | Tools                          |
-|-------------|--------------------------------|
-| Frontend    | React.js, TailwindCSS, Next.js |
-| Backend     | FastAPI / Node.js / Python     |
-| AI Agents   | LangChain, GPT-4, Claude, Gemini APIs |
-| Database    | PostgreSQL / Supabase / Firebase |
-| DevOps      | GitHub Actions, Docker, Vercel |
-
----
-
-## 🏁 Usage Instructions
-
-> To be added in the next release — includes CLI, web UI, and mobile deployment instructions.
-
----
-
-## 📜 License
-
-> MIT License *(Change to Proprietary when monetizing if needed)*
-
----
-
-## 🧠 Vision
-
-> “This app markets itself into the world — and in doing so, proves it can market anything else just as effectively.”
-
-Let it become the blueprint for every entrepreneur, app developer, and business wanting **revenue without reinventing marketing**.
-
----
-# 🌐 World-Leading AI-Powered Marketing Agency App
-
-An autonomous, full-stack, multilingual, AI-driven marketing system designed to run your entire business's promotional engine — 100% automated. Engineered for maximum scalability, performance, and revenue.
-
----
-
-## 🚀 What This App Does
-
-### 📲 Automates Promotion of:
-- iOS and Android mobile apps
-- SaaS platforms and digital services
-- Physical products via dropshipping/eCommerce
-- Affiliate and influencer offers
-
----
-
-## 🧠 Built-in AI Agents (Modular & Autonomous)
-
-### 👨‍💼 1. **Campaign Manager AI**
-- Plans full campaigns across all platforms
-- Analyzes past performance to improve results
-
-### 🧑‍🎨 2. **Creative Designer AI**
-- Generates viral thumbnails, short-form videos, reels, and stories
-- Designs brand kits and static graphics for posts and ads
-
-### ✍️ 3. **Copywriter AI**
-- Writes SEO-optimized captions, titles, and descriptions
-- Generates ad copy for TikTok, Meta, YouTube, Google Ads
-
-### 🌍 4. **Translation AI**
-- Translates every post into 20+ languages instantly
-- Uses auto-detection of target market regions
-
-### 📅 5. **Scheduling Agent**
-- Posts 10x per day across all platforms
-- Uses best-time-to-post algorithms per region
-
-### 🎯 6. **Ad Optimizer AI**
-- Automatically runs and tests paid ads
-- Tracks ROI, adjusts bids, refines audiences
-
-### 📈 7. **Analytics & Reports AI**
-- Generates daily, weekly, and monthly reports
-- Visualizes KPIs: reach, CTR, conversion, bounce, CPA
-
-### 💬 8. **Auto-Responder AI**
-- Handles customer DMs on Instagram, Facebook, TikTok
-- Provides instant answers, booking links, or escalates issues
-
----
-
-## 🧬 Meta-Agent System
-
-### 🕵️ 9. **Overseer AI (New)**
-- Supervises all AI agents
-- Flags underperformance or errors
-- Assigns retraining or improvement tasks
-
-### 🔄 10. **Agent-Coordinator AI (New)**
-- Ensures cross-agent collaboration
-- Optimizes workflows to prevent overlaps or conflicts
-- Maintains resource usage balance and uptime
-
----
-
-## 🔗 API Integrations (Live)
-
-- **TikTok Business API**
-- **Instagram Graph API**
-- **Meta Ads API**
-- **OpenAI GPT-4o**
-- **YouTube Studio API**
-- **Google Search Console**
-- **Shopify API (for stores)**
-- **Zapier & Webhooks**
-
----
-
-## 📦 Features for Business Growth
-
-- Campaign Replicator: one-click duplication for multiple clients
-- App Launch Booster: full go-to-market rollout for mobile apps
-- Built-in CRM with secure messaging & lead scoring
-- Split-test automation with image/video/text variations
-- Ad budget allocator (ROI-prioritized)
-- Auto-starter for viral trends with TikTok audio pairing
-
----
-
-## 📊 Real-Time Dashboard
-
-- Conversion tracking
-- Post engagement heatmaps
-- Ad spend vs profit graph
-- Trend prediction engine (AI powered)
-- Push alerts to your phone or smart device
-
----
-
-## 🔐 Admin & Access
-
-- Private admin access with master code lock
-- Team role assignment + permission controls
-- Banking integration with split payments
-- Encrypted API key manager
-- Ready for Henry accountant integration (NZ)
-
----
-
-## 💡 Tech Stack
-
-- Frontend: React + Tailwind CSS
-- Backend: Node.js + Express
-- AI: OpenAI GPT-4o + LangChain agents
-- DB: MongoDB (NoSQL) + PostgreSQL (optional)
-- Hosting: Vercel (Frontend), Railway or Render (Backend)
-- CI/CD: GitHub Actions
-
----
-
-## 👨‍💻 Instructions
-
-1. Clone the repository
-2. Run `npm install`
-3. Configure `.env` with your API keys
-4. Run `npm run dev` to start local development
-5. Deploy via Vercel, Render, or Docker
-
----
-
-## 👑 Developer Note
-
-Built to scale from solopreneurs to enterprise. This app improves as you grow. The meta-agents constantly update and refine themselves for optimal performance.
-
-Teamwork makes the dream work — and the dream is now automated.
+> "This app markets itself into the world — and in doing so, proves it can market anything else just as effectively."
