@@ -50,10 +50,10 @@ function stripMongo(doc) {
 async function getMongoDb() {
   if (!USE_MONGO) return null;
   if (mongoDb) return mongoDb;
-  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ai_marketing';
+  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ai_marketing_agency';
   mongoClient = new MongoClient(uri);
   await mongoClient.connect();
-  mongoDb = mongoClient.db(process.env.MONGODB_DB_NAME || 'ai_marketing');
+  mongoDb = mongoClient.db(process.env.MONGODB_DB_NAME || 'ai_marketing_agency');
   console.log('Connected to MongoDB');
   return mongoDb;
 }
@@ -92,6 +92,7 @@ const store = {
 
   isMongo() { return USE_MONGO && !!mongoDb; },
 
+  // Users
   getUsers() {
     if (this.isMongo()) return col('users').find().toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(users);
@@ -117,7 +118,7 @@ const store = {
   },
   async findUserByEmail(email) {
     if (this.isMongo()) return stripMongo(await col('users').findOne({ email: email.toLowerCase() }));
-    return users.find(u => u.email === email.toLowerCase());
+    return users.find(u => u.email === email);
   },
   async findUserById(id) {
     if (this.isMongo()) return stripMongo(await col('users').findOne({ _id: toMongoId(id) }));
@@ -146,6 +147,7 @@ const store = {
   },
   async hashPassword(password) { return bcrypt.hash(password, 12); },
 
+  // Organizations
   getOrganizations() {
     if (this.isMongo()) return col('orgs').find().toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(organizations);
@@ -180,6 +182,7 @@ const store = {
     const org = organizations.find(o => o.id === orgId); if (!org) return null; const member = org.members.find(m => m.userId === userId); if (member) { member.role = role; this._save(); } return org;
   },
 
+  // Invites
   getInvites() {
     if (this.isMongo()) return col('invites').find().toArray().then(docs => docs.map(stripMongo));
     return invites;
@@ -193,11 +196,20 @@ const store = {
     if (this.isMongo()) return col('invites').findOne({ token, expiresAt: { $gt: new Date().toISOString() } }).then(stripMongo);
     return invites.find(i => i.token === token && new Date(i.expiresAt) > new Date());
   },
+  getInvitesByOrg(orgId) {
+    if (this.isMongo()) return col('invites').find({ orgId }).toArray().then(docs => docs.map(stripMongo));
+    return Promise.resolve(invites.filter(i => i.orgId === orgId));
+  },
   deleteInvite(id) {
     if (this.isMongo()) return col('invites').deleteOne({ _id: toMongoId(id) }).then(() => true);
     const idx = invites.findIndex(i => i.id === id); if (idx === -1) return false; invites.splice(idx, 1); this._save(); return true;
   },
+  cleanupExpiredInvites() {
+    if (this.isMongo()) return col('invites').deleteMany({ expiresAt: { $lt: new Date().toISOString() } }).then(() => true);
+    const before = invites.length; invites = invites.filter(i => new Date(i.expiresAt) > new Date()); if (invites.length !== before) this._save();
+  },
 
+  // Agents
   getAgents() {
     if (this.isMongo()) return col('agents').find().toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(agents);
@@ -224,6 +236,7 @@ const store = {
     if (agents.length === 0) { agents = defaults.map(a => ({ id: this._id(), ...a, createdAt: new Date().toISOString() })); this._save(); }
   },
 
+  // Campaigns
   getCampaigns() {
     if (this.isMongo()) return col('campaigns').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(campaigns);
@@ -246,6 +259,7 @@ const store = {
     const idx = campaigns.findIndex(c => c.id === id); if (idx === -1) return false; campaigns.splice(idx, 1); this._save(); return true;
   },
 
+  // Content
   getContent() {
     if (this.isMongo()) return col('content').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(content);
@@ -264,6 +278,7 @@ const store = {
     const idx = content.findIndex(c => c.id === id); if (idx === -1) return false; content.splice(idx, 1); this._save(); return true;
   },
 
+  // Leads
   getLeads() {
     if (this.isMongo()) return col('leads').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(leads);
@@ -282,6 +297,7 @@ const store = {
     const idx = leads.findIndex(l => l.id === id); if (idx === -1) return false; leads.splice(idx, 1); this._save(); return true;
   },
 
+  // Legal
   getLegalDocs() {
     if (this.isMongo()) return col('legalDocs').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(legalDocs);
@@ -291,7 +307,16 @@ const store = {
     if (this.isMongo()) return col('legalDocs').insertOne(d).then(res => stripMongo({ ...d, _id: res.insertedId }));
     legalDocs.push(d); this._save(); return d;
   },
+  updateLegalDoc(id, updates) {
+    if (this.isMongo()) return col('legalDocs').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('legalDocs').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = legalDocs.findIndex(d => d.id === id); if (idx === -1) return null; legalDocs[idx] = { ...legalDocs[idx], ...updates }; this._save(); return legalDocs[idx];
+  },
+  deleteLegalDoc(id) {
+    if (this.isMongo()) return col('legalDocs').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = legalDocs.findIndex(d => d.id === id); if (idx === -1) return false; legalDocs.splice(idx, 1); this._save(); return true;
+  },
 
+  // Tasks
   getTasks() {
     if (this.isMongo()) return col('tasks').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(tasks);
@@ -301,7 +326,16 @@ const store = {
     if (this.isMongo()) return col('tasks').insertOne(t).then(res => stripMongo({ ...t, _id: res.insertedId }));
     tasks.push(t); this._save(); return t;
   },
+  updateTask(id, updates) {
+    if (this.isMongo()) return col('tasks').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('tasks').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = tasks.findIndex(t => t.id === id); if (idx === -1) return null; tasks[idx] = { ...tasks[idx], ...updates }; this._save(); return tasks[idx];
+  },
+  deleteTask(id) {
+    if (this.isMongo()) return col('tasks').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = tasks.findIndex(t => t.id === id); if (idx === -1) return false; tasks.splice(idx, 1); this._save(); return true;
+  },
 
+  // Subscriptions
   getSubscriptions() {
     if (this.isMongo()) return col('subscriptions').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
     return Promise.resolve(subscriptions);
@@ -319,7 +353,21 @@ const store = {
     if (this.isMongo()) return col('subscriptions').find({ userId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
     return subscriptions.filter(s => s.userId === userId || s.user === userId);
   },
+  deleteSubscription(id) {
+    if (this.isMongo()) return col('subscriptions').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = subscriptions.findIndex(s => s.id === id); if (idx === -1) return false; subscriptions.splice(idx, 1); this._save(); return true;
+  },
+  createPaymentIntent(data) {
+    const p = { id: this._id(), ...data, createdAt: new Date().toISOString() };
+    if (this.isMongo()) return col('payments').insertOne(p).then(res => stripMongo({ ...p, _id: res.insertedId }));
+    return p;
+  },
+  ping() {
+    if (this.isMongo()) return mongoClient ? Promise.resolve(true) : Promise.reject(new Error('MongoDB not connected'));
+    return Promise.resolve(true);
+  },
 
+  // Analytics
   getAnalytics() {
     if (this.isMongo()) return col('analytics').findOne({ key: 'global' }).then(doc => doc?.data || {});
     return Promise.resolve(analytics);
@@ -329,6 +377,7 @@ const store = {
     analytics[key] = value; this._save();
   },
 
+  // Settings
   getSettings() {
     if (this.isMongo()) return col('settings').findOne({ key: 'global' }).then(doc => doc?.data || {});
     return Promise.resolve(settings);
@@ -337,6 +386,42 @@ const store = {
     if (this.isMongo()) { await col('settings').updateOne({ key: 'global' }, { $set: { [`data.${key}`]: value, updatedAt: new Date().toISOString() } }, { upsert: true }); return; }
     settings[key] = value; this._save();
   },
+
+  // Messages (new for MongoDB, fallback to in-memory for JSON)
+  async createMessage(data) {
+    if (this.isMongo()) { const msg = { id: this._id(), ...data, createdAt: new Date().toISOString() }; const res = await col('messages').insertOne(msg); return stripMongo({ ...msg, _id: res.insertedId }); }
+    return { id: this._id(), ...data, createdAt: new Date().toISOString() };
+  },
+  async getMessagesByLead(leadId) {
+    if (this.isMongo()) return col('messages').find({ leadId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return [];
+  },
+  async getMessagesByUser(userId) {
+    if (this.isMongo()) return col('messages').find({ userId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return [];
+  },
+  async updateMessage(id, updates) {
+    if (this.isMongo()) { await col('messages').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }); return true; }
+    return true;
+  },
+  async deleteMessage(id) {
+    if (this.isMongo()) { await col('messages').deleteOne({ _id: toMongoId(id) }); return true; }
+    return true;
+  },
+
+  // Full export
+  async fullExport() {
+    if (this.isMongo()) {
+      const [u, c, ct, l, a, o, s, p] = await Promise.all([
+        col('users').find().toArray(), col('campaigns').find().toArray(), col('content').find().toArray(),
+        col('leads').find().toArray(), col('agents').find().toArray(), col('orgs').find().toArray(),
+        col('subscriptions').find().toArray(), col('payments').find().toArray(),
+      ]);
+      return { users: u.map(stripMongo), campaigns: c.map(stripMongo), content: ct.map(stripMongo), leads: l.map(stripMongo), agents: a.map(stripMongo), orgs: o.map(stripMongo), subscriptions: s.map(stripMongo), payments: p.map(stripMongo) };
+    }
+    return { users, campaigns, content, leads, agents, organizations, subscriptions, payments: [] };
+  },
 };
 
 export default store;
+
