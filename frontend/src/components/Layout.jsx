@@ -5,7 +5,7 @@ import SearchBar from './SearchBar'
 import {
   LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
   FileText, Video, Users, CreditCard, TrendingUp, Settings,
-  Lock, LogOut, ChevronDown, User, Globe, Sun, Moon, Menu, X
+  Lock, LogOut, ChevronDown, User, Globe, Sun, Moon, Menu, X, ShoppingCart
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
@@ -13,6 +13,7 @@ const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/dashboard/agents', icon: Bot, label: 'Agents' },
   { path: '/dashboard/campaigns', icon: Megaphone, label: 'Campaigns' },
+  { path: '/dashboard/products', icon: ShoppingCart, label: 'Product Marketing' },
   { path: '/dashboard/social', icon: Share2, label: 'Social' },
   { path: '/dashboard/content', icon: FileText, label: 'Content Studio' },
   { path: '/dashboard/video', icon: Video, label: 'Video Studio' },
