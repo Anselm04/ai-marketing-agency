@@ -20,6 +20,8 @@ function saveFile(name, data) {
 }
 
 let users = loadFile('users');
+let organizations = loadFile('organizations');
+let invites = loadFile('invites');
 let agents = loadFile('agents');
 let campaigns = loadFile('campaigns');
 let content = loadFile('content');
@@ -33,6 +35,8 @@ let settings = loadFile('settings', {});
 const store = {
   _save() {
     saveFile('users', users);
+    saveFile('organizations', organizations);
+    saveFile('invites', invites);
     saveFile('agents', agents);
     saveFile('campaigns', campaigns);
     saveFile('content', content);
@@ -78,6 +82,88 @@ const store = {
   async comparePassword(password, hash) { return bcrypt.compare(password, hash); },
   generateToken(userId) { return jwt.sign({ userId }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' }); },
   verifyToken(token) { return jwt.verify(token, process.env.JWT_SECRET || 'dev-secret'); },
+
+  // Organizations
+  getOrganizations() { return organizations; },
+  getOrganizationById(id) { return organizations.find(o => o.id === id); },
+  getOrganizationByUserId(userId) {
+    return organizations.find(o => o.members.some(m => m.userId === userId));
+  },
+  createOrganization(data) {
+    const org = {
+      id: this._id(),
+      name: data.name,
+      ownerId: data.ownerId,
+      members: [{ userId: data.ownerId, role: 'owner', joinedAt: new Date().toISOString() }],
+      createdAt: new Date().toISOString(),
+    };
+    organizations.push(org);
+    this._save();
+    return org;
+  },
+  updateOrganization(id, updates) {
+    const idx = organizations.findIndex(o => o.id === id);
+    if (idx === -1) return null;
+    organizations[idx] = { ...organizations[idx], ...updates, id };
+    this._save();
+    return organizations[idx];
+  },
+  addMember(orgId, userId, role) {
+    const org = organizations.find(o => o.id === orgId);
+    if (!org) return null;
+    if (!org.members.some(m => m.userId === userId)) {
+      org.members.push({ userId, role: role || 'member', joinedAt: new Date().toISOString() });
+      this._save();
+    }
+    return org;
+  },
+  removeMember(orgId, userId) {
+    const org = organizations.find(o => o.id === orgId);
+    if (!org) return null;
+    org.members = org.members.filter(m => m.userId !== userId);
+    this._save();
+    return org;
+  },
+  updateMemberRole(orgId, userId, role) {
+    const org = organizations.find(o => o.id === orgId);
+    if (!org) return null;
+    const member = org.members.find(m => m.userId === userId);
+    if (member) {
+      member.role = role;
+      this._save();
+    }
+    return org;
+  },
+
+  // Invites
+  getInvites() { return invites; },
+  createInvite(data) {
+    const invite = {
+      id: this._id(),
+      orgId: data.orgId,
+      email: data.email.toLowerCase(),
+      role: data.role || 'member',
+      token: data.token,
+      expiresAt: data.expiresAt,
+      createdAt: new Date().toISOString(),
+    };
+    invites.push(invite);
+    this._save();
+    return invite;
+  },
+  findInviteByToken(token) { return invites.find(i => i.token === token && new Date(i.expiresAt) > new Date()); },
+  deleteInvite(id) {
+    const idx = invites.findIndex(i => i.id === id);
+    if (idx === -1) return false;
+    invites.splice(idx, 1);
+    this._save();
+    return true;
+  },
+  cleanupExpiredInvites() {
+    const before = invites.length;
+    invites = invites.filter(i => new Date(i.expiresAt) > new Date());
+    if (invites.length !== before) this._save();
+  },
 
   // Agents
   getAgents() { return agents; },

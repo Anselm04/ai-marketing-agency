@@ -5,6 +5,17 @@ import { authenticate } from '../middleware/auth.js';
 const router = express.Router();
 router.use(authenticate);
 
+router.get('/', (req, res) => {
+  const campaigns = store.getCampaigns().filter(c => c.owner === req.user.id);
+  const leads = store.getLeads().filter(l => l.owner === req.user.id);
+  res.json({
+    campaigns: campaigns.length,
+    leads: leads.length,
+    revenue: campaigns.reduce((s, c) => s + (c.revenue || 0), 0),
+    spend: campaigns.reduce((s, c) => s + (c.spend || 0), 0),
+  });
+});
+
 router.get('/dashboard', (req, res) => {
   const campaigns = store.getCampaigns().filter(c => c.owner === req.user.id);
   const totalRevenue = campaigns.reduce((sum, c) => sum + (c.revenue || 0), 0);

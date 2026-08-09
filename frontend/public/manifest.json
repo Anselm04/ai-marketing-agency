@@ -1,0 +1,17 @@
+{
+  "name": "AI Marketing Agency",
+  "short_name": "AI Agency",
+  "description": "Autonomous AI-powered marketing platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

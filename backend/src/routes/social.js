@@ -17,6 +17,18 @@ router.post('/publish', async (req, res) => {
   }
 });
 
+// Generic platform publish endpoint
+router.post('/:platform', async (req, res) => {
+  const { platform } = req.params;
+  try {
+    const result = await socialMediaService.publishToAll({ [platform]: true, ...req.body });
+    res.json(result[0] || { platform, fallback: true, message: 'Platform not found' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Legacy specific endpoints
 router.post('/tiktok', async (req, res) => {
   const { videoUrl, caption, hashtags } = req.body;
   const result = await socialMediaService.publishTikTok(videoUrl, caption, hashtags);

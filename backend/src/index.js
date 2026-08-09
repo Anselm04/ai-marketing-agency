@@ -20,16 +20,38 @@ import trendsRoutes from './routes/trends.js';
 import adminRoutes from './routes/admin.js';
 import settingsRoutes from './routes/settings.js';
 import translationRoutes from './routes/translation.js';
+import exportRoutes from './routes/export.js';
+import teamRoutes from './routes/team.js';
 
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
+import { sanitizeBody } from './middleware/sanitize.js';
+import { validateEnv } from './middleware/envCheck.js';
+import { auditLog } from './middleware/auditLog.js';
+import { authenticate } from './middleware/auth.js';
 import schedulerService from './services/schedulerService.js';
 import store from './utils/store.js';
 
 dotenv.config();
+validateEnv();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// CORS whitelist
+const whitelist = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173').split(',');
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || whitelist.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
 
 store.seedAgents([
   { agentId: 'chief-strategy', name: 'Chief Strategy Agent', role: 'Oversees all operations and revenue generation priorities', category: 'strategy', status: 'active', lastActive: new Date().toISOString() },
@@ -48,13 +70,19 @@ store.seedAgents([
 ]);
 
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(sanitizeBody);
+app.use(auditLog);
 app.use(rateLimit);
 
 app.use('/api/auth', authRoutes);
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), db: 'json-store' });
+});
+app.use(authenticate);
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/analytics', analyticsRoutes);
@@ -70,17 +98,19 @@ app.use('/api/trends', trendsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/translation', translationRoutes);
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), db: 'json-store' });
-});
+app.use('/api/export', exportRoutes);
+app.use('/api/team', teamRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  schedulerService.start();
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    schedulerService.start();
+  });
+} else {
+  // In test mode, export app without starting server
+}
 
 export default app;

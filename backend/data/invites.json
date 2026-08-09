@@ -1,0 +1,29 @@
+[
+  {
+    "id": "a013220d-364e-4634-a5a4-3e841544bf24",
+    "orgId": "8bcda649-7d3c-4101-8439-b53c55be0374",
+    "email": "invited@example.com",
+    "role": "member",
+    "token": "db28522a2eddea001cd4b178c47b28aa55d58128e6a4cef88a506b9fc1abe45e",
+    "expiresAt": "2026-08-16T11:17:41.331Z",
+    "createdAt": "2026-08-09T11:17:41.331Z"
+  },
+  {
+    "id": "d14eadb3-bc85-4d65-a49b-0f646cd72d05",
+    "orgId": "71d2a9ba-f194-4777-902a-1fe2ff2835cb",
+    "email": "invited@example.com",
+    "role": "member",
+    "token": "a122650fa18ee086178e261025adb3a710806ae7f6f8e63ea23e436f87fe69fe",
+    "expiresAt": "2026-08-16T11:18:30.245Z",
+    "createdAt": "2026-08-09T11:18:30.245Z"
+  },
+  {
+    "id": "02072922-22ae-44d8-9bf9-42074ac52cb3",
+    "orgId": "9c47bc35-b394-4cd5-a41b-17ff4dd39ec6",
+    "email": "invited@example.com",
+    "role": "member",
+    "token": "aee6088a0bc5fdfc7de1b2147f620f93610c66b27c2e1bf119f48f611845e95f",
+    "expiresAt": "2026-08-16T11:19:19.538Z",
+    "createdAt": "2026-08-09T11:19:19.538Z"
+  }
+]
