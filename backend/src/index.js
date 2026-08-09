@@ -22,6 +22,9 @@ import settingsRoutes from './routes/settings.js';
 import translationRoutes from './routes/translation.js';
 import exportRoutes from './routes/export.js';
 import teamRoutes from './routes/team.js';
+import uploadRoutes from './routes/uploads.js';
+import searchRoutes from './routes/search.js';
+import { serveUploads } from './routes/uploads.js';
 
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
@@ -34,6 +37,8 @@ import store from './utils/store.js';
 
 dotenv.config();
 validateEnv();
+
+store.connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -100,6 +105,10 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/translation', translationRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/team', teamRoutes);
+app.use('/api/uploads', authenticate, uploadRoutes);
+app.use('/api/search', authenticate, searchRoutes);
+
+serveUploads(app);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

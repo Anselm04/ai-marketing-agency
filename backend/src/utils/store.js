@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { MongoClient, ObjectId } from 'mongodb';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', '..', 'data');
@@ -10,11 +11,8 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 function loadFile(name, defaultVal = []) {
   const file = path.join(dataDir, `${name}.json`);
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch { return defaultVal; }
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')); } catch { return defaultVal; }
 }
-
 function saveFile(name, data) {
   fs.writeFileSync(path.join(dataDir, `${name}.json`), JSON.stringify(data, null, 2));
 }
@@ -32,8 +30,41 @@ let subscriptions = loadFile('subscriptions');
 let analytics = loadFile('analytics', {});
 let settings = loadFile('settings', {});
 
+const USE_MONGO = process.env.USE_MONGO === 'true' || process.env.MONGODB_URI;
+let mongoClient = null;
+let mongoDb = null;
+
+function toMongoId(val) {
+  if (!val) return val;
+  if (val instanceof ObjectId) return val;
+  if (ObjectId.isValid(val)) return new ObjectId(val);
+  return val;
+}
+function stripMongo(doc) {
+  if (!doc) return doc;
+  const { _id, ...rest } = doc;
+  return { id: _id?.toString?.() || _id, ...rest };
+}
+
+async function getMongoDb() {
+  if (!USE_MONGO) return null;
+  if (mongoDb) return mongoDb;
+  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ai_marketing_agency';
+  mongoClient = new MongoClient(uri);
+  await mongoClient.connect();
+  mongoDb = mongoClient.db(process.env.MONGODB_DB_NAME || 'ai_marketing_agency');
+  console.log('Connected to MongoDB');
+  return mongoDb;
+}
+
+function col(name) {
+  if (!mongoDb) throw new Error('MongoDB not connected');
+  return mongoDb.collection(name);
+}
+
 const store = {
   _save() {
+    if (USE_MONGO) return;
     saveFile('users', users);
     saveFile('organizations', organizations);
     saveFile('invites', invites);
@@ -50,28 +81,53 @@ const store = {
 
   _id() { return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2); },
 
+  async connectDB() {
+    if (USE_MONGO) await getMongoDb();
+  },
+
+  async disconnectDB() {
+    if (mongoClient) { await mongoClient.close(); mongoClient = null; mongoDb = null; }
+  },
+
+  isMongo() { return USE_MONGO && !!mongoDb; },
+
   // Users
-  getUsers() { return users; },
+  getUsers() {
+    if (this.isMongo()) return col('users').find().toArray().then(docs => docs.map(stripMongo));
+    return users;
+  },
   async createUser(userData) {
+    if (this.isMongo()) {
+      const existing = await col('users').findOne({ email: userData.email.toLowerCase() });
+      if (existing) throw new Error('User already exists');
+      const hashed = await bcrypt.hash(userData.password, 12);
+      const user = { id: this._id(), email: userData.email.toLowerCase(), password: hashed, role: userData.role || 'user', profile: userData.profile || {}, createdAt: new Date().toISOString() };
+      const res = await col('users').insertOne(user);
+      const { password, ...safe } = user;
+      return safe;
+    }
     const existing = users.find(u => u.email === userData.email);
     if (existing) throw new Error('User already exists');
     const hashed = await bcrypt.hash(userData.password, 12);
-    const user = {
-      id: this._id(),
-      email: userData.email,
-      password: hashed,
-      role: userData.role || 'user',
-      profile: userData.profile || {},
-      createdAt: new Date().toISOString(),
-    };
+    const user = { id: this._id(), email: userData.email, password: hashed, role: userData.role || 'user', profile: userData.profile || {}, createdAt: new Date().toISOString() };
     users.push(user);
     this._save();
     const { password, ...safe } = user;
     return safe;
   },
-  async findUserByEmail(email) { return users.find(u => u.email === email); },
-  async findUserById(id) { return users.find(u => u.id === id); },
+  async findUserByEmail(email) {
+    if (this.isMongo()) return stripMongo(await col('users').findOne({ email: email.toLowerCase() }));
+    return users.find(u => u.email === email);
+  },
+  async findUserById(id) {
+    if (this.isMongo()) return stripMongo(await col('users').findOne({ _id: toMongoId(id) }));
+    return users.find(u => u.id === id);
+  },
   async updateUser(id, updates) {
+    if (this.isMongo()) {
+      await col('users').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } });
+      return this.findUserById(id);
+    }
     const idx = users.findIndex(u => u.id === id);
     if (idx === -1) return null;
     users[idx] = { ...users[idx], ...updates, id: users[idx].id };
@@ -82,258 +138,262 @@ const store = {
   async comparePassword(password, hash) { return bcrypt.compare(password, hash); },
   generateToken(userId) { return jwt.sign({ userId }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' }); },
   verifyToken(token) { return jwt.verify(token, process.env.JWT_SECRET || 'dev-secret'); },
+  async hashPassword(password) { return bcrypt.hash(password, 12); },
 
   // Organizations
-  getOrganizations() { return organizations; },
-  getOrganizationById(id) { return organizations.find(o => o.id === id); },
+  getOrganizations() {
+    if (this.isMongo()) return col('orgs').find().toArray().then(docs => docs.map(stripMongo));
+    return organizations;
+  },
+  getOrganizationById(id) {
+    if (this.isMongo()) return col('orgs').findOne({ _id: toMongoId(id) }).then(stripMongo);
+    return organizations.find(o => o.id === id);
+  },
   getOrganizationByUserId(userId) {
+    if (this.isMongo()) return col('orgs').findOne({ 'members.userId': userId }).then(stripMongo);
     return organizations.find(o => o.members.some(m => m.userId === userId));
   },
-  createOrganization(data) {
-    const org = {
-      id: this._id(),
-      name: data.name,
-      ownerId: data.ownerId,
-      members: [{ userId: data.ownerId, role: 'owner', joinedAt: new Date().toISOString() }],
-      createdAt: new Date().toISOString(),
-    };
-    organizations.push(org);
-    this._save();
-    return org;
+  async createOrganization(data) {
+    const org = { id: this._id(), name: data.name, ownerId: data.ownerId, members: [{ userId: data.ownerId, role: 'owner', joinedAt: new Date().toISOString() }], createdAt: new Date().toISOString() };
+    if (this.isMongo()) { const res = await col('orgs').insertOne(org); return stripMongo({ ...org, _id: res.insertedId }); }
+    organizations.push(org); this._save(); return org;
   },
-  updateOrganization(id, updates) {
-    const idx = organizations.findIndex(o => o.id === id);
-    if (idx === -1) return null;
-    organizations[idx] = { ...organizations[idx], ...updates, id };
-    this._save();
-    return organizations[idx];
+  async updateOrganization(id, updates) {
+    if (this.isMongo()) { await col('orgs').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }); return this.getOrganizationById(id); }
+    const idx = organizations.findIndex(o => o.id === id); if (idx === -1) return null; organizations[idx] = { ...organizations[idx], ...updates, id }; this._save(); return organizations[idx];
   },
   addMember(orgId, userId, role) {
-    const org = organizations.find(o => o.id === orgId);
-    if (!org) return null;
-    if (!org.members.some(m => m.userId === userId)) {
-      org.members.push({ userId, role: role || 'member', joinedAt: new Date().toISOString() });
-      this._save();
-    }
-    return org;
+    if (this.isMongo()) return col('orgs').updateOne({ _id: toMongoId(orgId) }, { $addToSet: { members: { userId, role: role || 'member', joinedAt: new Date().toISOString() } } }).then(() => this.getOrganizationById(orgId));
+    const org = organizations.find(o => o.id === orgId); if (!org) return null; if (!org.members.some(m => m.userId === userId)) { org.members.push({ userId, role: role || 'member', joinedAt: new Date().toISOString() }); this._save(); } return org;
   },
   removeMember(orgId, userId) {
-    const org = organizations.find(o => o.id === orgId);
-    if (!org) return null;
-    org.members = org.members.filter(m => m.userId !== userId);
-    this._save();
-    return org;
+    if (this.isMongo()) return col('orgs').updateOne({ _id: toMongoId(orgId) }, { $pull: { members: { userId } } }).then(() => this.getOrganizationById(orgId));
+    const org = organizations.find(o => o.id === orgId); if (!org) return null; org.members = org.members.filter(m => m.userId !== userId); this._save(); return org;
   },
   updateMemberRole(orgId, userId, role) {
-    const org = organizations.find(o => o.id === orgId);
-    if (!org) return null;
-    const member = org.members.find(m => m.userId === userId);
-    if (member) {
-      member.role = role;
-      this._save();
-    }
-    return org;
+    if (this.isMongo()) return col('orgs').updateOne({ _id: toMongoId(orgId), 'members.userId': userId }, { $set: { 'members.$.role': role } }).then(() => this.getOrganizationById(orgId));
+    const org = organizations.find(o => o.id === orgId); if (!org) return null; const member = org.members.find(m => m.userId === userId); if (member) { member.role = role; this._save(); } return org;
   },
 
   // Invites
-  getInvites() { return invites; },
-  createInvite(data) {
-    const invite = {
-      id: this._id(),
-      orgId: data.orgId,
-      email: data.email.toLowerCase(),
-      role: data.role || 'member',
-      token: data.token,
-      expiresAt: data.expiresAt,
-      createdAt: new Date().toISOString(),
-    };
-    invites.push(invite);
-    this._save();
-    return invite;
+  getInvites() {
+    if (this.isMongo()) return col('invites').find().toArray().then(docs => docs.map(stripMongo));
+    return invites;
   },
-  findInviteByToken(token) { return invites.find(i => i.token === token && new Date(i.expiresAt) > new Date()); },
+  createInvite(data) {
+    const invite = { id: this._id(), orgId: data.orgId, email: data.email.toLowerCase(), role: data.role || 'member', token: data.token, expiresAt: data.expiresAt, createdAt: new Date().toISOString() };
+    if (this.isMongo()) return col('invites').insertOne(invite).then(res => stripMongo({ ...invite, _id: res.insertedId }));
+    invites.push(invite); this._save(); return invite;
+  },
+  findInviteByToken(token) {
+    if (this.isMongo()) return col('invites').findOne({ token, expiresAt: { $gt: new Date().toISOString() } }).then(stripMongo);
+    return invites.find(i => i.token === token && new Date(i.expiresAt) > new Date());
+  },
   deleteInvite(id) {
-    const idx = invites.findIndex(i => i.id === id);
-    if (idx === -1) return false;
-    invites.splice(idx, 1);
-    this._save();
-    return true;
+    if (this.isMongo()) return col('invites').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = invites.findIndex(i => i.id === id); if (idx === -1) return false; invites.splice(idx, 1); this._save(); return true;
   },
   cleanupExpiredInvites() {
-    const before = invites.length;
-    invites = invites.filter(i => new Date(i.expiresAt) > new Date());
-    if (invites.length !== before) this._save();
+    if (this.isMongo()) return col('invites').deleteMany({ expiresAt: { $lt: new Date().toISOString() } }).then(() => true);
+    const before = invites.length; invites = invites.filter(i => new Date(i.expiresAt) > new Date()); if (invites.length !== before) this._save();
   },
 
   // Agents
-  getAgents() { return agents; },
-  getAgentById(id) { return agents.find(a => a.id === id || a.agentId === id); },
+  getAgents() {
+    if (this.isMongo()) return col('agents').find().toArray().then(docs => docs.map(stripMongo));
+    return agents;
+  },
+  getAgentById(id) {
+    if (this.isMongo()) return col('agents').findOne({ $or: [{ _id: toMongoId(id) }, { agentId: id }] }).then(stripMongo);
+    return agents.find(a => a.id === id || a.agentId === id);
+  },
   createAgent(agent) {
     const a = { id: this._id(), ...agent, createdAt: new Date().toISOString() };
-    agents.push(a);
-    this._save();
-    return a;
+    if (this.isMongo()) return col('agents').insertOne(a).then(res => stripMongo({ ...a, _id: res.insertedId }));
+    agents.push(a); this._save(); return a;
   },
   updateAgent(id, updates) {
-    const idx = agents.findIndex(a => a.id === id || a.agentId === id);
-    if (idx === -1) return null;
-    agents[idx] = { ...agents[idx], ...updates };
-    this._save();
-    return agents[idx];
+    if (this.isMongo()) return col('agents').updateOne({ agentId: id }, { $set: { ...updates, updatedAt: new Date().toISOString() } }, { upsert: true }).then(() => this.getAgentById(id));
+    const idx = agents.findIndex(a => a.id === id || a.agentId === id); if (idx === -1) return null; agents[idx] = { ...agents[idx], ...updates }; this._save(); return agents[idx];
   },
   deleteAgent(id) {
-    const idx = agents.findIndex(a => a.id === id || a.agentId === id);
-    if (idx === -1) return false;
-    agents.splice(idx, 1);
-    this._save();
-    return true;
+    if (this.isMongo()) return col('agents').deleteOne({ $or: [{ _id: toMongoId(id) }, { agentId: id }] }).then(() => true);
+    const idx = agents.findIndex(a => a.id === id || a.agentId === id); if (idx === -1) return false; agents.splice(idx, 1); this._save(); return true;
   },
   seedAgents(defaults) {
-    if (agents.length === 0) {
-      agents = defaults.map(a => ({ id: this._id(), ...a, createdAt: new Date().toISOString() }));
-      this._save();
-    }
+    if (this.isMongo()) return col('agents').countDocuments().then(c => { if (c === 0) return col('agents').insertMany(defaults.map(a => ({ ...a, createdAt: new Date().toISOString() }))); });
+    if (agents.length === 0) { agents = defaults.map(a => ({ id: this._id(), ...a, createdAt: new Date().toISOString() })); this._save(); }
   },
 
   // Campaigns
-  getCampaigns() { return campaigns; },
-  getCampaignById(id) { return campaigns.find(c => c.id === id); },
+  getCampaigns() {
+    if (this.isMongo()) return col('campaigns').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return campaigns;
+  },
+  getCampaignById(id) {
+    if (this.isMongo()) return col('campaigns').findOne({ _id: toMongoId(id) }).then(stripMongo);
+    return campaigns.find(c => c.id === id);
+  },
   createCampaign(campaign) {
     const c = { id: this._id(), ...campaign, createdAt: new Date().toISOString() };
-    campaigns.push(c);
-    this._save();
-    return c;
+    if (this.isMongo()) return col('campaigns').insertOne(c).then(res => stripMongo({ ...c, _id: res.insertedId }));
+    campaigns.push(c); this._save(); return c;
   },
   updateCampaign(id, updates) {
-    const idx = campaigns.findIndex(c => c.id === id);
-    if (idx === -1) return null;
-    campaigns[idx] = { ...campaigns[idx], ...updates };
-    this._save();
-    return campaigns[idx];
+    if (this.isMongo()) return col('campaigns').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => this.getCampaignById(id));
+    const idx = campaigns.findIndex(c => c.id === id); if (idx === -1) return null; campaigns[idx] = { ...campaigns[idx], ...updates }; this._save(); return campaigns[idx];
   },
   deleteCampaign(id) {
-    const idx = campaigns.findIndex(c => c.id === id);
-    if (idx === -1) return false;
-    campaigns.splice(idx, 1);
-    this._save();
-    return true;
+    if (this.isMongo()) return col('campaigns').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = campaigns.findIndex(c => c.id === id); if (idx === -1) return false; campaigns.splice(idx, 1); this._save(); return true;
   },
 
   // Content
-  getContent() { return content; },
+  getContent() {
+    if (this.isMongo()) return col('content').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return content;
+  },
   createContent(item) {
     const c = { id: this._id(), ...item, createdAt: new Date().toISOString() };
-    content.push(c);
-    this._save();
-    return c;
+    if (this.isMongo()) return col('content').insertOne(c).then(res => stripMongo({ ...c, _id: res.insertedId }));
+    content.push(c); this._save(); return c;
   },
   updateContent(id, updates) {
-    const idx = content.findIndex(c => c.id === id);
-    if (idx === -1) return null;
-    content[idx] = { ...content[idx], ...updates };
-    this._save();
-    return content[idx];
+    if (this.isMongo()) return col('content').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('content').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = content.findIndex(c => c.id === id); if (idx === -1) return null; content[idx] = { ...content[idx], ...updates }; this._save(); return content[idx];
   },
   deleteContent(id) {
-    const idx = content.findIndex(c => c.id === id);
-    if (idx === -1) return false;
-    content.splice(idx, 1);
-    this._save();
-    return true;
+    if (this.isMongo()) return col('content').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = content.findIndex(c => c.id === id); if (idx === -1) return false; content.splice(idx, 1); this._save(); return true;
   },
 
   // Leads
-  getLeads() { return leads; },
+  getLeads() {
+    if (this.isMongo()) return col('leads').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return leads;
+  },
   createLead(lead) {
     const l = { id: this._id(), ...lead, createdAt: new Date().toISOString() };
-    leads.push(l);
-    this._save();
-    return l;
+    if (this.isMongo()) return col('leads').insertOne(l).then(res => stripMongo({ ...l, _id: res.insertedId }));
+    leads.push(l); this._save(); return l;
   },
   updateLead(id, updates) {
-    const idx = leads.findIndex(l => l.id === id);
-    if (idx === -1) return null;
-    leads[idx] = { ...leads[idx], ...updates };
-    this._save();
-    return leads[idx];
+    if (this.isMongo()) return col('leads').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('leads').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = leads.findIndex(l => l.id === id); if (idx === -1) return null; leads[idx] = { ...leads[idx], ...updates }; this._save(); return leads[idx];
   },
   deleteLead(id) {
-    const idx = leads.findIndex(l => l.id === id);
-    if (idx === -1) return false;
-    leads.splice(idx, 1);
-    this._save();
-    return true;
+    if (this.isMongo()) return col('leads').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = leads.findIndex(l => l.id === id); if (idx === -1) return false; leads.splice(idx, 1); this._save(); return true;
   },
 
   // Legal
-  getLegalDocs() { return legalDocs; },
+  getLegalDocs() {
+    if (this.isMongo()) return col('legalDocs').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return legalDocs;
+  },
   createLegalDoc(doc) {
     const d = { id: this._id(), ...doc, createdAt: new Date().toISOString() };
-    legalDocs.push(d);
-    this._save();
-    return d;
+    if (this.isMongo()) return col('legalDocs').insertOne(d).then(res => stripMongo({ ...d, _id: res.insertedId }));
+    legalDocs.push(d); this._save(); return d;
   },
   updateLegalDoc(id, updates) {
-    const idx = legalDocs.findIndex(d => d.id === id);
-    if (idx === -1) return null;
-    legalDocs[idx] = { ...legalDocs[idx], ...updates };
-    this._save();
-    return legalDocs[idx];
+    if (this.isMongo()) return col('legalDocs').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('legalDocs').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = legalDocs.findIndex(d => d.id === id); if (idx === -1) return null; legalDocs[idx] = { ...legalDocs[idx], ...updates }; this._save(); return legalDocs[idx];
   },
   deleteLegalDoc(id) {
-    const idx = legalDocs.findIndex(d => d.id === id);
-    if (idx === -1) return false;
-    legalDocs.splice(idx, 1);
-    this._save();
-    return true;
+    if (this.isMongo()) return col('legalDocs').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = legalDocs.findIndex(d => d.id === id); if (idx === -1) return false; legalDocs.splice(idx, 1); this._save(); return true;
   },
 
   // Tasks
-  getTasks() { return tasks; },
+  getTasks() {
+    if (this.isMongo()) return col('tasks').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return tasks;
+  },
   createTask(task) {
     const t = { id: this._id(), ...task, createdAt: new Date().toISOString() };
-    tasks.push(t);
-    this._save();
-    return t;
+    if (this.isMongo()) return col('tasks').insertOne(t).then(res => stripMongo({ ...t, _id: res.insertedId }));
+    tasks.push(t); this._save(); return t;
   },
   updateTask(id, updates) {
-    const idx = tasks.findIndex(t => t.id === id);
-    if (idx === -1) return null;
-    tasks[idx] = { ...tasks[idx], ...updates };
-    this._save();
-    return tasks[idx];
+    if (this.isMongo()) return col('tasks').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('tasks').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = tasks.findIndex(t => t.id === id); if (idx === -1) return null; tasks[idx] = { ...tasks[idx], ...updates }; this._save(); return tasks[idx];
   },
   deleteTask(id) {
-    const idx = tasks.findIndex(t => t.id === id);
-    if (idx === -1) return false;
-    tasks.splice(idx, 1);
-    this._save();
-    return true;
+    if (this.isMongo()) return col('tasks').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = tasks.findIndex(t => t.id === id); if (idx === -1) return false; tasks.splice(idx, 1); this._save(); return true;
   },
 
   // Subscriptions
-  getSubscriptions() { return subscriptions; },
+  getSubscriptions() {
+    if (this.isMongo()) return col('subscriptions').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return subscriptions;
+  },
   createSubscription(sub) {
     const s = { id: this._id(), ...sub, createdAt: new Date().toISOString() };
-    subscriptions.push(s);
-    this._save();
-    return s;
+    if (this.isMongo()) return col('subscriptions').insertOne(s).then(res => stripMongo({ ...s, _id: res.insertedId }));
+    subscriptions.push(s); this._save(); return s;
   },
   updateSubscription(id, updates) {
-    const idx = subscriptions.findIndex(s => s.id === id);
-    if (idx === -1) return null;
-    subscriptions[idx] = { ...subscriptions[idx], ...updates };
-    this._save();
-    return subscriptions[idx];
+    if (this.isMongo()) return col('subscriptions').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('subscriptions').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = subscriptions.findIndex(s => s.id === id); if (idx === -1) return null; subscriptions[idx] = { ...subscriptions[idx], ...updates }; this._save(); return subscriptions[idx];
   },
 
   // Analytics
-  getAnalytics() { return analytics; },
-  setAnalytics(key, value) { analytics[key] = value; this._save(); },
+  getAnalytics() {
+    if (this.isMongo()) return col('analytics').findOne({ key: 'global' }).then(doc => doc?.data || {});
+    return analytics;
+  },
+  async setAnalytics(key, value) {
+    if (this.isMongo()) { await col('analytics').updateOne({ key: 'global' }, { $set: { [`data.${key}`]: value, updatedAt: new Date().toISOString() } }, { upsert: true }); return; }
+    analytics[key] = value; this._save();
+  },
 
   // Settings
-  getSettings() { return settings; },
-  setSettings(key, value) { settings[key] = value; this._save(); },
+  getSettings() {
+    if (this.isMongo()) return col('settings').findOne({ key: 'global' }).then(doc => doc?.data || {});
+    return settings;
+  },
+  async setSettings(key, value) {
+    if (this.isMongo()) { await col('settings').updateOne({ key: 'global' }, { $set: { [`data.${key}`]: value, updatedAt: new Date().toISOString() } }, { upsert: true }); return; }
+    settings[key] = value; this._save();
+  },
+
+  // Messages (new for MongoDB, fallback to in-memory for JSON)
+  async createMessage(data) {
+    if (this.isMongo()) { const msg = { id: this._id(), ...data, createdAt: new Date().toISOString() }; const res = await col('messages').insertOne(msg); return stripMongo({ ...msg, _id: res.insertedId }); }
+    return { id: this._id(), ...data, createdAt: new Date().toISOString() };
+  },
+  async getMessagesByLead(leadId) {
+    if (this.isMongo()) return col('messages').find({ leadId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return [];
+  },
+  async getMessagesByUser(userId) {
+    if (this.isMongo()) return col('messages').find({ userId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return [];
+  },
+  async updateMessage(id, updates) {
+    if (this.isMongo()) { await col('messages').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }); return true; }
+    return true;
+  },
+  async deleteMessage(id) {
+    if (this.isMongo()) { await col('messages').deleteOne({ _id: toMongoId(id) }); return true; }
+    return true;
+  },
+
+  // Full export
+  async fullExport() {
+    if (this.isMongo()) {
+      const [u, c, ct, l, a, o, s, p] = await Promise.all([
+        col('users').find().toArray(), col('campaigns').find().toArray(), col('content').find().toArray(),
+        col('leads').find().toArray(), col('agents').find().toArray(), col('orgs').find().toArray(),
+        col('subscriptions').find().toArray(), col('payments').find().toArray(),
+      ]);
+      return { users: u.map(stripMongo), campaigns: c.map(stripMongo), content: ct.map(stripMongo), leads: l.map(stripMongo), agents: a.map(stripMongo), orgs: o.map(stripMongo), subscriptions: s.map(stripMongo), payments: p.map(stripMongo) };
+    }
+    return { users, campaigns, content, leads, agents, organizations, subscriptions, payments: [] };
+  },
 };
 
 export default store;
+
