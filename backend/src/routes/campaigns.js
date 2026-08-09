@@ -1,57 +1,50 @@
 import express from 'express';
+import store from '../utils/store.js';
 import agentOrchestrator from '../services/agentOrchestrator.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
-
-let campaigns = [
-  { id: 1, name: 'App Launch Booster', platform: 'TikTok', status: 'running', budget: 5000, spend: 2340, impressions: 450000, clicks: 12500, conversions: 340, roi: 2.4, createdAt: '2025-07-01' },
-  { id: 2, name: 'SEO Content Wave', platform: 'Google', status: 'running', budget: 3000, spend: 1200, impressions: 890000, clicks: 23400, conversions: 890, roi: 3.1, createdAt: '2025-07-05' },
-  { id: 3, name: 'Instagram Reels Push', platform: 'Instagram', status: 'paused', budget: 2000, spend: 1800, impressions: 320000, clicks: 8900, conversions: 210, roi: 1.8, createdAt: '2025-07-10' },
-];
+router.use(authenticate);
 
 router.get('/', (req, res) => {
+  const campaigns = store.getCampaigns().filter(c => c.owner === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json(campaigns);
 });
 
 router.post('/', (req, res) => {
-  const campaign = {
-    id: campaigns.length + 1,
-    ...req.body,
-    status: 'draft',
-    createdAt: new Date().toISOString().split('T')[0]
-  };
-  campaigns.push(campaign);
+  const campaign = store.createCampaign({ ...req.body, status: 'draft', owner: req.user.id });
   res.status(201).json(campaign);
 });
 
-router.post('/:id/strategy', async (req, res) => {
-  const campaign = campaigns.find(c => c.id === parseInt(req.params.id));
-  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-
+router.post('/:id/strategy', (req, res) => {
+  const campaign = store.getCampaignById(req.params.id);
+  if (!campaign || campaign.owner !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
   const { product, targetAudience } = req.body;
-
   try {
-    const strategy = await agentOrchestrator.runCampaignStrategy(
+    const strategy = agentOrchestrator.runCampaignStrategy(
       product || campaign.name,
       campaign.budget,
-      [campaign.platform],
-      targetAudience || 'general consumers'
+      campaign.platforms || [campaign.platform],
+      targetAudience || campaign.targetAudience || 'general consumers'
     );
-    res.json({ campaign, strategy });
+    store.updateCampaign(campaign.id, { strategy: strategy.strategy });
+    res.json({ campaign: store.getCampaignById(campaign.id), strategy });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 router.patch('/:id', (req, res) => {
-  const campaign = campaigns.find(c => c.id === parseInt(req.params.id));
-  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-  Object.assign(campaign, req.body);
-  res.json(campaign);
+  const campaign = store.getCampaignById(req.params.id);
+  if (!campaign || campaign.owner !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+  store.updateCampaign(campaign.id, req.body);
+  res.json(store.getCampaignById(campaign.id));
 });
 
 router.delete('/:id', (req, res) => {
-  campaigns = campaigns.filter(c => c.id !== parseInt(req.params.id));
+  const campaign = store.getCampaignById(req.params.id);
+  if (!campaign || campaign.owner !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+  store.deleteCampaign(campaign.id);
   res.json({ success: true });
 });
 

@@ -1,23 +1,41 @@
 import express from 'express';
+import store from '../utils/store.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 router.get('/dashboard', (req, res) => {
+  const campaigns = store.getCampaigns().filter(c => c.owner === req.user.id);
+  const totalRevenue = campaigns.reduce((sum, c) => sum + (c.revenue || 0), 0);
+  const totalSpend = campaigns.reduce((sum, c) => sum + (c.spend || 0), 0);
+  const totalImpressions = campaigns.reduce((sum, c) => sum + (c.impressions || 0), 0);
+  const totalClicks = campaigns.reduce((sum, c) => sum + (c.clicks || 0), 0);
+  const totalConversions = campaigns.reduce((sum, c) => sum + (c.conversions || 0), 0);
+  const overallRoi = totalSpend > 0 ? (totalRevenue - totalSpend) / totalSpend : 0;
+
+  const platformBreakdown = campaigns.reduce((acc, c) => {
+    c.platforms?.forEach(p => {
+      if (!acc[p]) acc[p] = { platform: p, spend: 0, revenue: 0 };
+      acc[p].spend += c.spend || 0;
+      acc[p].revenue += c.revenue || 0;
+    });
+    return acc;
+  }, {});
+
+  const leads = store.getLeads().filter(l => l.owner === req.user.id && new Date(l.createdAt) >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+
   res.json({
-    totalCampaigns: 12,
-    activeCampaigns: 5,
-    totalSpend: 45600,
-    totalRevenue: 128900,
-    overallRoi: 2.8,
-    impressions: 2340000,
-    clicks: 67800,
-    conversions: 3450,
-    platformBreakdown: [
-      { platform: 'TikTok', spend: 15000, revenue: 42000, roi: 2.8 },
-      { platform: 'Instagram', spend: 12000, revenue: 31200, roi: 2.6 },
-      { platform: 'Google', spend: 11000, revenue: 38500, roi: 3.5 },
-      { platform: 'YouTube', spend: 7600, revenue: 17200, roi: 2.3 },
-    ],
+    totalCampaigns: campaigns.length,
+    activeCampaigns: campaigns.filter(c => c.status === 'running').length,
+    totalSpend,
+    totalRevenue,
+    overallRoi: parseFloat(overallRoi.toFixed(2)),
+    impressions: totalImpressions,
+    clicks: totalClicks,
+    conversions: totalConversions,
+    leads: leads.length,
+    platformBreakdown: Object.values(platformBreakdown).map(p => ({ ...p, roi: p.spend > 0 ? parseFloat(((p.revenue - p.spend) / p.spend).toFixed(2)) : 0 })),
     dailyTrends: [
       { date: '2025-07-01', spend: 800, revenue: 2100 },
       { date: '2025-07-02', spend: 950, revenue: 2400 },
@@ -26,7 +44,7 @@ router.get('/dashboard', (req, res) => {
       { date: '2025-07-05', spend: 1200, revenue: 3400 },
       { date: '2025-07-06', spend: 1300, revenue: 3600 },
       { date: '2025-07-07', spend: 1150, revenue: 3200 },
-    ]
+    ],
   });
 });
 
