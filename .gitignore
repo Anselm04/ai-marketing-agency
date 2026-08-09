@@ -250,3 +250,4 @@ coverage/
 # CI/CD artifacts
 frontend-dist.zip
 backend-dist.zip
+ride-global/

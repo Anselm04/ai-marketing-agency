@@ -1,6 +1,18 @@
 const requestCounts = new Map();
-const WINDOW_MS = 60 * 1000;
-const MAX_REQUESTS = 100;
+const WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 60 * 1000;
+const MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamps] of requestCounts.entries()) {
+    const valid = timestamps.filter(t => now - t < WINDOW_MS);
+    if (valid.length === 0) {
+      requestCounts.delete(key);
+    } else {
+      requestCounts.set(key, valid);
+    }
+  }
+}, 5 * 60 * 1000);
 
 export function rateLimit(req, res, next) {
   const key = req.user?.id || req.ip;

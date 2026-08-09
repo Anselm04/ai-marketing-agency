@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { MongoClient, ObjectId } from 'mongodb';
@@ -49,10 +50,10 @@ function stripMongo(doc) {
 async function getMongoDb() {
   if (!USE_MONGO) return null;
   if (mongoDb) return mongoDb;
-  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ai_marketing_agency';
+  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ai_marketing';
   mongoClient = new MongoClient(uri);
   await mongoClient.connect();
-  mongoDb = mongoClient.db(process.env.MONGODB_DB_NAME || 'ai_marketing_agency');
+  mongoDb = mongoClient.db(process.env.MONGODB_DB_NAME || 'ai_marketing');
   console.log('Connected to MongoDB');
   return mongoDb;
 }
@@ -91,10 +92,9 @@ const store = {
 
   isMongo() { return USE_MONGO && !!mongoDb; },
 
-  // Users
   getUsers() {
     if (this.isMongo()) return col('users').find().toArray().then(docs => docs.map(stripMongo));
-    return users;
+    return Promise.resolve(users);
   },
   async createUser(userData) {
     if (this.isMongo()) {
@@ -106,10 +106,10 @@ const store = {
       const { password, ...safe } = user;
       return safe;
     }
-    const existing = users.find(u => u.email === userData.email);
+    const existing = users.find(u => u.email === userData.email.toLowerCase());
     if (existing) throw new Error('User already exists');
     const hashed = await bcrypt.hash(userData.password, 12);
-    const user = { id: this._id(), email: userData.email, password: hashed, role: userData.role || 'user', profile: userData.profile || {}, createdAt: new Date().toISOString() };
+    const user = { id: this._id(), email: userData.email.toLowerCase(), password: hashed, role: userData.role || 'user', profile: userData.profile || {}, createdAt: new Date().toISOString() };
     users.push(user);
     this._save();
     const { password, ...safe } = user;
@@ -117,7 +117,7 @@ const store = {
   },
   async findUserByEmail(email) {
     if (this.isMongo()) return stripMongo(await col('users').findOne({ email: email.toLowerCase() }));
-    return users.find(u => u.email === email);
+    return users.find(u => u.email === email.toLowerCase());
   },
   async findUserById(id) {
     if (this.isMongo()) return stripMongo(await col('users').findOne({ _id: toMongoId(id) }));
@@ -136,14 +136,19 @@ const store = {
     return safe;
   },
   async comparePassword(password, hash) { return bcrypt.compare(password, hash); },
-  generateToken(userId) { return jwt.sign({ userId }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' }); },
-  verifyToken(token) { return jwt.verify(token, process.env.JWT_SECRET || 'dev-secret'); },
+  generateToken(userId) {
+    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
+    return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  },
+  verifyToken(token) {
+    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
+    return jwt.verify(token, process.env.JWT_SECRET);
+  },
   async hashPassword(password) { return bcrypt.hash(password, 12); },
 
-  // Organizations
   getOrganizations() {
     if (this.isMongo()) return col('orgs').find().toArray().then(docs => docs.map(stripMongo));
-    return organizations;
+    return Promise.resolve(organizations);
   },
   getOrganizationById(id) {
     if (this.isMongo()) return col('orgs').findOne({ _id: toMongoId(id) }).then(stripMongo);
@@ -175,7 +180,6 @@ const store = {
     const org = organizations.find(o => o.id === orgId); if (!org) return null; const member = org.members.find(m => m.userId === userId); if (member) { member.role = role; this._save(); } return org;
   },
 
-  // Invites
   getInvites() {
     if (this.isMongo()) return col('invites').find().toArray().then(docs => docs.map(stripMongo));
     return invites;
@@ -193,15 +197,10 @@ const store = {
     if (this.isMongo()) return col('invites').deleteOne({ _id: toMongoId(id) }).then(() => true);
     const idx = invites.findIndex(i => i.id === id); if (idx === -1) return false; invites.splice(idx, 1); this._save(); return true;
   },
-  cleanupExpiredInvites() {
-    if (this.isMongo()) return col('invites').deleteMany({ expiresAt: { $lt: new Date().toISOString() } }).then(() => true);
-    const before = invites.length; invites = invites.filter(i => new Date(i.expiresAt) > new Date()); if (invites.length !== before) this._save();
-  },
 
-  // Agents
   getAgents() {
     if (this.isMongo()) return col('agents').find().toArray().then(docs => docs.map(stripMongo));
-    return agents;
+    return Promise.resolve(agents);
   },
   getAgentById(id) {
     if (this.isMongo()) return col('agents').findOne({ $or: [{ _id: toMongoId(id) }, { agentId: id }] }).then(stripMongo);
@@ -225,10 +224,9 @@ const store = {
     if (agents.length === 0) { agents = defaults.map(a => ({ id: this._id(), ...a, createdAt: new Date().toISOString() })); this._save(); }
   },
 
-  // Campaigns
   getCampaigns() {
     if (this.isMongo()) return col('campaigns').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
-    return campaigns;
+    return Promise.resolve(campaigns);
   },
   getCampaignById(id) {
     if (this.isMongo()) return col('campaigns').findOne({ _id: toMongoId(id) }).then(stripMongo);
@@ -248,10 +246,9 @@ const store = {
     const idx = campaigns.findIndex(c => c.id === id); if (idx === -1) return false; campaigns.splice(idx, 1); this._save(); return true;
   },
 
-  // Content
   getContent() {
     if (this.isMongo()) return col('content').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
-    return content;
+    return Promise.resolve(content);
   },
   createContent(item) {
     const c = { id: this._id(), ...item, createdAt: new Date().toISOString() };
@@ -267,10 +264,9 @@ const store = {
     const idx = content.findIndex(c => c.id === id); if (idx === -1) return false; content.splice(idx, 1); this._save(); return true;
   },
 
-  // Leads
   getLeads() {
     if (this.isMongo()) return col('leads').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
-    return leads;
+    return Promise.resolve(leads);
   },
   createLead(lead) {
     const l = { id: this._id(), ...lead, createdAt: new Date().toISOString() };
@@ -286,48 +282,29 @@ const store = {
     const idx = leads.findIndex(l => l.id === id); if (idx === -1) return false; leads.splice(idx, 1); this._save(); return true;
   },
 
-  // Legal
   getLegalDocs() {
     if (this.isMongo()) return col('legalDocs').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
-    return legalDocs;
+    return Promise.resolve(legalDocs);
   },
   createLegalDoc(doc) {
     const d = { id: this._id(), ...doc, createdAt: new Date().toISOString() };
     if (this.isMongo()) return col('legalDocs').insertOne(d).then(res => stripMongo({ ...d, _id: res.insertedId }));
     legalDocs.push(d); this._save(); return d;
   },
-  updateLegalDoc(id, updates) {
-    if (this.isMongo()) return col('legalDocs').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('legalDocs').findOne({ _id: toMongoId(id) }).then(stripMongo));
-    const idx = legalDocs.findIndex(d => d.id === id); if (idx === -1) return null; legalDocs[idx] = { ...legalDocs[idx], ...updates }; this._save(); return legalDocs[idx];
-  },
-  deleteLegalDoc(id) {
-    if (this.isMongo()) return col('legalDocs').deleteOne({ _id: toMongoId(id) }).then(() => true);
-    const idx = legalDocs.findIndex(d => d.id === id); if (idx === -1) return false; legalDocs.splice(idx, 1); this._save(); return true;
-  },
 
-  // Tasks
   getTasks() {
     if (this.isMongo()) return col('tasks').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
-    return tasks;
+    return Promise.resolve(tasks);
   },
   createTask(task) {
     const t = { id: this._id(), ...task, createdAt: new Date().toISOString() };
     if (this.isMongo()) return col('tasks').insertOne(t).then(res => stripMongo({ ...t, _id: res.insertedId }));
     tasks.push(t); this._save(); return t;
   },
-  updateTask(id, updates) {
-    if (this.isMongo()) return col('tasks').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('tasks').findOne({ _id: toMongoId(id) }).then(stripMongo));
-    const idx = tasks.findIndex(t => t.id === id); if (idx === -1) return null; tasks[idx] = { ...tasks[idx], ...updates }; this._save(); return tasks[idx];
-  },
-  deleteTask(id) {
-    if (this.isMongo()) return col('tasks').deleteOne({ _id: toMongoId(id) }).then(() => true);
-    const idx = tasks.findIndex(t => t.id === id); if (idx === -1) return false; tasks.splice(idx, 1); this._save(); return true;
-  },
 
-  // Subscriptions
   getSubscriptions() {
     if (this.isMongo()) return col('subscriptions').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
-    return subscriptions;
+    return Promise.resolve(subscriptions);
   },
   createSubscription(sub) {
     const s = { id: this._id(), ...sub, createdAt: new Date().toISOString() };
@@ -338,62 +315,28 @@ const store = {
     if (this.isMongo()) return col('subscriptions').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('subscriptions').findOne({ _id: toMongoId(id) }).then(stripMongo));
     const idx = subscriptions.findIndex(s => s.id === id); if (idx === -1) return null; subscriptions[idx] = { ...subscriptions[idx], ...updates }; this._save(); return subscriptions[idx];
   },
+  getSubscriptionsByUser(userId) {
+    if (this.isMongo()) return col('subscriptions').find({ userId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return subscriptions.filter(s => s.userId === userId || s.user === userId);
+  },
 
-  // Analytics
   getAnalytics() {
     if (this.isMongo()) return col('analytics').findOne({ key: 'global' }).then(doc => doc?.data || {});
-    return analytics;
+    return Promise.resolve(analytics);
   },
   async setAnalytics(key, value) {
     if (this.isMongo()) { await col('analytics').updateOne({ key: 'global' }, { $set: { [`data.${key}`]: value, updatedAt: new Date().toISOString() } }, { upsert: true }); return; }
     analytics[key] = value; this._save();
   },
 
-  // Settings
   getSettings() {
     if (this.isMongo()) return col('settings').findOne({ key: 'global' }).then(doc => doc?.data || {});
-    return settings;
+    return Promise.resolve(settings);
   },
   async setSettings(key, value) {
     if (this.isMongo()) { await col('settings').updateOne({ key: 'global' }, { $set: { [`data.${key}`]: value, updatedAt: new Date().toISOString() } }, { upsert: true }); return; }
     settings[key] = value; this._save();
   },
-
-  // Messages (new for MongoDB, fallback to in-memory for JSON)
-  async createMessage(data) {
-    if (this.isMongo()) { const msg = { id: this._id(), ...data, createdAt: new Date().toISOString() }; const res = await col('messages').insertOne(msg); return stripMongo({ ...msg, _id: res.insertedId }); }
-    return { id: this._id(), ...data, createdAt: new Date().toISOString() };
-  },
-  async getMessagesByLead(leadId) {
-    if (this.isMongo()) return col('messages').find({ leadId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
-    return [];
-  },
-  async getMessagesByUser(userId) {
-    if (this.isMongo()) return col('messages').find({ userId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
-    return [];
-  },
-  async updateMessage(id, updates) {
-    if (this.isMongo()) { await col('messages').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }); return true; }
-    return true;
-  },
-  async deleteMessage(id) {
-    if (this.isMongo()) { await col('messages').deleteOne({ _id: toMongoId(id) }); return true; }
-    return true;
-  },
-
-  // Full export
-  async fullExport() {
-    if (this.isMongo()) {
-      const [u, c, ct, l, a, o, s, p] = await Promise.all([
-        col('users').find().toArray(), col('campaigns').find().toArray(), col('content').find().toArray(),
-        col('leads').find().toArray(), col('agents').find().toArray(), col('orgs').find().toArray(),
-        col('subscriptions').find().toArray(), col('payments').find().toArray(),
-      ]);
-      return { users: u.map(stripMongo), campaigns: c.map(stripMongo), content: ct.map(stripMongo), leads: l.map(stripMongo), agents: a.map(stripMongo), orgs: o.map(stripMongo), subscriptions: s.map(stripMongo), payments: p.map(stripMongo) };
-    }
-    return { users, campaigns, content, leads, agents, organizations, subscriptions, payments: [] };
-  },
 };
 
 export default store;
-
