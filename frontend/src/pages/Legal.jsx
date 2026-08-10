@@ -15,7 +15,7 @@ export default function Legal() {
     setGenerating(type)
     api.post('/legal/generate', {
       type,
-      businessName: 'AI Marketing Agency',
+      businessName: 'Trillion AI Tech',
       jurisdiction: 'Global'
     }).then(res => {
       setGeneratedDoc(res.data)

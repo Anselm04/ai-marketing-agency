@@ -10,7 +10,7 @@ describe('LandingPage', () => {
         <LandingPage />
       </MemoryRouter>
     );
-    expect(screen.getAllByText(/AI Marketing Agency/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Trillion AI Tech/i).length).toBeGreaterThan(0);
   });
 
   it('shows pricing tiers', () => {
