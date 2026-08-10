@@ -4,7 +4,7 @@ import LanguageSelector from '../components/LanguageSelector'
 import {
   Bot, Megaphone, Globe, Shield, Zap, TrendingUp, BarChart3,
   Users, Sparkles, ArrowRight, Moon, Sun,
-  Gamepad2, ShoppingCart, Smartphone, Headphones, Heart, Cpu
+  Gamepad2, Smartphone, Heart, Cpu
 } from 'lucide-react'
 
 const features = [

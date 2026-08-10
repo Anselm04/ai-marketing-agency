@@ -34,7 +34,6 @@ import ProductMarketing from './pages/ProductMarketing'
 import AIModels from './pages/AIModels'
 import Connectors from './pages/Connectors'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
-import EmptyState from './components/EmptyState'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()

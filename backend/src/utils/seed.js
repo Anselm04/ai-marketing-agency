@@ -23,8 +23,6 @@ async function seed() {
 
   const users = store.getUsers();
   if (users.length === 0) {
-    const hashed = await store.comparePassword('admin123', 'admin123'); // just a placeholder check
-    // Actually we need bcrypt import here for seed
     const bcrypt = (await import('bcryptjs')).default;
     const hashed = await bcrypt.hash('admin123', 12);
     store.createUser({
