@@ -37,7 +37,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="text-blue-600" size={24} />
-            <span className="font-bold text-lg text-gray-900 dark:text-white">AI Marketing Agency</span>
+            <span className="font-bold text-lg text-gray-900 dark:text-white">Trillion AI Tech</span>
           </div>
           <div className="flex items-center gap-4">
             <LanguageSelector />
@@ -55,7 +55,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl sm:text-6xl font-bold text-gray-900 dark:text-white tracking-tight">
             The World's Most Advanced<br />
-            <span className="text-blue-600">AI Marketing Agency</span>
+            <span className="text-blue-600">Trillion AI Tech</span>
           </h1>
           <p className="mt-6 text-lg sm:text-xl text-gray-500 dark:text-gray-400 max-w-3xl mx-auto">
             Autonomous AI agents that market your apps, products, and services across every platform on Earth.
@@ -120,7 +120,7 @@ export default function LandingPage() {
       <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            AI Marketing Agency — Anselm Perkins, CEO & Owner of Trillion AI Tech.
+            Trillion AI Tech — Anselm Perkins, CEO & Owner of Trillion AI Tech.
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
             Autonomous growth engine for apps, products, and services.

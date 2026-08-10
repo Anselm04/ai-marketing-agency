@@ -12,7 +12,7 @@ export default function Games() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="text-blue-600" size={24} />
-            <span className="font-bold text-lg text-gray-900 dark:text-white">AI Marketing Agency</span>
+            <span className="font-bold text-lg text-gray-900 dark:text-white">Trillion AI Tech</span>
           </div>
           <div className="flex items-center gap-4">
             <LanguageSelector />
@@ -41,7 +41,7 @@ export default function Games() {
       <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            AI Marketing Agency — Anselm Perkins, CEO & Owner of Trillion AI Tech.
+            Trillion AI Tech — Anselm Perkins, CEO & Owner of Trillion AI Tech.
           </p>
         </div>
       </footer>

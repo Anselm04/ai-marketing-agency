@@ -8,7 +8,7 @@ export default function Trends() {
   const [viral, setViral] = useState(null)
   const [loading, setLoading] = useState(false)
   const [niche, setNiche] = useState('SaaS')
-  const [brand, setBrand] = useState('AI Marketing Agency')
+  const [brand, setBrand] = useState('Trillion AI Tech')
 
   useEffect(() => {
     fetchTrends()
