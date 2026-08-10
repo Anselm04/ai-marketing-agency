@@ -120,7 +120,7 @@ export default function LandingPage() {
       <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            AI Marketing Agency — Built by Anselm Perkins. Trillion AI Tech.
+            AI Marketing Agency — Anselm Perkins, CEO & Owner of Trillion AI Tech.
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
             Autonomous growth engine for apps, products, and services.

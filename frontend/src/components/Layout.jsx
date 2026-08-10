@@ -135,7 +135,9 @@ export default function Layout() {
               </div>
             )}
           </div>
-          <div className="text-xs text-gray-400 dark:text-gray-500 mt-3 text-center">v0.1.0 Alpha</div>
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-3 text-center">
+            v0.1.0 Alpha — Anselm Perkins, CEO & Owner of Trillion AI Tech
+          </div>
         </div>
       </aside>
 
