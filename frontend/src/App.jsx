@@ -24,6 +24,11 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Translation from './pages/Translation'
 import LandingPage from './pages/LandingPage'
+import Apps from './pages/Apps'
+import AgentsPage from './pages/AgentsPage'
+import Tools from './pages/Tools'
+import Games from './pages/Games'
+import Software from './pages/Software'
 import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
 import AIModels from './pages/AIModels'
@@ -36,6 +41,16 @@ function ProtectedRoute({ children }) {
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6">
       <div className="w-full max-w-4xl space-y-4">
+        <SkeletonCard />
+        <SkeletonMetric />
+        <SkeletonList />
+      </div>
+    </div>
+  )
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return children
+}
+
 function AppRoutes() {
   const { isAuthenticated } = useAuth()
 
@@ -46,6 +61,11 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+      <Route path="/apps" element={<Apps />} />
+      <Route path="/agents" element={<AgentsPage />} />
+      <Route path="/tools" element={<Tools />} />
+      <Route path="/games" element={<Games />} />
+      <Route path="/software" element={<Software />} />
       <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="agents" element={<Agents />} />
@@ -71,8 +91,8 @@ function AppRoutes() {
   )
 }
 
-        <Route path="settings" element={<Settings />} />
-        <Route path="team" element={<Team />} />
+export default function App() {
+  return (
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
@@ -85,17 +105,4 @@ function AppRoutes() {
       </ThemeProvider>
     </ErrorBoundary>
   )
-      <ThemeProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <OrchestratorProvider>
-              <AppRoutes />
-            </OrchestratorProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
-  )
 }
-
-export default App

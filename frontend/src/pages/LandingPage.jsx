@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
+import LanguageSelector from '../components/LanguageSelector'
 import {
   Bot, Megaphone, Globe, Shield, Zap, TrendingUp, BarChart3,
-  Users, CreditCard, Sparkles, Check, ArrowRight, Moon, Sun,
-  Gamepad2, ShoppingCart, Smartphone, Headphones, Heart
+  Users, Sparkles, ArrowRight, Moon, Sun,
+  Gamepad2, ShoppingCart, Smartphone, Headphones, Heart, Cpu
 } from 'lucide-react'
 
 const features = [
@@ -15,18 +16,15 @@ const features = [
   { icon: TrendingUp, title: 'Trend Intelligence', desc: 'Real-time trend scanning across TikTok, Twitter, Google' },
   { icon: BarChart3, title: 'Deep Analytics', desc: 'Campaign analytics, lead scoring, pipeline tracking' },
   { icon: Users, title: 'CRM & Leads', desc: 'Lead scoring, auto-qualification, and pipeline management' },
-  { icon: CreditCard, title: 'Subscriptions', desc: 'Stripe billing, affiliate program, and revenue tracking' },
-  { icon: Gamepad2, title: 'Gaming Platforms', desc: 'Steam, Twitch, Discord, Roblox, Epic, and console stores' },
-  { icon: ShoppingCart, title: 'E-commerce', desc: 'Amazon, Shopify, eBay, Etsy, Gumroad, and more' },
-  { icon: Smartphone, title: 'App Stores', desc: 'App Store, Google Play, Samsung, Huawei, Amazon Appstore' },
-  { icon: Headphones, title: 'Audio & Podcast', desc: 'Spotify, Apple Podcasts, SoundCloud, and Clubhouse' },
   { icon: Heart, title: 'Creator Economy', desc: 'Patreon, Ko-fi, Buy Me a Coffee, and OnlyFans' },
 ]
 
-const plans = [
-  { name: 'Starter', price: 0, interval: 'mo', features: ['3 AI agents', '5 campaigns', '10 posts/day', '5 languages', '1 team seat', 'Basic analytics'], cta: 'Get Started' },
-  { name: 'Growth', price: 49, interval: 'mo', features: ['8 AI agents', '25 campaigns', '50 posts/day', '15 languages', '3 team seats', 'Advanced analytics', 'API access'], cta: 'Start Free Trial', popular: true },
-  { name: 'Pro', price: 149, interval: 'mo', features: ['13 AI agents', 'Unlimited campaigns', '200 posts/day', '20 languages', '10 team seats', 'Priority support', 'White label', 'Custom integrations'], cta: 'Contact Sales' },
+const categories = [
+  { icon: Smartphone, title: 'Apps', desc: 'Mobile and desktop applications for productivity and entertainment', path: '/apps' },
+  { icon: Bot, title: 'Agents', desc: 'Autonomous AI agents for strategy, content, video, SEO, legal, and more', path: '/agents' },
+  { icon: Zap, title: 'Tools', desc: 'Utility tools and software to streamline your workflow', path: '/tools' },
+  { icon: Gamepad2, title: 'Games', desc: 'Interactive games and entertainment experiences', path: '/games' },
+  { icon: Cpu, title: 'Software', desc: 'Full-featured software solutions for business and personal use', path: '/software' },
 ]
 
 export default function LandingPage() {
@@ -42,6 +40,7 @@ export default function LandingPage() {
             <span className="font-bold text-lg text-gray-900 dark:text-white">AI Marketing Agency</span>
           </div>
           <div className="flex items-center gap-4">
+            <LanguageSelector />
             <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
               {theme === 'dark' ? <Sun size={18} className="text-gray-400" /> : <Moon size={18} className="text-gray-400" />}
             </button>
@@ -89,42 +88,29 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing */}
+      {/* Categories */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">Simple Pricing</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {plans.map((plan) => (
-              <div key={plan.name} className={`relative p-6 rounded-xl border ${plan.popular ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800`}>
-                {plan.popular && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded-full">
-                    Most Popular
-                  </span>
-                )}
-                <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{plan.name}</h3>
-                <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-3xl font-bold text-gray-900 dark:text-white">${plan.price}</span>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">/{plan.interval}</span>
+          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">Explore Our Universe</h2>
+          <p className="text-center text-gray-500 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
+            Discover apps, agents, tools, games, and software built for the future.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {categories.map((cat) => (
+              <Link
+                key={cat.title}
+                to={cat.path}
+                className="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-lg transition-shadow flex flex-col items-center text-center"
+              >
+                <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4">
+                  <cat.icon className="text-blue-600" size={24} />
                 </div>
-                <ul className="mt-6 space-y-3">
-                  {plan.features.map((feat, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                      <Check size={16} className="text-green-500" />
-                      {feat}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  to="/register"
-                  className={`mt-6 block w-full text-center py-2 rounded-lg font-medium transition-colors ${
-                    plan.popular
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {plan.cta}
-                </Link>
-              </div>
+                <h3 className="font-semibold text-lg text-gray-900 dark:text-white mb-2">{cat.title}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{cat.desc}</p>
+                <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-600">
+                  Explore <ArrowRight size={16} />
+                </span>
+              </Link>
             ))}
           </div>
         </div>
