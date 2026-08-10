@@ -21,7 +21,23 @@ import billingRoutes from './routes/billing.js';
 import adminRoutes from './routes/admin.js';
 import teamRoutes from './routes/team.js';
 import settingsRoutes from './routes/settings.js';
+import socialRoutes from './routes/social.js';
+import exportRoutes from './routes/export.js';
+import aiModelsRoutes from './routes/aiModels.js';
+import connectorsRoutes from './routes/connectors.js';
+import orchestratorRoutes from './routes/orchestrator.js';
+import productsRoutes from './routes/products.js';
+import legalRoutes from './routes/legal.js';
+import trendsRoutes from './routes/trends.js';
+import translationRoutes from './routes/translation.js';
+import videoRoutes from './routes/video.js';
+import schedulerRoutes from './routes/scheduler.js';
+import uploadsRoutes from './routes/uploads.js';
+import searchRoutes from './routes/search.js';
+import realtimeRoutes from './routes/realtime.js';
+import affiliateRoutes from './routes/affiliate.js';
 
+import { metricsRouteHandler } from './utils/metrics.js';
 import { authenticate } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
@@ -58,6 +74,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/metrics', metricsRouteHandler);
+
 app.use('/api/auth', authRoutes);
 app.use(authenticate);
 app.use('/api/agents', agentRoutes);
@@ -69,6 +91,21 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/social', socialRoutes);
+app.use('/api/export', exportRoutes);
+app.use('/api/ai-models', aiModelsRoutes);
+app.use('/api/connectors', connectorsRoutes);
+app.use('/api/orchestrator', orchestratorRoutes);
+app.use('/api/products', productsRoutes);
+app.use('/api/legal', legalRoutes);
+app.use('/api/trends', trendsRoutes);
+app.use('/api/translation', translationRoutes);
+app.use('/api/video', videoRoutes);
+app.use('/api/scheduler', schedulerRoutes);
+app.use('/api/uploads', uploadsRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/realtime', realtimeRoutes);
+app.use('/api/affiliate', affiliateRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
