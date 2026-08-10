@@ -5,7 +5,7 @@ import SearchBar from './SearchBar'
 import { NotificationBell } from './RealtimeNotifications'
 import {
   LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
-  FileText, Video, Users, CreditCard, TrendingUp, Settings,
+  FileText, Video, Users, TrendingUp, Settings,
   Lock, LogOut, ChevronDown, User, Globe, Sun, Moon, Menu, X, ShoppingCart,
   Cpu, Plug
 } from 'lucide-react'
@@ -24,7 +24,6 @@ const navItems = [
   { path: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/dashboard/trends', icon: TrendingUp, label: 'Trends' },
   { path: '/dashboard/legal', icon: Shield, label: 'Legal' },
-  { path: '/dashboard/billing', icon: CreditCard, label: 'Billing' },
   { path: '/dashboard/ai-models', icon: Cpu, label: 'AI Models' },
   { path: '/dashboard/connectors', icon: Plug, label: 'Connectors' },
   { path: '/dashboard/settings', icon: Settings, label: 'Settings' },
@@ -136,7 +135,9 @@ export default function Layout() {
               </div>
             )}
           </div>
-          <div className="text-xs text-gray-400 dark:text-gray-500 mt-3 text-center">v0.1.0 Alpha</div>
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-3 text-center">
+            v0.1.0 Alpha — Anselm Perkins, CEO & Owner of Trillion AI Tech
+          </div>
         </div>
       </aside>
 
