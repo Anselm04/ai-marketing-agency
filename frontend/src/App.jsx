@@ -36,17 +36,6 @@ function ProtectedRoute({ children }) {
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6">
       <div className="w-full max-w-4xl space-y-4">
-        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48 animate-pulse" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <SkeletonMetric /><SkeletonMetric /><SkeletonMetric />
-        </div>
-      </div>
-    </div>
-  )
-  if (!isAuthenticated) return <Navigate to="/login" replace />
-  return children
-}
-
 function AppRoutes() {
   const { isAuthenticated } = useAuth()
 
@@ -82,9 +71,20 @@ function AppRoutes() {
   )
 }
 
-function App() {
-  return (
+        <Route path="settings" element={<Settings />} />
+        <Route path="team" element={<Team />} />
     <ErrorBoundary>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <OrchestratorProvider>
+              <AppRoutes />
+            </OrchestratorProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  )
       <ThemeProvider>
         <ToastProvider>
           <AuthProvider>

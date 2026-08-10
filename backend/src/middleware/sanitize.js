@@ -1,40 +1,36 @@
-// Basic input sanitization to prevent XSS and injection
-const DANGEROUS_PATTERNS = [
+import { logger } from '../utils/logger.js';
+
+const XSS_PATTERNS = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
   /javascript:/gi,
   /on\w+\s*=/gi,
-  /<iframe/gi,
-  /<object/gi,
-  /<embed/gi,
-  /eval\s*\(/gi,
-  /expression\s*\(/gi,
 ];
 
 function sanitizeString(str) {
   if (typeof str !== 'string') return str;
-  let clean = str;
-  for (const pattern of DANGEROUS_PATTERNS) {
-    clean = clean.replace(pattern, '');
-  }
-  return clean;
+  let cleaned = str;
+  XSS_PATTERNS.forEach(pattern => {
+    cleaned = cleaned.replace(pattern, '');
+  });
+  return cleaned;
 }
 
-function sanitizeValue(value) {
-  if (typeof value === 'string') return sanitizeString(value);
-  if (Array.isArray(value)) return value.map(sanitizeValue);
-  if (value && typeof value === 'object') {
-    const clean = {};
-    for (const [k, v] of Object.entries(value)) {
-      clean[k] = sanitizeValue(v);
+function sanitizeObject(obj) {
+  if (typeof obj === 'string') return sanitizeString(obj);
+  if (Array.isArray(obj)) return obj.map(sanitizeObject);
+  if (obj && typeof obj === 'object') {
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = sanitizeObject(value);
     }
-    return clean;
+    return result;
   }
-  return value;
+  return obj;
 }
 
 export function sanitizeBody(req, res, next) {
-  if (req.body && typeof req.body === 'object') {
-    req.body = sanitizeValue(req.body);
+  if (req.body) {
+    req.body = sanitizeObject(req.body);
   }
   next();
 }
