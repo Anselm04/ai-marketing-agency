@@ -8,6 +8,9 @@ class BMXPhysics {
     this.angularVelocity = 0;
     this.grounded = false;
     this.onRamp = false;
+    this.crashed = false;
+    this.crashTimer = 0;
+    this.crashCooldown = 0;
 
     this.gravity = 0.6;
     this.friction = 0.92;
@@ -31,6 +34,9 @@ class BMXPhysics {
     this.groundY = 0;
     this.ramps = [];
     this.trackLength = 8000;
+    this.bestLandingAngle = 0.15;
+    this.okLandingAngle = 0.45;
+    this.badLandingAngle = 0.8;
   }
 
   reset(startX = 0, startY = 0) {
@@ -42,6 +48,9 @@ class BMXPhysics {
     this.angularVelocity = 0;
     this.grounded = true;
     this.onRamp = false;
+    this.crashed = false;
+    this.crashTimer = 0;
+    this.crashCooldown = 0;
     this.trickState = null;
     this.trickTimer = 0;
     this.trickRotation = 0;
@@ -94,7 +103,43 @@ class BMXPhysics {
     return 0;
   }
 
+  checkLanding() {
+    if (this.crashed) return { score: 0, message: 'Crashed!', severity: 'crash' };
+
+    const angle = Math.abs(this.rotation) % (Math.PI * 2);
+    const normalizedAngle = Math.min(angle, Math.PI * 2 - angle);
+    const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+
+    if (normalizedAngle > this.badLandingAngle || speed > 15) {
+      this.crashed = true;
+      this.crashTimer = 120;
+      this.vx *= 0.1;
+      this.angularVelocity = 0;
+      return { score: -150, message: 'Bad Landing!', severity: 'crash' };
+    }
+    if (normalizedAngle > this.okLandingAngle) {
+      return { score: 50, message: 'OK Landing', severity: 'ok' };
+    }
+    if (normalizedAngle < this.bestLandingAngle) {
+      const bonus = Math.floor(100 * this.comboMultiplier);
+      return { score: bonus, message: 'Perfect Landing!', severity: 'perfect' };
+    }
+    return { score: 0, message: 'Smooth', severity: 'normal' };
+  }
+
   update(input, dt = 1) {
+    if (this.crashed) {
+      this.crashTimer -= dt;
+      this.crashCooldown -= dt;
+      if (this.crashTimer <= 0) {
+        this.crashed = false;
+        this.rotation = 0;
+        this.angularVelocity = 0;
+        this.vy = 0;
+      }
+      return;
+    }
+
     this.vy += this.gravity;
 
     if (input.left) {
@@ -130,10 +175,19 @@ class BMXPhysics {
     const distToGround = this.y + this.wheelRadius - groundY;
 
     if (distToGround >= 0) {
+      const wasAirborne = !this.grounded;
       this.y = groundY - this.wheelRadius;
       this.vy = 0;
       this.grounded = true;
       this.onRamp = Math.abs(this.getRampAngle(this.x)) > 0.05;
+
+      if (wasAirborne) {
+        const landing = this.checkLanding();
+        if (landing.severity === 'crash') {
+          this.comboMultiplier = 1;
+          this.comboTimer = 0;
+        }
+      }
 
       if (Math.abs(this.vx) < 0.1) this.vx = 0;
       else this.vx *= this.groundFriction;
@@ -173,15 +227,20 @@ class BMXPhysics {
   }
 
   doTrick(trickName) {
-    if (this.grounded) return null;
+    if (this.grounded || this.crashed) return null;
     if (this.trickState) return null;
 
     const tricks = {
-      'tailwhip': { duration: 40, baseScore: 150 },
-      'barspin': { duration: 30, baseScore: 120 },
-      'superman': { duration: 50, baseScore: 200 },
-      'backflip': { duration: 60, baseScore: 300 },
-      '360': { duration: 45, baseScore: 180 },
+      'tailwhip': { duration: 40, baseScore: 150, difficulty: 'easy' },
+      'barspin': { duration: 30, baseScore: 120, difficulty: 'easy' },
+      'superman': { duration: 50, baseScore: 200, difficulty: 'medium' },
+      'backflip': { duration: 60, baseScore: 300, difficulty: 'hard' },
+      '360': { duration: 45, baseScore: 180, difficulty: 'medium' },
+      'invert': { duration: 55, baseScore: 250, difficulty: 'hard' },
+      'doubletailwhip': { duration: 70, baseScore: 350, difficulty: 'hard' },
+      'whiplash': { duration: 80, baseScore: 400, difficulty: 'extreme' },
+      'tucknohander': { duration: 40, baseScore: 220, difficulty: 'medium' },
+      'flipwhip': { duration: 90, baseScore: 500, difficulty: 'extreme' },
     };
 
     const trick = tricks[trickName];
@@ -194,8 +253,9 @@ class BMXPhysics {
     this.comboMultiplier = Math.min(this.comboMultiplier + 0.5, 5);
     this.comboTimer = 120;
 
-    const score = Math.floor(trick.baseScore * this.comboMultiplier);
-    return { name: trickName, score, multiplier: this.comboMultiplier };
+    const multiplier = trick.difficulty === 'extreme' ? 2.0 : trick.difficulty === 'hard' ? 1.5 : trick.difficulty === 'medium' ? 1.2 : 1.0;
+    const score = Math.floor(trick.baseScore * this.comboMultiplier * multiplier);
+    return { name: trickName, score, multiplier: this.comboMultiplier, difficulty: trick.difficulty };
   }
 
   getState() {
@@ -207,10 +267,33 @@ class BMXPhysics {
       rotation: this.rotation,
       angularVelocity: this.angularVelocity,
       grounded: this.grounded,
+      crashed: this.crashed,
       trickState: this.trickState,
       trickRotation: this.trickRotation,
       comboMultiplier: this.comboMultiplier
     };
+  }
+
+  checkCollision(other) {
+    const dx = this.x - other.x;
+    const dy = this.y - other.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const minDist = this.bikeWidth + 5;
+    if (dist < minDist && dist > 0) {
+      const overlap = minDist - dist;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      this.x += nx * overlap * 0.5;
+      this.y += ny * overlap * 0.5;
+      other.x -= nx * overlap * 0.5;
+      other.y -= ny * overlap * 0.5;
+      this.vx += nx * 1;
+      this.vy += ny * 1;
+      other.vx -= nx * 1;
+      other.vy -= ny * 1;
+      return true;
+    }
+    return false;
   }
 }
 
@@ -222,17 +305,41 @@ class Camera {
     this.targetY = 0;
     this.smoothing = 0.08;
     this.zoom = 1;
+    this.targetZoom = 1;
+    this.shakeX = 0;
+    this.shakeY = 0;
+    this.shakeIntensity = 0;
+    this.shakeDecay = 0.9;
   }
 
-  follow(targetX, targetY, canvasWidth, canvasHeight) {
+  follow(targetX, targetY, speed, canvasWidth, canvasHeight) {
     this.targetX = targetX - canvasWidth / 2;
     this.targetY = targetY - canvasHeight / 2 + 100;
 
     this.x += (this.targetX - this.x) * this.smoothing;
     this.y += (this.targetY - this.y) * this.smoothing;
+
+    const speedRatio = Math.abs(speed) / 12;
+    this.targetZoom = 1 - speedRatio * 0.15;
+    this.zoom += (this.targetZoom - this.zoom) * 0.05;
+
+    if (this.shakeIntensity > 0.1) {
+      this.shakeX = (Math.random() - 0.5) * this.shakeIntensity;
+      this.shakeY = (Math.random() - 0.5) * this.shakeIntensity;
+      this.shakeIntensity *= this.shakeDecay;
+    } else {
+      this.shakeX = 0;
+      this.shakeY = 0;
+    }
+  }
+
+  shake(intensity) {
+    this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
   }
 
   apply(ctx) {
-    ctx.translate(-this.x, -this.y);
+    ctx.translate(this.shakeX, this.shakeY);
+    ctx.scale(this.zoom, this.zoom);
+    ctx.translate(-this.x / this.zoom, -this.y / this.zoom);
   }
 }
