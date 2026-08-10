@@ -1,36 +1,101 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Campaigns from './pages/Campaigns';
-import Agents from './pages/Agents';
-import Analytics from './pages/Analytics';
-import ContentStudio from './pages/ContentStudio';
-import CRM from './pages/CRM';
-import Settings from './pages/Settings';
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
+import { ToastProvider } from './context/ToastContext'
+import { OrchestratorProvider } from './context/OrchestratorContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import Layout from './components/Layout'
+import Dashboard from './pages/Dashboard'
+import Agents from './pages/Agents'
+import Campaigns from './pages/Campaigns'
+import Analytics from './pages/Analytics'
+import Legal from './pages/Legal'
+import Social from './pages/Social'
+import ContentStudio from './pages/ContentStudio'
+import VideoStudio from './pages/VideoStudio'
+import CRM from './pages/CRM'
+import Billing from './pages/Billing'
+import Trends from './pages/Trends'
+import Settings from './pages/Settings'
+import Admin from './pages/Admin'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
+import Translation from './pages/Translation'
+import LandingPage from './pages/LandingPage'
+import Team from './pages/Team'
+import ProductMarketing from './pages/ProductMarketing'
+import AIModels from './pages/AIModels'
+import Connectors from './pages/Connectors'
+import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
+import EmptyState from './components/EmptyState'
 
 function ProtectedRoute({ children }) {
-  const { user } = useAuth();
-  return user ? children : <Navigate to="/login" />;
-}
+  const { isAuthenticated, loading } = useAuth()
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="w-full max-w-4xl space-y-4">
+function AppRoutes() {
+  const { isAuthenticated } = useAuth()
 
-function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/campaigns" element={<ProtectedRoute><Campaigns /></ProtectedRoute>} />
-        <Route path="/agents" element={<ProtectedRoute><Agents /></ProtectedRoute>} />
-        <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-        <Route path="/content" element={<ProtectedRoute><ContentStudio /></ProtectedRoute>} />
-        <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-      </Routes>
-    </AuthProvider>
-  );
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+      <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        <Route index element={<Dashboard />} />
+        <Route path="agents" element={<Agents />} />
+        <Route path="campaigns" element={<Campaigns />} />
+        <Route path="products" element={<ProductMarketing />} />
+        <Route path="social" element={<Social />} />
+        <Route path="analytics" element={<Analytics />} />
+        <Route path="legal" element={<Legal />} />
+        <Route path="content" element={<ContentStudio />} />
+        <Route path="video" element={<VideoStudio />} />
+        <Route path="translation" element={<Translation />} />
+        <Route path="crm" element={<CRM />} />
+        <Route path="billing" element={<Billing />} />
+        <Route path="trends" element={<Trends />} />
+        <Route path="settings" element={<Settings />} />
+        <Route path="team" element={<Team />} />
+        <Route path="admin" element={<Admin />} />
+        <Route path="ai-models" element={<AIModels />} />
+        <Route path="connectors" element={<Connectors />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
 }
 
-export default App;
+        <Route path="settings" element={<Settings />} />
+        <Route path="team" element={<Team />} />
+    <ErrorBoundary>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <OrchestratorProvider>
+              <AppRoutes />
+            </OrchestratorProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  )
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <OrchestratorProvider>
+              <AppRoutes />
+            </OrchestratorProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  )
+}
+
+export default App
