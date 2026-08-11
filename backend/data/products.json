@@ -7,7 +7,11 @@
     "price": 0,
     "currency": "NZD",
     "billingType": "free",
-    "features": ["5 starter templates", "Basic guides", "Community access"],
+    "features": [
+      "5 starter templates",
+      "Basic guides",
+      "Community access"
+    ],
     "status": "active",
     "createdAt": "2026-01-01T00:00:00.000Z"
   },
@@ -20,7 +24,12 @@
     "currency": "NZD",
     "billingType": "one_time",
     "stripePriceId": "price_premium_agent_placeholder",
-    "features": ["13 AI agents", "All platforms", "Unlimited campaigns", "Priority support"],
+    "features": [
+      "13 AI agents",
+      "All platforms",
+      "Unlimited campaigns",
+      "Priority support"
+    ],
     "status": "active",
     "createdAt": "2026-01-01T00:00:00.000Z"
   },
@@ -35,7 +44,13 @@
     "billingInterval": "month",
     "trialPeriod": 14,
     "stripePriceId": "price_campaign_pro_placeholder",
-    "features": ["A/B testing", "Budget optimizer", "Deep analytics", "50+ platforms", "20+ languages"],
+    "features": [
+      "A/B testing",
+      "Budget optimizer",
+      "Deep analytics",
+      "50+ platforms",
+      "20+ languages"
+    ],
     "status": "active",
     "createdAt": "2026-01-01T00:00:00.000Z"
   },
@@ -50,7 +65,13 @@
     "billingInterval": "year",
     "trialPeriod": 30,
     "stripePriceId": "price_annual_unlimited_placeholder",
-    "features": ["All products included", "White-label access", "API access", "Team seats (10)", "Priority support"],
+    "features": [
+      "All products included",
+      "White-label access",
+      "API access",
+      "Team seats (10)",
+      "Priority support"
+    ],
     "status": "active",
     "createdAt": "2026-01-01T00:00:00.000Z"
   },
@@ -63,7 +84,12 @@
     "currency": "NZD",
     "billingType": "one_time",
     "stripePriceId": "price_game_ad_placeholder",
-    "features": ["Trailer scripts", "Store assets", "Console publishing guides", "Platform-specific templates"],
+    "features": [
+      "Trailer scripts",
+      "Store assets",
+      "Console publishing guides",
+      "Platform-specific templates"
+    ],
     "status": "active",
     "createdAt": "2026-01-01T00:00:00.000Z"
   }

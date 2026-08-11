@@ -70,5 +70,31 @@
       "lastName": "User"
     },
     "createdAt": "2026-08-09T11:19:17.871Z"
+  },
+  {
+    "id": "607c2a65-7576-4e37-9af0-328ee6c2ece9",
+    "email": "testuser@example.com",
+    "password": "$2a$12$1.VjQsiB9FRgtQ8/mZqhq.1buu4WH43BmQyBfiQETdGlLdOwL9pq.",
+    "role": "user",
+    "profile": {
+      "firstName": "Test",
+      "lastName": "User"
+    },
+    "agreements": {
+      "terms": {
+        "versionId": "terms-v1.0",
+        "agreedAt": "2026-08-11T08:25:26.270Z"
+      },
+      "privacy": {
+        "versionId": "privacy-v1.0",
+        "agreedAt": "2026-08-11T08:25:26.270Z"
+      }
+    },
+    "marketingConsent": {
+      "optedIn": false,
+      "optedInAt": null,
+      "updatedAt": "2026-08-11T08:25:26.270Z"
+    },
+    "createdAt": "2026-08-11T08:25:27.072Z"
   }
 ]
