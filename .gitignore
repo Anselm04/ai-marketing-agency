@@ -251,3 +251,6 @@ coverage/
 frontend-dist.zip
 backend-dist.zip
 ride-global/
+
+# Backend local JSON data store (contains user passwords, agreements, purchases)
+backend/data/
