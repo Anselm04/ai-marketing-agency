@@ -8,16 +8,14 @@ export default function ForgotPassword() {
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [devToken, setDevToken] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const res = await api.post('/auth/forgot-password', { email })
+      await api.post('/auth/forgot-password', { email })
       setSent(true)
-      if (res.data.devToken) setDevToken(res.data.devToken)
     } catch (err) {
       setError(err.response?.data?.error || 'Request failed')
     } finally {
@@ -39,12 +37,6 @@ export default function ForgotPassword() {
               <CheckCircle className="mx-auto text-green-500" size={48} />
               <h3 className="font-semibold text-gray-900 dark:text-white">Check your email</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">If an account exists, we have sent a reset link.</p>
-              {devToken && (
-                <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg text-left">
-                  <p className="text-xs text-gray-500 mb-1">Development token (remove in production):</p>
-                  <code className="text-xs font-mono break-all">{devToken}</code>
-                </div>
-              )}
               <Link to="/login" className="text-sm text-blue-600 hover:underline">Back to login</Link>
             </div>
           ) : (

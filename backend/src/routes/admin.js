@@ -6,7 +6,7 @@ const router = express.Router();
 router.use(requireAdmin);
 
 router.get('/users', async (req, res) => {
-  const users = (await store.getUsers()).map(u => { const { password, ...safe } = u; return safe; }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 100);
+  const users = (await store.getUsers()).map(u => { const { password: _, resetToken: __, resetTokenExpires: ___, ...safe } = u; return safe; }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 100);
   res.json(users);
 });
 

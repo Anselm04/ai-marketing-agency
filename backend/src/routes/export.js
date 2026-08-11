@@ -62,7 +62,7 @@ router.get('/backup', (req, res) => {
     exportedAt: new Date().toISOString(),
     version: '1.0',
     data: {
-      users: store.getUsers().map(u => { const { password, ...safe } = u; return safe; }),
+      users: store.getUsers().map(u => { const { password: _, resetToken: __, resetTokenExpires: ___, ...safe } = u; return safe; }),
       agents: store.getAgents(),
       campaigns: store.getCampaigns(),
       content: store.getContent(),

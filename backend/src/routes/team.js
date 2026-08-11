@@ -65,7 +65,7 @@ router.post('/invites', async (req, res) => {
       token,
       expiresAt,
     });
-    res.json({ invite, devToken: token });
+    res.json({ invite });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

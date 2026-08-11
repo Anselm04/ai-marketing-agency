@@ -6,7 +6,7 @@ const router = express.Router();
 router.get('/profile', async (req, res) => {
   const user = await store.findUserById(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const { password, ...safe } = user;
+  const { password: _, resetToken: __, resetTokenExpires: ___, ...safe } = user;
   res.json(safe);
 });
 

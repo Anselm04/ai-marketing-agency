@@ -41,7 +41,7 @@ export default function Team() {
     setLoading(true)
     try {
       const res = await api.post('/team/invites', { email, role })
-      setSuccess(`Invite sent to ${email}. Token: ${res.data.devToken?.slice(0, 16)}...`)
+      setSuccess(`Invite sent to ${email}.`)
       setEmail('')
       fetchInvites()
     } catch (err) {

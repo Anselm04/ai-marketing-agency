@@ -56,7 +56,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     const token = store.generateToken(user.id);
-    const { password: _, ...safe } = user;
+    const { password: _, resetToken: __, resetTokenExpires: ___, ...safe } = user;
     res.json({ token, user: safe });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -73,7 +73,7 @@ router.get('/me', async (req, res) => {
     const decoded = store.verifyToken(token);
     const user = await store.findUserById(decoded.userId);
     if (!user) return res.status(401).json({ error: 'User not found' });
-    const { password, ...safe } = user;
+    const { password: _, resetToken: __, resetTokenExpires: ___, ...safe } = user;
     res.json(safe);
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
@@ -90,7 +90,7 @@ router.post('/forgot-password', async (req, res) => {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     await store.updateUser(user.id, { resetToken, resetTokenExpires });
-    res.json({ success: true, message: 'If an account exists, a reset link has been sent.', devToken: resetToken });
+    res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

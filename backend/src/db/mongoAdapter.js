@@ -19,6 +19,12 @@ function stripInternal(doc) {
   return { id: _id?.toString?.() || _id, ...rest };
 }
 
+function stripUserSafe(doc) {
+  if (!doc) return doc;
+  const { _id, password, resetToken, resetTokenExpires, ...rest } = doc;
+  return { id: _id?.toString?.() || _id, ...rest };
+}
+
 class MongoAdapter {
   constructor() {
     this.client = null;
@@ -54,17 +60,17 @@ class MongoAdapter {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    return stripInternal({ ...data, _id: res.insertedId });
+    return stripUserSafe({ ...data, _id: res.insertedId });
   }
 
   async findUserById(id) {
     const doc = await this._col('users').findOne({ _id: toId(id) });
-    return stripInternal(doc);
+    return stripUserSafe(doc);
   }
 
   async findUserByEmail(email) {
     const doc = await this._col('users').findOne({ email: email.toLowerCase() });
-    return stripInternal(doc);
+    return stripUserSafe(doc);
   }
 
   async updateUser(id, data) {
@@ -77,7 +83,7 @@ class MongoAdapter {
 
   async getUsers() {
     const docs = await this._col('users').find().toArray();
-    return docs.map(stripInternal);
+    return docs.map(stripUserSafe);
   }
 
   // Campaigns
@@ -315,7 +321,7 @@ class MongoAdapter {
       this._col('payments').find().toArray(),
     ]);
     return {
-      users: users.map(stripInternal),
+      users: users.map(stripUserSafe),
       campaigns: campaigns.map(stripInternal),
       content: content.map(stripInternal),
       leads: leads.map(stripInternal),

@@ -126,7 +126,7 @@ const store = {
         createdAt: new Date().toISOString(),
       };
       const res = await col('users').insertOne(user);
-      const { password, ...safe } = user;
+      const { password: _, resetToken: __, resetTokenExpires: ___, ...safe } = user;
       return safe;
     }
     const existing = users.find(u => u.email === userData.email.toLowerCase());
@@ -164,7 +164,7 @@ const store = {
     if (idx === -1) return null;
     users[idx] = { ...users[idx], ...updates, id: users[idx].id };
     this._save();
-    const { password, ...safe } = users[idx];
+    const { password: _, resetToken: __, resetTokenExpires: ___, ...safe } = users[idx];
     return safe;
   },
   async comparePassword(password, hash) { return bcrypt.compare(password, hash); },
