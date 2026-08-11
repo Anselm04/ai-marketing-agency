@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { MongoClient, ObjectId } from 'mongodb';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', '..', 'data');
@@ -43,9 +42,18 @@ let webhookEvents = loadFile('webhookEvents', []);
 const USE_MONGO = process.env.USE_MONGO === 'true' || process.env.MONGODB_URI;
 let mongoClient = null;
 let mongoDb = null;
+let MongoModule = null;
+
+async function getMongoModule() {
+  if (!MongoModule) {
+    MongoModule = await import('mongodb');
+  }
+  return MongoModule;
+}
 
 function toMongoId(val) {
   if (!val) return val;
+  const { ObjectId } = MongoModule;
   if (val instanceof ObjectId) return val;
   if (ObjectId.isValid(val)) return new ObjectId(val);
   return val;
@@ -59,6 +67,7 @@ function stripMongo(doc) {
 async function getMongoDb() {
   if (!USE_MONGO) return null;
   if (mongoDb) return mongoDb;
+  const { MongoClient } = await getMongoModule();
   const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ai_marketing';
   mongoClient = new MongoClient(uri);
   await mongoClient.connect();
