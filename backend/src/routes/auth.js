@@ -6,15 +6,37 @@ import store from '../utils/store.js';
 const router = express.Router();
 
 router.post('/register', async (req, res) => {
-  const { email, password, firstName, lastName } = req.body;
+  const { email, password, firstName, lastName, termsAgreed, termsVersionId, privacyVersionId, marketingConsent } = req.body;
   if (!email || !password || password.length < 6) {
     return res.status(400).json({ error: 'Email and password (min 6 chars) required' });
   }
+  if (!termsAgreed) {
+    return res.status(400).json({ error: 'You must agree to the Terms of Service and Privacy Policy to create an account.' });
+  }
+
+  const currentTerms = store.getCurrentTermsVersion('terms');
+  const currentPrivacy = store.getCurrentTermsVersion('privacy');
+  if (!termsVersionId || !privacyVersionId) {
+    return res.status(400).json({ error: 'Terms and Privacy Policy version identifiers are required.' });
+  }
+  if (termsVersionId !== currentTerms?.id || privacyVersionId !== currentPrivacy?.id) {
+    return res.status(400).json({ error: 'You must agree to the current Terms of Service and Privacy Policy.' });
+  }
+
   try {
     const user = await store.createUser({
       email: email.toLowerCase(),
       password,
       profile: { firstName, lastName },
+      agreements: {
+        terms: { versionId: termsVersionId, agreedAt: new Date().toISOString() },
+        privacy: { versionId: privacyVersionId, agreedAt: new Date().toISOString() },
+      },
+      marketingConsent: {
+        optedIn: !!marketingConsent,
+        optedInAt: marketingConsent ? new Date().toISOString() : null,
+        updatedAt: new Date().toISOString(),
+      },
     });
     const token = store.generateToken(user.id);
     res.status(201).json({ token, user });

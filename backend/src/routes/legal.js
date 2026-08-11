@@ -4,6 +4,26 @@ import { generateLegalDocument } from '../services/openaiService.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Public endpoint: current terms versions for registration page
+router.get('/terms-versions', (req, res) => {
+  const currentTerms = store.getCurrentTermsVersion('terms');
+  const currentPrivacy = store.getCurrentTermsVersion('privacy');
+  const currentAup = store.getCurrentTermsVersion('aup');
+  res.json({
+    terms: currentTerms,
+    privacy: currentPrivacy,
+    aup: currentAup,
+  });
+});
+
+// Public endpoint: get specific terms document by id
+router.get('/terms-versions/:id', (req, res) => {
+  const doc = store.getTermsVersionById(req.params.id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  res.json(doc);
+});
+
 router.use(authenticate);
 
 router.get('/templates', (req, res) => {

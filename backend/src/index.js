@@ -42,6 +42,7 @@ import { authenticate } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { sanitizeBody } from './middleware/sanitize.js';
+import { handleWebhookEvent } from './services/stripeService.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -65,6 +66,69 @@ app.use(helmet());
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan('combined'));
+
+// Stripe webhook endpoint MUST use raw body — register BEFORE express.json()
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  const signature = req.headers['stripe-signature'];
+  try {
+    const event = await handleWebhookEvent(req.body, signature);
+    if (event.fallback) {
+      logger.info('Stripe webhook fallback mode');
+      return res.json({ received: true, fallback: true });
+    }
+    await store.createWebhookEvent({
+      type: event.type,
+      stripeEventId: event.id,
+      data: event.data,
+      processed: false,
+    });
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const { productId, userId } = session.metadata || {};
+      if (productId && userId) {
+        const product = await store.getProductById(productId);
+        if (product) {
+          await store.createPurchase({
+            userId,
+            productId,
+            productName: product.name,
+            price: product.price,
+            currency: product.currency || 'NZD',
+            billingType: product.billingType,
+            billingInterval: product.billingInterval,
+            stripePaymentIntentId: session.payment_intent,
+            stripeSubscriptionId: session.subscription,
+            stripeSessionId: session.id,
+            status: 'active',
+            purchasedAt: new Date().toISOString(),
+          });
+        }
+      }
+    }
+    if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object;
+      const purchases = await store.getPurchases();
+      const purchase = purchases.find(p => p.stripeSubscriptionId === invoice.subscription);
+      if (purchase) {
+        await store.updatePurchase(purchase.id, { status: 'payment_failed', lastFailureAt: new Date().toISOString() });
+      }
+    }
+    if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object;
+      const purchases = await store.getPurchases();
+      const purchase = purchases.find(p => p.stripeSubscriptionId === subscription.id);
+      if (purchase) {
+        await store.updatePurchase(purchase.id, { status: 'expired', expiredAt: new Date().toISOString() });
+      }
+    }
+    res.json({ received: true });
+  } catch (err) {
+    logger.error('Stripe webhook error', { error: err.message });
+    res.status(400).json({ error: 'Webhook signature verification failed' });
+  }
+});
+
+// Now apply JSON parsing for all other routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeBody);
@@ -80,7 +144,12 @@ app.get('/api/health', (req, res) => {
 
 app.get('/metrics', metricsRouteHandler);
 
+// Public routes (no authentication required)
 app.use('/api/auth', authRoutes);
+app.use('/api/products', productsRoutes); // catalog endpoints are public; marketing endpoints require auth
+app.use('/api/legal', legalRoutes); // terms-versions are public; document generation requires auth
+
+// Protected routes (authentication required)
 app.use(authenticate);
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);
@@ -96,8 +165,6 @@ app.use('/api/export', exportRoutes);
 app.use('/api/ai-models', aiModelsRoutes);
 app.use('/api/connectors', connectorsRoutes);
 app.use('/api/orchestrator', orchestratorRoutes);
-app.use('/api/products', productsRoutes);
-app.use('/api/legal', legalRoutes);
 app.use('/api/trends', trendsRoutes);
 app.use('/api/translation', translationRoutes);
 app.use('/api/video', videoRoutes);

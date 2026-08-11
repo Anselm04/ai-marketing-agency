@@ -1,98 +1,216 @@
 import { useEffect, useState } from 'react'
-import { CreditCard, Check, Zap, Crown, Building2, Star } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { Link } from 'react-router-dom'
+import {
+  CreditCard, Check, Package, ArrowRight, X, AlertCircle,
+  RefreshCw, Clock, Receipt, ShieldCheck
+} from 'lucide-react'
 import api from '../services/api'
 
 export default function Billing() {
-  const [plans, setPlans] = useState([])
-  const [subscription, setSubscription] = useState(null)
+  const { user } = useAuth()
+  const [purchases, setPurchases] = useState([])
+  const [subscriptions, setSubscriptions] = useState([])
+  const [refunds, setRefunds] = useState([])
   const [loading, setLoading] = useState(false)
+  const [actionMsg, setActionMsg] = useState('')
 
   useEffect(() => {
-    api.get('/billing/plans').then(res => setPlans(res.data))
-    api.get('/billing/subscription').then(res => setSubscription(res.data))
+    loadData()
   }, [])
 
-  const handleCheckout = async (plan) => {
+  const loadData = () => {
+    api.get('/billing/purchases').then(res => {
+      const all = res.data || []
+      setPurchases(all)
+      setSubscriptions(all.filter(p =>
+        p.billingType === 'subscription' || p.billingType === 'monthly' || p.billingType === 'annual'
+      ))
+    }).catch(() => {})
+    api.get('/billing/refunds').then(res => setRefunds(res.data || [])).catch(() => {})
+  }
+
+  const handleCancel = async (purchaseId) => {
+    if (!confirm('Are you sure you want to cancel this subscription? You will retain access until the current billing period ends.')) return
     setLoading(true)
     try {
-      const res = await api.post('/billing/checkout', { priceId: plan.id })
-      if (res.data.url) window.location.href = res.data.url
+      await api.post('/billing/cancel', { purchaseId })
+      setActionMsg('Subscription cancelled successfully.')
+      loadData()
     } catch (err) {
-      console.error(err)
+      setActionMsg(err.response?.data?.error || 'Cancellation failed.')
     } finally {
       setLoading(false)
+      setTimeout(() => setActionMsg(''), 5000)
     }
   }
 
-  const handleCancel = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription?')) return
-    await api.post('/billing/cancel')
-    const res = await api.get('/billing/subscription')
-    setSubscription(res.data)
+  const handleRefund = async (purchaseId) => {
+    if (!confirm('Request a refund for this purchase?')) return
+    setLoading(true)
+    try {
+      await api.post('/billing/refund-request', { purchaseId, reason: 'Customer request' })
+      setActionMsg('Refund request submitted.')
+      loadData()
+    } catch (err) {
+      setActionMsg(err.response?.data?.error || 'Refund request failed.')
+    } finally {
+      setLoading(false)
+      setTimeout(() => setActionMsg(''), 5000)
+    }
   }
 
-  const planIcons = { starter: Zap, growth: Star, pro: Crown, enterprise: Building2 }
+  const activeSubs = subscriptions.filter(s => s.status === 'active')
+  const otherPurchases = purchases.filter(p => !activeSubs.some(s => s.id === p.id))
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Billing</h2>
-        <p className="text-gray-500 mt-1">Manage your subscription and billing</p>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Billing</h2>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">
+          Manage your purchased products, subscriptions, and billing history.
+        </p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+          Creating an account is free. You pay only for individual products you choose to purchase.
+        </p>
       </div>
 
-      {subscription && subscription.status !== 'none' && (
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <h3 className="font-semibold text-gray-900 mb-2">Current Subscription</h3>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-lg font-medium text-gray-900 capitalize">{subscription.plan || 'Free'} Plan</div>
-              <div className="text-sm text-gray-500">Status: <span className={`font-medium ${subscription.status === 'active' ? 'text-green-600' : 'text-yellow-600'}`}>{subscription.status}</span></div>
-            </div>
-            {subscription.status === 'active' && (
-              <button onClick={handleCancel} className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50">Cancel Subscription</button>
-            )}
+      {actionMsg && (
+        <div className={`p-3 rounded-lg text-sm ${
+          actionMsg.includes('failed') || actionMsg.includes('error')
+            ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+            : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
+        }`}>
+          {actionMsg}
+        </div>
+      )}
+
+      {/* Active Subscriptions */}
+      {activeSubs.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <RefreshCw size={18} className="text-blue-500" />
+            Active Subscriptions
+          </h3>
+          <div className="space-y-4">
+            {activeSubs.map(sub => (
+              <div key={sub.id} className="flex items-start justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-white">{sub.productName}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    ${sub.price} {sub.currency || 'NZD'} / {sub.billingInterval || 'month'} · Renews automatically
+                  </div>
+                  <div className="text-xs text-green-600 dark:text-green-400 mt-1">Status: active</div>
+                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                    Purchased {new Date(sub.purchasedAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleCancel(sub.id)}
+                    disabled={loading}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                  >
+                    <X size={12} /> Cancel
+                  </button>
+                  <button
+                    onClick={() => handleRefund(sub.id)}
+                    disabled={loading}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    <Receipt size={12} /> Refund
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {plans.map(plan => {
-          const Icon = planIcons[plan.id] || Zap
-          const isCurrent = subscription?.plan === plan.id
-          return (
-            <div key={plan.id} className={`bg-white rounded-xl border p-5 flex flex-col ${isCurrent ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200'}`}>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <Icon size={20} className="text-blue-600" />
-                </div>
+      {/* All Purchases */}
+      {purchases.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Package size={18} className="text-blue-500" />
+            Purchase History
+          </h3>
+          <div className="space-y-3">
+            {purchases.map(p => (
+              <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{plan.name}</h3>
-                  <div className="text-sm text-gray-500">${plan.price}/{plan.interval}</div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-white">{p.productName}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {p.price === 0 || !p.price ? 'Free' : `$${p.price} ${p.currency || 'NZD'}`}
+                    {' · '}{p.billingType || 'one-time'}
+                    {' · '}{p.status}
+                  </div>
+                  <div className="text-xs text-gray-400 dark:text-gray-500">
+                    {new Date(p.purchasedAt).toLocaleDateString()}
+                  </div>
                 </div>
+                {p.status === 'active' && p.price > 0 && (
+                  <button
+                    onClick={() => handleRefund(p.id)}
+                    disabled={loading}
+                    className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    Request Refund
+                  </button>
+                )}
               </div>
-              <ul className="space-y-2 mb-4 flex-1">
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.agents} AI agents</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.campaigns} campaigns</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.postsPerDay} posts/day</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.languages} languages</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.teamSeats} team seats</li>
-                {plan.features.apiAccess && <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />API access</li>}
-                {plan.features.whiteLabel && <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />White label</li>}
-              </ul>
-              <button
-                onClick={() => handleCheckout(plan)}
-                disabled={loading || isCurrent}
-                className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isCurrent
-                    ? 'bg-green-50 text-green-700 cursor-default'
-                    : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
-                }`}
-              >
-                {isCurrent ? 'Current Plan' : 'Subscribe'}
-              </button>
-            </div>
-          )
-        })}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Refund Requests */}
+      {refunds.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Receipt size={18} className="text-blue-500" />
+            Refund Requests
+          </h3>
+          <div className="space-y-3">
+            {refunds.map(r => (
+              <div key={r.id} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <div className="text-sm font-medium text-gray-900 dark:text-white">{r.reason || 'Refund request'}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Status: {r.status}</div>
+                <div className="text-xs text-gray-400 dark:text-gray-500">{new Date(r.createdAt).toLocaleDateString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty + Browse CTA */}
+      {purchases.length === 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <Package size={48} className="text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Purchases Yet</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            Your account is free. Browse the product catalog to find free and paid products.
+          </p>
+          <Link
+            to="/products"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            Browse Products <ArrowRight size={16} />
+          </Link>
+        </div>
+      )}
+
+      {/* Billing security notice */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+        <div className="flex items-start gap-3">
+          <ShieldCheck size={20} className="text-green-600 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Secure Payments</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              All payments are processed by Stripe. Trillion AI Tech never stores your payment card information.
+              Payment status is verified server-side before granting product access.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

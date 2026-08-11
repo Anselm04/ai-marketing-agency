@@ -38,8 +38,16 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const updateMarketingConsent = async (optedIn) => {
+    const res = await api.post('/settings/marketing-consent', { optedIn });
+    setUser(prev => ({ ...prev, marketingConsent: res.data.marketingConsent }));
+    return res.data;
+  };
+
+  const isAuthenticated = !!user;
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAuthenticated, login, register, logout, updateMarketingConsent }}>
       {children}
     </AuthContext.Provider>
   );

@@ -10,6 +10,7 @@ import Agents from './pages/Agents'
 import Campaigns from './pages/Campaigns'
 import Analytics from './pages/Analytics'
 import Legal from './pages/Legal'
+import LegalPage from './pages/LegalPage'
 import Social from './pages/Social'
 import ContentStudio from './pages/ContentStudio'
 import VideoStudio from './pages/VideoStudio'
@@ -33,6 +34,8 @@ import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
 import AIModels from './pages/AIModels'
 import Connectors from './pages/Connectors'
+import ProductCatalog from './pages/ProductCatalog'
+import ProductDetail from './pages/ProductDetail'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
 
 function ProtectedRoute({ children }) {
@@ -65,6 +68,10 @@ function AppRoutes() {
       <Route path="/tools" element={<Tools />} />
       <Route path="/games" element={<Games />} />
       <Route path="/software" element={<Software />} />
+      <Route path="/products" element={<ProductCatalog />} />
+      <Route path="/products/:id" element={<ProductDetail />} />
+      <Route path="/legal/terms/:id" element={<LegalPage type="terms" />} />
+      <Route path="/legal/privacy/:id" element={<LegalPage type="privacy" />} />
       <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="agents" element={<Agents />} />

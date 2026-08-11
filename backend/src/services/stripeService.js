@@ -36,16 +36,17 @@ export async function cancelSubscription(subscriptionId) {
   return subscription;
 }
 
-export async function createCheckoutSession(customerId, priceId, successUrl, cancelUrl) {
+export async function createCheckoutSession({ customerEmail, lineItems, mode, successUrl, cancelUrl, metadata }) {
   if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
     return { fallback: true, url: successUrl };
   }
   const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    mode: 'subscription',
+    customer_email: customerEmail,
+    line_items: lineItems,
+    mode: mode || 'payment',
     success_url: successUrl,
     cancel_url: cancelUrl,
+    metadata: metadata || {},
   });
   return session;
 }

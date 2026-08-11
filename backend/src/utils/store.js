@@ -30,6 +30,15 @@ let tasks = loadFile('tasks');
 let subscriptions = loadFile('subscriptions');
 let analytics = loadFile('analytics', {});
 let settings = loadFile('settings', {});
+let products = loadFile('products', []);
+let purchases = loadFile('purchases', []);
+let termsVersions = loadFile('termsVersions', [
+  { id: 'terms-v1.0', type: 'terms', version: '1.0', title: 'Terms of Service', effectiveDate: '2026-01-01', content: 'Terms of Service v1.0 — Placeholder. Final terms must be reviewed before commercial launch.', createdAt: new Date().toISOString() },
+  { id: 'privacy-v1.0', type: 'privacy', version: '1.0', title: 'Privacy Policy', effectiveDate: '2026-01-01', content: 'Privacy Policy v1.0 — Placeholder. Final privacy policy must be reviewed before commercial launch.', createdAt: new Date().toISOString() },
+  { id: 'aup-v1.0', type: 'aup', version: '1.0', title: 'Acceptable Use Policy', effectiveDate: '2026-01-01', content: 'Acceptable Use Policy v1.0 — Placeholder. Final AUP must be reviewed before commercial launch.', createdAt: new Date().toISOString() },
+]);
+let refunds = loadFile('refunds', []);
+let webhookEvents = loadFile('webhookEvents', []);
 
 const USE_MONGO = process.env.USE_MONGO === 'true' || process.env.MONGODB_URI;
 let mongoClient = null;
@@ -78,6 +87,11 @@ const store = {
     saveFile('subscriptions', subscriptions);
     saveFile('analytics', analytics);
     saveFile('settings', settings);
+    saveFile('products', products);
+    saveFile('purchases', purchases);
+    saveFile('termsVersions', termsVersions);
+    saveFile('refunds', refunds);
+    saveFile('webhookEvents', webhookEvents);
   },
 
   _id() { return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2); },
@@ -101,7 +115,16 @@ const store = {
       const existing = await col('users').findOne({ email: userData.email.toLowerCase() });
       if (existing) throw new Error('User already exists');
       const hashed = await bcrypt.hash(userData.password, 12);
-      const user = { id: this._id(), email: userData.email.toLowerCase(), password: hashed, role: userData.role || 'user', profile: userData.profile || {}, createdAt: new Date().toISOString() };
+      const user = {
+        id: this._id(),
+        email: userData.email.toLowerCase(),
+        password: hashed,
+        role: userData.role || 'user',
+        profile: userData.profile || {},
+        agreements: userData.agreements || {},
+        marketingConsent: userData.marketingConsent || { optedIn: false, optedInAt: null, updatedAt: new Date().toISOString() },
+        createdAt: new Date().toISOString(),
+      };
       const res = await col('users').insertOne(user);
       const { password, ...safe } = user;
       return safe;
@@ -109,7 +132,16 @@ const store = {
     const existing = users.find(u => u.email === userData.email.toLowerCase());
     if (existing) throw new Error('User already exists');
     const hashed = await bcrypt.hash(userData.password, 12);
-    const user = { id: this._id(), email: userData.email.toLowerCase(), password: hashed, role: userData.role || 'user', profile: userData.profile || {}, createdAt: new Date().toISOString() };
+    const user = {
+      id: this._id(),
+      email: userData.email.toLowerCase(),
+      password: hashed,
+      role: userData.role || 'user',
+      profile: userData.profile || {},
+      agreements: userData.agreements || {},
+      marketingConsent: userData.marketingConsent || { optedIn: false, optedInAt: null, updatedAt: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+    };
     users.push(user);
     this._save();
     const { password, ...safe } = user;
@@ -318,6 +350,88 @@ const store = {
   getSubscriptionsByUser(userId) {
     if (this.isMongo()) return col('subscriptions').find({ userId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
     return subscriptions.filter(s => s.userId === userId || s.user === userId);
+  },
+
+  getProducts() {
+    if (this.isMongo()) return col('products').find().toArray().then(docs => docs.map(stripMongo));
+    return Promise.resolve(products);
+  },
+  getProductById(id) {
+    if (this.isMongo()) return col('products').findOne({ _id: toMongoId(id) }).then(stripMongo);
+    return products.find(p => p.id === id);
+  },
+  createProduct(product) {
+    const p = { id: this._id(), ...product, createdAt: new Date().toISOString() };
+    if (this.isMongo()) return col('products').insertOne(p).then(res => stripMongo({ ...p, _id: res.insertedId }));
+    products.push(p); this._save(); return p;
+  },
+  updateProduct(id, updates) {
+    if (this.isMongo()) return col('products').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => this.getProductById(id));
+    const idx = products.findIndex(p => p.id === id); if (idx === -1) return null; products[idx] = { ...products[idx], ...updates }; this._save(); return products[idx];
+  },
+  deleteProduct(id) {
+    if (this.isMongo()) return col('products').deleteOne({ _id: toMongoId(id) }).then(() => true);
+    const idx = products.findIndex(p => p.id === id); if (idx === -1) return false; products.splice(idx, 1); this._save(); return true;
+  },
+
+  getPurchases() {
+    if (this.isMongo()) return col('purchases').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return Promise.resolve(purchases);
+  },
+  getPurchasesByUser(userId) {
+    if (this.isMongo()) return col('purchases').find({ userId }).sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return purchases.filter(p => p.userId === userId);
+  },
+  createPurchase(purchase) {
+    const p = { id: this._id(), ...purchase, createdAt: new Date().toISOString() };
+    if (this.isMongo()) return col('purchases').insertOne(p).then(res => stripMongo({ ...p, _id: res.insertedId }));
+    purchases.push(p); this._save(); return p;
+  },
+  updatePurchase(id, updates) {
+    if (this.isMongo()) return col('purchases').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('purchases').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = purchases.findIndex(p => p.id === id); if (idx === -1) return null; purchases[idx] = { ...purchases[idx], ...updates }; this._save(); return purchases[idx];
+  },
+
+  getTermsVersions() {
+    if (this.isMongo()) return col('termsVersions').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return Promise.resolve(termsVersions);
+  },
+  getTermsVersionById(id) {
+    if (this.isMongo()) return col('termsVersions').findOne({ _id: toMongoId(id) }).then(stripMongo);
+    return termsVersions.find(t => t.id === id);
+  },
+  getCurrentTermsVersion(type) {
+    if (this.isMongo()) return col('termsVersions').find({ type }).sort({ effectiveDate: -1 }).limit(1).toArray().then(docs => docs.map(stripMongo)[0] || null);
+    return termsVersions.filter(t => t.type === type).sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate))[0] || null;
+  },
+  createTermsVersion(doc) {
+    const d = { id: this._id(), ...doc, createdAt: new Date().toISOString() };
+    if (this.isMongo()) return col('termsVersions').insertOne(d).then(res => stripMongo({ ...d, _id: res.insertedId }));
+    termsVersions.push(d); this._save(); return d;
+  },
+
+  getRefunds() {
+    if (this.isMongo()) return col('refunds').find().sort({ createdAt: -1 }).toArray().then(docs => docs.map(stripMongo));
+    return Promise.resolve(refunds);
+  },
+  createRefund(refund) {
+    const r = { id: this._id(), ...refund, createdAt: new Date().toISOString() };
+    if (this.isMongo()) return col('refunds').insertOne(r).then(res => stripMongo({ ...r, _id: res.insertedId }));
+    refunds.push(r); this._save(); return r;
+  },
+  updateRefund(id, updates) {
+    if (this.isMongo()) return col('refunds').updateOne({ _id: toMongoId(id) }, { $set: { ...updates, updatedAt: new Date().toISOString() } }).then(() => col('refunds').findOne({ _id: toMongoId(id) }).then(stripMongo));
+    const idx = refunds.findIndex(r => r.id === id); if (idx === -1) return null; refunds[idx] = { ...refunds[idx], ...updates }; this._save(); return refunds[idx];
+  },
+
+  createWebhookEvent(event) {
+    const e = { id: this._id(), ...event, createdAt: new Date().toISOString() };
+    if (this.isMongo()) return col('webhookEvents').insertOne(e).then(res => stripMongo({ ...e, _id: res.insertedId }));
+    webhookEvents.push(e); this._save(); return e;
+  },
+  getWebhookEvents() {
+    if (this.isMongo()) return col('webhookEvents').find().sort({ createdAt: -1 }).limit(100).toArray().then(docs => docs.map(stripMongo));
+    return Promise.resolve(webhookEvents.slice(-100));
   },
 
   getAnalytics() {

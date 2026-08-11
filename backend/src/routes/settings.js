@@ -19,6 +19,17 @@ router.patch('/profile', async (req, res) => {
   res.json(updated);
 });
 
+router.post('/marketing-consent', async (req, res) => {
+  const { optedIn } = req.body;
+  const marketingConsent = {
+    optedIn: !!optedIn,
+    optedInAt: optedIn ? new Date().toISOString() : null,
+    updatedAt: new Date().toISOString(),
+  };
+  const updated = await store.updateUser(req.user.id, { marketingConsent });
+  res.json({ success: true, marketingConsent: updated.marketingConsent });
+});
+
 router.get('/integrations', (req, res) => {
   res.json({
     openai: !!process.env.OPENAI_API_KEY,

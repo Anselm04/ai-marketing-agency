@@ -4,15 +4,25 @@ import store from '../utils/store.js';
 
 let authToken;
 let testUser;
+let currentTermsId;
+let currentPrivacyId;
 
 beforeAll(async () => {
-  // Ensure clean state for tests
+  // Fetch current terms versions first
+  const termsRes = await request(app).get('/api/legal/terms-versions');
+  currentTermsId = termsRes.body.terms?.id || 'terms-v1.0';
+  currentPrivacyId = termsRes.body.privacy?.id || 'privacy-v1.0';
+
   const timestamp = Date.now();
   testUser = {
     email: `test${timestamp}@example.com`,
     password: 'TestPass123!',
     firstName: 'Test',
     lastName: 'User',
+    termsAgreed: true,
+    termsVersionId: currentTermsId,
+    privacyVersionId: currentPrivacyId,
+    marketingConsent: false,
   };
 
   const registerRes = await request(app)
@@ -38,7 +48,7 @@ afterAll(() => {
 // Auth Tests
 
 describe('Auth API', () => {
-  test('POST /api/auth/register - creates a new user', async () => {
+  test('POST /api/auth/register - creates a new user with terms agreement', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({
@@ -46,10 +56,28 @@ describe('Auth API', () => {
         password: 'SecurePass123!',
         firstName: 'New',
         lastName: 'User',
+        termsAgreed: true,
+        termsVersionId: currentTermsId,
+        privacyVersionId: currentPrivacyId,
+        marketingConsent: false,
       });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
     expect(res.body.user.email).toBeDefined();
+    expect(res.body.user.agreements).toBeDefined();
+  });
+
+  test('POST /api/auth/register - rejects registration without terms agreement', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        email: `noterms${Date.now()}@example.com`,
+        password: 'SecurePass123!',
+        firstName: 'No',
+        lastName: 'Terms',
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/agree/);
   });
 
   test('POST /api/auth/register - rejects duplicate email', async () => {

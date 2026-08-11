@@ -19,3 +19,24 @@ const logger = winston.createLogger({
 });
 
 export { logger };
+
+export function logAIRequest(provider, model, operation, duration, tokens, cost, error = null, errObj = null) {
+  logger.info('AI request completed', {
+    provider,
+    model,
+    operation,
+    duration_ms: duration,
+    tokens,
+    cost_usd: cost,
+    error: error ? String(error) : undefined,
+  });
+}
+
+export function logConnectorRequest(provider, operation, duration, error = null) {
+  logger.info('Connector request completed', {
+    provider,
+    operation,
+    duration_ms: duration,
+    error: error ? String(error) : undefined,
+  });
+}

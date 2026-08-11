@@ -2,10 +2,53 @@ import express from 'express';
 import productMarketingService from '../services/productMarketingService.js';
 import store from '../utils/store.js';
 import { upload } from '../middleware/upload.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Public product catalog — no authentication required for browsing
+router.get('/catalog', async (req, res) => {
+  const products = await store.getProducts();
+  res.json(products.map(p => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    category: p.category,
+    price: p.price,
+    currency: p.currency || 'NZD',
+    billingType: p.billingType,
+    billingInterval: p.billingInterval,
+    trialPeriod: p.trialPeriod,
+    stripeProductId: p.stripeProductId,
+    features: p.features,
+    images: p.images,
+    status: p.status,
+    createdAt: p.createdAt,
+  })));
+});
+
+router.get('/catalog/:id', async (req, res) => {
+  const product = await store.getProductById(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Product not found' });
+  res.json({
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    category: product.category,
+    price: product.price,
+    currency: product.currency || 'NZD',
+    billingType: product.billingType,
+    billingInterval: product.billingInterval,
+    trialPeriod: product.trialPeriod,
+    stripeProductId: product.stripeProductId,
+    features: product.features,
+    images: product.images,
+    status: product.status,
+    createdAt: product.createdAt,
+  });
+});
+
+// Authenticated marketing campaigns (existing)
 router.use(authenticate);
 
 // POST /api/products/marketing
@@ -84,6 +127,19 @@ router.get('/:id', (req, res) => {
   );
 
   res.json({ campaign, contentItems });
+});
+
+// Admin: create product
+router.post('/catalog', requireAdmin, async (req, res) => {
+  const product = await store.createProduct(req.body);
+  res.status(201).json(product);
+});
+
+// Admin: update product
+router.put('/catalog/:id', requireAdmin, async (req, res) => {
+  const product = await store.updateProduct(req.params.id, req.body);
+  if (!product) return res.status(404).json({ error: 'Product not found' });
+  res.json(product);
 });
 
 export default router;

@@ -4,7 +4,7 @@ import LanguageSelector from '../components/LanguageSelector'
 import {
   Bot, Megaphone, Globe, Shield, Zap, TrendingUp, BarChart3,
   Users, Sparkles, ArrowRight, Moon, Sun,
-  Gamepad2, Smartphone, Heart, Cpu
+  Gamepad2, Smartphone, Heart, Cpu, Package
 } from 'lucide-react'
 
 const features = [
@@ -25,6 +25,7 @@ const categories = [
   { icon: Zap, title: 'Tools', desc: 'Utility tools and software to streamline your workflow', path: '/tools' },
   { icon: Gamepad2, title: 'Games', desc: 'Interactive games and entertainment experiences', path: '/games' },
   { icon: Cpu, title: 'Software', desc: 'Full-featured software solutions for business and personal use', path: '/software' },
+  { icon: Package, title: 'Products', desc: 'Browse and purchase individual products with transparent pricing', path: '/products' },
 ]
 
 export default function LandingPage() {
@@ -61,12 +62,15 @@ export default function LandingPage() {
             Autonomous AI agents that market your apps, products, and services across every platform on Earth.
             From TikTok to Steam, from the App Store to Amazon — fully automated.
           </p>
+          <p className="mt-4 text-sm text-gray-400 dark:text-gray-500 max-w-2xl mx-auto">
+            This website is free to browse. Accounts are free. Individual products may be free or paid.
+          </p>
           <div className="mt-10 flex items-center justify-center gap-4">
-            <Link to="/register" className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
-              Start Free <ArrowRight size={18} />
+            <Link to="/products" className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+              Browse Products <ArrowRight size={18} />
             </Link>
-            <Link to="/login" className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              Sign In
+            <Link to="/register" className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              Create Free Account
             </Link>
           </div>
         </div>
@@ -93,7 +97,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">Explore Our Universe</h2>
           <p className="text-center text-gray-500 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
-            Discover apps, agents, tools, games, and software built for the future.
+            Discover apps, agents, tools, games, and software built for the future. No account required to browse.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {categories.map((cat) => (
@@ -125,6 +129,10 @@ export default function LandingPage() {
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
             Autonomous growth engine for apps, products, and services.
           </p>
+          <div className="mt-4 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-gray-500">
+            <Link to="/legal/terms/terms-v1.0" target="_blank" className="hover:text-blue-600">Terms of Service</Link>
+            <Link to="/legal/privacy/privacy-v1.0" target="_blank" className="hover:text-blue-600">Privacy Policy</Link>
+          </div>
         </div>
       </footer>
     </div>

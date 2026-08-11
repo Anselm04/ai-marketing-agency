@@ -26,6 +26,7 @@ const navItems = [
   { path: '/dashboard/legal', icon: Shield, label: 'Legal' },
   { path: '/dashboard/ai-models', icon: Cpu, label: 'AI Models' },
   { path: '/dashboard/connectors', icon: Plug, label: 'Connectors' },
+  { path: '/dashboard/billing', icon: CreditCard, label: 'Billing & Purchases' },
   { path: '/dashboard/settings', icon: Settings, label: 'Settings' },
   { path: '/dashboard/team', icon: Users, label: 'Team' },
   { path: '/dashboard/admin', icon: Lock, label: 'Admin', adminOnly: true },

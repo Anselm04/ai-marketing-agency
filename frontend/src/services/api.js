@@ -19,8 +19,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      const isPublicRoute = error.config?.url?.includes('/auth/register') ||
+                            error.config?.url?.includes('/auth/login') ||
+                            error.config?.url?.includes('/legal/terms-versions') ||
+                            error.config?.url?.includes('/products/catalog');
+      if (!isPublicRoute) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
