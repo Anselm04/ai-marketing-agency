@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {
   Upload, Mic, MicOff, Image, X, ShoppingCart, Sparkles, ChevronRight,
   Check, Copy, FileText, Megaphone, Video, Mail, Search, BookOpen,
@@ -448,8 +448,27 @@ export default function ProductMarketing() {
   const renderInput = () => (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Product Marketing</h2>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">Upload photos, describe your product, and let AI create a full marketing campaign</p>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Market the live TrillionAI Tech products</h2>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">
+          Plan social, ads, and SEO campaigns for AppForge and TrillionAI Marketing.
+          Campaigns are not running until you launch them here. There is no six-product catalog until AppForge generates products that actually work.
+        </p>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <a href="https://appforge-unfurling-moon-9058.fly.dev" target="_blank" rel="noreferrer" className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 hover:border-blue-400">
+            <div className="font-semibold text-gray-900 dark:text-gray-100">AppForge</div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Generate real live apps, games, agents, tools, software, and websites. Brand: trillionaitech.com</p>
+            <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 mt-2">Open AppForge <ArrowRight size={14} /></span>
+          </a>
+          <Link to="/dashboard/billing" className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 hover:border-blue-400">
+            <div className="font-semibold text-gray-900 dark:text-gray-100">TrillionAI Marketing</div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">This app: autonomous marketing across social, ads, and SEO. Subscribe to start. Campaigns are not already running.</p>
+            <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 mt-2">Plans and billing <ArrowRight size={14} /></span>
+          </Link>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={() => setForm(prev => ({ ...prev, productName: 'AppForge', category: 'software', targetAudience: 'Builders who need live apps, games, agents, tools, software, and websites', description: 'AppForge by TrillionAI Tech generates real live apps, games, agents, tools, software, and websites. Live at https://appforge-unfurling-moon-9058.fly.dev. Brand: https://trillionaitech.com.' }))} className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">Fill AppForge</button>
+          <button type="button" onClick={() => setForm(prev => ({ ...prev, productName: 'TrillionAI Marketing', category: 'software', targetAudience: 'Founders and agencies who need autonomous social, ads, and SEO', description: 'TrillionAI Marketing by TrillionAI Tech is an autonomous marketing platform for social, ads, and SEO. Create an account, subscribe, and launch campaigns from this app. Campaigns are not already running.' }))} className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">Fill TrillionAI Marketing</button>
+        </div>
       </div>
 
       {/* Photo Upload */}
