@@ -29,6 +29,8 @@ let tasks = loadFile('tasks');
 let subscriptions = loadFile('subscriptions');
 let analytics = loadFile('analytics', {});
 let settings = loadFile('settings', {});
+let godCodes = loadFile('godCodes');
+
 
 const store = {
   _save() {
@@ -44,6 +46,7 @@ const store = {
     saveFile('subscriptions', subscriptions);
     saveFile('analytics', analytics);
     saveFile('settings', settings);
+    saveFile('godCodes', godCodes);
   },
 
   _id() { return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2); },
@@ -206,6 +209,23 @@ const store = {
   async setSettings(key, value) {
     settings[key] = value; this._save();
   },
+
+  getGodCodes() { return Promise.resolve(godCodes); },
+  findGodCodeByHash(hash) {
+    return godCodes.find(c => c.hash === hash);
+  },
+  createGodCode(row) {
+    const c = { id: this._id(), ...row, createdAt: new Date().toISOString() };
+    godCodes.push(c); this._save(); return c;
+  },
+  updateGodCode(id, updates) {
+    const idx = godCodes.findIndex(c => c.id === id);
+    if (idx === -1) return null;
+    godCodes[idx] = { ...godCodes[idx], ...updates, id: godCodes[idx].id };
+    this._save();
+    return godCodes[idx];
+  },
 };
+
 
 export default store;
