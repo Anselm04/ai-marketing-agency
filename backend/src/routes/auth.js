@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import store from '../utils/store.js';
+import { isOwnerEmail } from '../utils/owner.js';
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ router.post('/register', async (req, res) => {
       profile: { firstName, lastName },
     });
     const token = store.generateToken(user.id);
-    res.status(201).json({ token, user });
+    res.status(201).json({ token, user: { ...user, isOwner: isOwnerEmail(user.email) } });
   } catch (err) {
     res.status(409).json({ error: err.message });
   }
@@ -34,8 +35,8 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     const token = store.generateToken(user.id);
-    const { password: _, ...safe } = user;
-    res.json({ token, user: safe });
+    const { password: _, resetToken, resetTokenExpires, ...safe } = user;
+    res.json({ token, user: { ...safe, isOwner: isOwnerEmail(user.email) } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -51,8 +52,8 @@ router.get('/me', async (req, res) => {
     const decoded = store.verifyToken(token);
     const user = await store.findUserById(decoded.userId);
     if (!user) return res.status(401).json({ error: 'User not found' });
-    const { password, ...safe } = user;
-    res.json(safe);
+    const { password, resetToken, resetTokenExpires, ...safe } = user;
+    res.json({ ...safe, isOwner: isOwnerEmail(user.email) });
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
   }
