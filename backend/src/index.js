@@ -17,6 +17,7 @@ import campaignRoutes from './routes/campaigns.js';
 import analyticsRoutes from './routes/analytics.js';
 import contentRoutes from './routes/content.js';
 import crmRoutes from './routes/crm.js';
+import billingPublicRoutes from './routes/billingPublic.js';
 import billingRoutes from './routes/billing.js';
 import adminRoutes from './routes/admin.js';
 import teamRoutes from './routes/team.js';
@@ -81,6 +82,7 @@ app.get('/api/health', (req, res) => {
 app.get('/metrics', metricsRouteHandler);
 
 app.use('/api/auth', authRoutes);
+app.use('/api/billing', billingPublicRoutes);
 app.use(authenticate);
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);

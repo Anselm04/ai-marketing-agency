@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 import LanguageSelector from '../components/LanguageSelector'
+import { CATALOG } from '../config/stripeCatalog'
 import {
   Bot, Megaphone, Globe, Shield, Zap, TrendingUp, BarChart3,
   Users, Sparkles, ArrowRight, Moon, Sun,
-  Gamepad2, Smartphone, Heart, Cpu
+  Gamepad2, Smartphone, Heart, Cpu,
+  Check, Star, Crown, Building2, CreditCard
 } from 'lucide-react'
 
 const features = [
@@ -26,6 +28,9 @@ const categories = [
   { icon: Gamepad2, title: 'Games', desc: 'Interactive games and entertainment experiences', path: '/games' },
   { icon: Cpu, title: 'Software', desc: 'Full-featured software solutions for business and personal use', path: '/software' },
 ]
+
+const planIcons = { starter: Zap, growth: Star, agency: Crown, enterprise: Building2 }
+const dollars = (item) => item.amount / 100
 
 export default function LandingPage() {
   const { theme, toggleTheme } = useTheme()
@@ -116,11 +121,88 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Pricing */}
+      <section className="py-20 bg-white dark:bg-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">Pricing</h2>
+          <p className="text-center text-gray-500 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
+            Monthly plans and one-time credit packs. Checkout works even if the API is down.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {CATALOG.plans.map((plan) => {
+              const Icon = planIcons[plan.id] || Zap
+              const f = plan.features || {}
+              return (
+                <div key={plan.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-5 flex flex-col">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                      <Icon size={20} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 dark:text-white">{plan.name}</h3>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">${dollars(plan)}/month</div>
+                    </div>
+                  </div>
+                  <ul className="space-y-2 mb-4 flex-1">
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.agents} AI agents</li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.campaigns} campaigns</li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.postsPerDay} posts/day</li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.languages} languages</li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.teamSeats} team seats</li>
+                    {f.apiAccess && <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />API access</li>}
+                    {f.whiteLabel && <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />White label</li>}
+                  </ul>
+                  <a
+                    href={plan.paymentLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 text-center transition-colors"
+                  >
+                    Subscribe
+                  </a>
+                </div>
+              )
+            })}
+          </div>
+
+          <h3 className="text-xl font-semibold text-center text-gray-900 dark:text-white mt-14 mb-6">Credit packs</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
+            {CATALOG.credits.map((pack) => (
+              <div key={pack.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-5 flex flex-col">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                    <CreditCard size={20} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">{pack.name}</h3>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">${dollars(pack)} one-time</div>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-1">{pack.credits} credits for extra agents, campaigns, and posts.</p>
+                <a
+                  href={pack.paymentLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 text-center transition-colors"
+                >
+                  Buy credits
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Trillion AI Tech — Anselm Perkins, CEO & Owner of Trillion AI Tech.
+            TrillionAI Tech — Anselm Perkins, Founder &amp; CEO.
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+            <a href="mailto:hello@trillionaitech.com" className="hover:text-blue-600">hello@trillionaitech.com</a>
+            {' · '}
+            <a href="mailto:support@trillionaitech.com" className="hover:text-blue-600">support@trillionaitech.com</a>
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
             Autonomous growth engine for apps, products, and services.

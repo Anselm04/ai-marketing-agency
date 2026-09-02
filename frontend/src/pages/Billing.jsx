@@ -1,27 +1,47 @@
 import { useEffect, useState } from 'react'
 import { CreditCard, Check, Zap, Crown, Building2, Star } from 'lucide-react'
 import api from '../services/api'
+import { CATALOG } from '../config/stripeCatalog'
+
+const dollars = (item) => item.price ?? (item.amount != null ? item.amount / 100 : 0)
 
 export default function Billing() {
   const [plans, setPlans] = useState([])
+  const [credits, setCredits] = useState([])
   const [subscription, setSubscription] = useState(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    api.get('/billing/plans').then(res => setPlans(res.data))
-    api.get('/billing/subscription').then(res => setSubscription(res.data))
+    api.get('/billing/plans')
+      .then(res => {
+        const data = Array.isArray(res.data) ? res.data : res.data?.plans
+        setPlans(data?.length ? data : CATALOG.plans)
+      })
+      .catch(() => setPlans(CATALOG.plans))
+
+    api.get('/billing/catalog')
+      .then(res => setCredits(res.data?.credits?.length ? res.data.credits : CATALOG.credits))
+      .catch(() => setCredits(CATALOG.credits))
+
+    api.get('/billing/subscription').then(res => setSubscription(res.data)).catch(() => {})
   }, [])
 
   const handleCheckout = async (plan) => {
     setLoading(true)
     try {
-      const res = await api.post('/billing/checkout', { priceId: plan.id })
-      if (res.data.url) window.location.href = res.data.url
+      const res = await api.post('/billing/checkout', {
+        lookup_key: plan.lookup_key,
+        priceId: plan.priceId || plan.id,
+      })
+      if (res.data.url) {
+        window.location.href = res.data.url
+        return
+      }
     } catch (err) {
       console.error(err)
-    } finally {
-      setLoading(false)
     }
+    if (plan.paymentLink) window.location.href = plan.paymentLink
+    setLoading(false)
   }
 
   const handleCancel = async () => {
@@ -31,7 +51,7 @@ export default function Billing() {
     setSubscription(res.data)
   }
 
-  const planIcons = { starter: Zap, growth: Star, pro: Crown, enterprise: Building2 }
+  const planIcons = { starter: Zap, growth: Star, agency: Crown, enterprise: Building2 }
 
   return (
     <div className="space-y-6">
@@ -59,6 +79,7 @@ export default function Billing() {
         {plans.map(plan => {
           const Icon = planIcons[plan.id] || Zap
           const isCurrent = subscription?.plan === plan.id
+          const features = plan.features || {}
           return (
             <div key={plan.id} className={`bg-white rounded-xl border p-5 flex flex-col ${isCurrent ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200'}`}>
               <div className="flex items-center gap-2 mb-3">
@@ -67,17 +88,17 @@ export default function Billing() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900">{plan.name}</h3>
-                  <div className="text-sm text-gray-500">${plan.price}/{plan.interval}</div>
+                  <div className="text-sm text-gray-500">${dollars(plan)}/{plan.interval || 'month'}</div>
                 </div>
               </div>
               <ul className="space-y-2 mb-4 flex-1">
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.agents} AI agents</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.campaigns} campaigns</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.postsPerDay} posts/day</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.languages} languages</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{plan.features.teamSeats} team seats</li>
-                {plan.features.apiAccess && <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />API access</li>}
-                {plan.features.whiteLabel && <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />White label</li>}
+                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.agents} AI agents</li>
+                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.campaigns} campaigns</li>
+                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.postsPerDay} posts/day</li>
+                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.languages} languages</li>
+                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.teamSeats} team seats</li>
+                {features.apiAccess && <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />API access</li>}
+                {features.whiteLabel && <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />White label</li>}
               </ul>
               <button
                 onClick={() => handleCheckout(plan)}
@@ -93,6 +114,33 @@ export default function Billing() {
             </div>
           )
         })}
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">Credit packs</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {credits.map(pack => (
+            <div key={pack.id} className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <CreditCard size={20} className="text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">{pack.name}</h3>
+                  <div className="text-sm text-gray-500">${dollars(pack)} one-time</div>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 mb-4 flex-1">{pack.credits} credits for extra agents, campaigns, and posts.</p>
+              <button
+                onClick={() => handleCheckout(pack)}
+                disabled={loading}
+                className="w-full py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                Buy credits
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
