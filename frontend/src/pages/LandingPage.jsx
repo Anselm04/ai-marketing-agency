@@ -1,222 +1,229 @@
 import { Link } from 'react-router-dom'
-import { useTheme } from '../context/ThemeContext'
-import LanguageSelector from '../components/LanguageSelector'
 import { CATALOG } from '../config/stripeCatalog'
-import {
-  Bot, Megaphone, Globe, Shield, Zap, TrendingUp, BarChart3,
-  Users, Sparkles, ArrowRight, Moon, Sun, Heart, ExternalLink,
-  Check, Star, Crown, Building2, CreditCard
-} from 'lucide-react'
+import { APPFORGE_URL, BRAND_URL, LIBRARY } from '../config/library'
+import { Check, Moon, Sun } from 'lucide-react'
+import { useTheme } from '../context/ThemeContext'
+import { useLanguage } from '../context/LanguageContext'
+import LanguageSelector from '../components/LanguageSelector'
+import './landing.css'
 
-const APPFORGE_URL = 'https://appforge-unfurling-moon-9058.fly.dev'
-const BRAND_URL = 'https://trillionaitech.com'
-
-const features = [
-  { icon: Bot, title: '13 AI Agents', desc: 'Autonomous agents for strategy, content, video, SEO, legal, and more' },
-  { icon: Megaphone, title: 'All Platforms', desc: 'Publish to 50+ platforms: social, gaming, e-commerce, app stores, ads' },
-  { icon: Globe, title: '20+ Languages', desc: 'Auto-translate content for global reach and local markets' },
-  { icon: Shield, title: 'Legal Compliance', desc: 'Auto-generate terms, privacy policies, and compliance docs' },
-  { icon: Zap, title: 'Auto-Optimization', desc: 'A/B testing, budget allocation, and ROI optimization' },
-  { icon: TrendingUp, title: 'Trend Intelligence', desc: 'Real-time trend scanning across TikTok, Twitter, Google' },
-  { icon: BarChart3, title: 'Deep Analytics', desc: 'Campaign analytics, lead scoring, pipeline tracking' },
-  { icon: Users, title: 'CRM & Leads', desc: 'Lead scoring, auto-qualification, and pipeline management' },
-  { icon: Heart, title: 'Creator Economy', desc: 'Patreon, Ko-fi, Buy Me a Coffee, and OnlyFans' },
+const featureKeys = [
+  ['featAgents', 'featAgentsDesc'],
+  ['featPlatforms', 'featPlatformsDesc'],
+  ['featLangs', 'featLangsDesc'],
+  ['featLegal', 'featLegalDesc'],
+  ['featAuto', 'featAutoDesc'],
+  ['featTrends', 'featTrendsDesc'],
+  ['featAnalytics', 'featAnalyticsDesc'],
+  ['featCrm', 'featCrmDesc'],
+  ['featCreator', 'featCreatorDesc'],
 ]
 
-const planIcons = { starter: Zap, growth: Star, agency: Crown, enterprise: Building2 }
 const dollars = (item) => item.amount / 100
 
 export default function LandingPage() {
   const { theme, toggleTheme } = useTheme()
+  const { t } = useLanguage()
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="text-blue-600" size={24} />
-            <span className="font-bold text-lg text-gray-900 dark:text-white">TrillionAI Tech</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <a href={BRAND_URL} target="_blank" rel="noreferrer" className="hidden sm:inline text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">trillionaitech.com</a>
+    <div className="studio">
+      <header className="studio-header">
+        <div className="wrap">
+          <a className="studio-brand" href={BRAND_URL} target="_blank" rel="noreferrer">
+            <img src="/appforge-logo.png" width="36" height="36" alt="" />
+            <span className="studio-brand-name">
+              <strong>TrillionAI</strong>
+              <span>Tech</span>
+            </span>
+          </a>
+          <nav className="studio-nav" aria-label="Primary">
+            <a className="hide-sm" href="#products">{t('products')}</a>
+            <a className="hide-sm" href="#library">{t('library')}</a>
+            <a className="hide-sm" href="#pricing">{t('pricing')}</a>
+            <a className="hide-sm" href={BRAND_URL} target="_blank" rel="noreferrer">trillionaitech.com</a>
             <LanguageSelector />
-            <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              {theme === 'dark' ? <Sun size={18} className="text-gray-400" /> : <Moon size={18} className="text-gray-400" />}
+            <button type="button" onClick={toggleTheme} className="studio-nav-cta" aria-label={theme === 'dark' ? t('day') : t('night')} style={{ border: '1px solid var(--gold)', background: 'transparent', cursor: 'pointer' }}>
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+              <span className="hide-sm">{theme === 'dark' ? t('day') : t('night')}</span>
             </button>
-            <Link to="/login" className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Sign in</Link>
-            <Link to="/register" className="text-sm font-medium px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Get Started</Link>
-          </div>
+            <Link to="/login">{t('signIn')}</Link>
+            <Link className="studio-nav-cta" to="/register">{t('getStarted')}</Link>
+          </nav>
         </div>
       </header>
 
-      <section className="py-20 sm:py-28">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-600 mb-4">TrillionAI Tech</p>
-          <h1 className="text-4xl sm:text-6xl font-bold text-gray-900 dark:text-white tracking-tight">
-            Two live products.<br />
-            <span className="text-blue-600">Build with AppForge. Grow with Marketing.</span>
-          </h1>
-          <p className="mt-6 text-lg sm:text-xl text-gray-500 dark:text-gray-400 max-w-3xl mx-auto">
-            AppForge generates real live apps, games, agents, tools, software, and websites.
-            TrillionAI Marketing is this app: autonomous marketing across social, ads, and SEO.
-            Create an account to subscribe and launch campaigns — we do not claim campaigns are already running.
-          </p>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-            <a href={APPFORGE_URL} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
-              Open AppForge <ExternalLink size={18} />
-            </a>
-            <Link to="/register" className="flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              Start marketing <ArrowRight size={18} />
-            </Link>
-            <Link to="/dashboard/billing" className="px-6 py-3 text-blue-600 font-medium hover:underline">
-              Plans &amp; billing
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-20 bg-white dark:bg-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">The live TrillionAI Tech lineup</h2>
-          <p className="text-center text-gray-500 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
-            We only advertise products that exist today. There is no six-product catalog until AppForge generates apps, games, and agents that actually work.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            <div className="p-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex flex-col">
-              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4">
-                <Bot className="text-blue-600" size={24} />
-              </div>
-              <h3 className="font-semibold text-2xl text-gray-900 dark:text-white mb-2">AppForge</h3>
-              <p className="text-gray-500 dark:text-gray-400 flex-1">
-                Generate real, live apps, games, agents, tools, software, and websites. A product of TrillionAI Tech — see the brand at trillionaitech.com.
-              </p>
-              <a href={APPFORGE_URL} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
-                Open AppForge <ExternalLink size={16} />
-              </a>
+      <main>
+        <section className="studio-hero">
+          <div className="wrap">
+            <p className="studio-kicker">{t('heroKicker')}</p>
+            <h1>{t('heroTitle')}<br /><em>{t('heroEm')}</em> {t('heroRest')}</h1>
+            <p className="studio-lede">{t('heroLede')}</p>
+            <div className="studio-actions">
+              <a className="studio-btn studio-btn-gold" href={APPFORGE_URL} target="_blank" rel="noreferrer">{t('openAppForge')}</a>
+              <Link className="studio-btn studio-btn-ghost" to="/register">{t('startMarketing')}</Link>
+              <Link className="studio-btn studio-btn-ghost" to="/dashboard/billing">{t('plansBilling')}</Link>
             </div>
-            <div className="p-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex flex-col">
-              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4">
-                <Megaphone className="text-blue-600" size={24} />
+            <dl className="studio-meta">
+              <div>
+                <dt>{t('liveProducts')}</dt>
+                <dd>AppForge · Marketing · Library</dd>
               </div>
-              <h3 className="font-semibold text-2xl text-gray-900 dark:text-white mb-2">TrillionAI Marketing</h3>
-              <p className="text-gray-500 dark:text-gray-400 flex-1">
-                This app. Autonomous marketing across social, ads, and SEO. Register, pick a plan, and launch campaigns from the dashboard when you are ready.
-              </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link to="/register" className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
-                  Create account <ArrowRight size={16} />
-                </Link>
-                <Link to="/dashboard/billing" className="inline-flex items-center justify-center px-5 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-white dark:hover:bg-gray-800 transition-colors">
-                  Plans &amp; billing
-                </Link>
+              <div>
+                <dt>{t('founderCeo')}</dt>
+                <dd>Anselm Perkins</dd>
               </div>
+              <div>
+                <dt>{t('studio')}</dt>
+                <dd>TrillionAI Tech</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        <section className="studio-section" id="products">
+          <div className="wrap">
+            <header className="studio-head split">
+              <div>
+                <p className="studio-kicker">{t('platformsKicker')}</p>
+                <h2>{t('platformsTitle')}</h2>
+              </div>
+              <p>{t('platformsLede')}</p>
+            </header>
+            <div className="studio-grid-2">
+              <article className="studio-card">
+                <p className="studio-kicker">{t('productKicker')}</p>
+                <h3>AppForge</h3>
+                <p>{t('appforgeBlurb')}</p>
+                <p className="note">{t('appforgeNote')}</p>
+                <a className="studio-btn studio-btn-gold" href={APPFORGE_URL} target="_blank" rel="noreferrer">{t('openAppForge')}</a>
+              </article>
+              <article className="studio-card">
+                <p className="studio-kicker">{t('productKicker')}</p>
+                <h3>TrillionAI Marketing</h3>
+                <p>{t('marketingBlurb')}</p>
+                <p className="note">{t('marketingNote')}</p>
+                <div className="studio-actions" style={{ marginTop: 'auto' }}>
+                  <Link className="studio-btn studio-btn-gold" to="/register">{t('createAccount')}</Link>
+                  <Link className="studio-btn studio-btn-ghost" to="/dashboard/billing">{t('plansBilling')}</Link>
+                </div>
+              </article>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">What TrillionAI Marketing does</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {features.map((f, i) => (
-              <div key={i} className="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
-                <f.icon className="text-blue-600 mb-4" size={28} />
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{f.title}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{f.desc}</p>
+        <section className="studio-section" id="library">
+          <div className="wrap">
+            <header className="studio-head split">
+              <div>
+                <p className="studio-kicker">{t('libraryKicker')}</p>
+                <h2>{t('libraryTitle')}</h2>
               </div>
-            ))}
+              <p>{t('libraryLede')}</p>
+            </header>
+            <div className="studio-library">
+              {LIBRARY.map((item) => (
+                <article className="studio-lib-card" key={item.name}>
+                  <p className="studio-kicker">{item.kind}</p>
+                  <h3>{item.name}</h3>
+                  <p>{item.blurb}</p>
+                  <p className="studio-price">${item.price} <span>{t('usdMonth')}</span></p>
+                  <div className="studio-lib-actions">
+                    <a className="studio-btn studio-btn-ghost" href={item.open} target="_blank" rel="noreferrer">{t('open')}</a>
+                    <a className="studio-btn studio-btn-gold" href={item.subscribe} target="_blank" rel="noreferrer">{t('subscribe')}</a>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="py-20 bg-white dark:bg-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">Pricing</h2>
-          <p className="text-center text-gray-500 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
-            Monthly plans and one-time credit packs for TrillionAI Marketing. Checkout works even if the API is down.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {CATALOG.plans.map((plan) => {
-              const Icon = planIcons[plan.id] || Zap
-              const f = plan.features || {}
-              return (
-                <div key={plan.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-5 flex flex-col">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                      <Icon size={20} className="text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white">{plan.name}</h3>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">${dollars(plan)}/month</div>
-                    </div>
-                  </div>
-                  <ul className="space-y-2 mb-4 flex-1">
-                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.agents} AI agents</li>
-                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.campaigns} campaigns</li>
-                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.postsPerDay} posts/day</li>
-                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.languages} languages</li>
-                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />{f.teamSeats} team seats</li>
-                    {f.apiAccess && <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />API access</li>}
-                    {f.whiteLabel && <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><Check size={16} className="text-green-500" />White label</li>}
-                  </ul>
-                  <a
-                    href={plan.paymentLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 text-center transition-colors"
-                  >
-                    Subscribe
-                  </a>
-                </div>
-              )
-            })}
+        <section className="studio-section" id="work">
+          <div className="wrap">
+            <header className="studio-head">
+              <p className="studio-kicker">{t('capability')}</p>
+              <h2>{t('whatItDoes')}</h2>
+            </header>
+            <div className="studio-features">
+              {featureKeys.map(([title, desc]) => (
+                <article className="studio-feat" key={title}>
+                  <h3>{t(title)}</h3>
+                  <p>{t(desc)}</p>
+                </article>
+              ))}
+            </div>
           </div>
+        </section>
 
-          <h3 className="text-xl font-semibold text-center text-gray-900 dark:text-white mt-14 mb-6">Credit packs</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
-            {CATALOG.credits.map((pack) => (
-              <div key={pack.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-5 flex flex-col">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                    <CreditCard size={20} className="text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{pack.name}</h3>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">${dollars(pack)} one-time</div>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-1">{pack.credits} credits for extra agents, campaigns, and posts.</p>
-                <a
-                  href={pack.paymentLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 text-center transition-colors"
-                >
-                  Buy credits
-                </a>
+        <section className="studio-section" id="pricing">
+          <div className="wrap">
+            <header className="studio-head split">
+              <div>
+                <p className="studio-kicker">{t('heroKicker')}</p>
+                <h2>{t('pricing')}</h2>
               </div>
-            ))}
+              <p>{t('pricingLede')}</p>
+            </header>
+            <div className="studio-plans">
+              {CATALOG.plans.map((plan) => {
+                const f = plan.features || {}
+                return (
+                  <article className={`studio-plan${plan.id === 'agency' ? ' featured' : ''}`} key={plan.id}>
+                    <h3>{plan.name}</h3>
+                    <p className="studio-price">${dollars(plan)} <span>{t('usdMonth')}</span></p>
+                    <ul>
+                      <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.agents} AI agents</li>
+                      <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.campaigns} campaigns</li>
+                      <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.postsPerDay} posts/day</li>
+                      <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.languages} languages</li>
+                      <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.teamSeats} team seats</li>
+                      {f.apiAccess && <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />API access</li>}
+                      {f.whiteLabel && <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />White label</li>}
+                    </ul>
+                    <a className="studio-btn studio-btn-gold" href={plan.paymentLink} target="_blank" rel="noreferrer">{t('subscribe')}</a>
+                  </article>
+                )
+              })}
+            </div>
+            <header className="studio-head" style={{ marginTop: '3rem', marginBottom: '1.4rem' }}>
+              <h2 style={{ fontSize: '2rem' }}>{t('creditPacks')}</h2>
+            </header>
+            <div className="studio-credits">
+              {CATALOG.credits.map((pack) => (
+                <article className="studio-plan" key={pack.id}>
+                  <h3>{pack.name}</h3>
+                  <p className="studio-price">${dollars(pack)} <span>{t('oneTime')}</span></p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', flex: 1 }}>{pack.credits} {t('creditsFor')}</p>
+                  <a className="studio-btn studio-btn-gold" href={pack.paymentLink} target="_blank" rel="noreferrer" style={{ marginTop: '1rem' }}>{t('buyCredits')}</a>
+                </article>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            TrillionAI Tech — Anselm Perkins, Founder &amp; CEO.
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-            <a href="mailto:hello@trillionaitech.com" className="hover:text-blue-600">hello@trillionaitech.com</a>
-            {' \u00b7 '}
-            <a href="mailto:support@trillionaitech.com" className="hover:text-blue-600">support@trillionaitech.com</a>
-          </p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-            <a href={BRAND_URL} target="_blank" rel="noreferrer" className="hover:text-blue-600">trillionaitech.com</a>
-            {' \u00b7 '}
-            <a href={APPFORGE_URL} target="_blank" rel="noreferrer" className="hover:text-blue-600">AppForge</a>
-            {' \u00b7 '}Autonomous marketing for social, ads, and SEO.
-          </p>
+      <footer className="studio-footer">
+        <div className="wrap">
+          <div>
+            <div className="studio-brand" style={{ marginBottom: '0.8rem' }}>
+              <img src="/appforge-logo.png" width="28" height="28" alt="" />
+              <span className="studio-brand-name">
+                <strong>TrillionAI</strong>
+                <span>Tech</span>
+              </span>
+            </div>
+            <h2>Anselm Perkins</h2>
+            <p className="role">{t('founderCeo')}</p>
+            <p className="fine">{t('footerFine')}</p>
+          </div>
+          <div>
+            <div className="studio-mails">
+              <a href="mailto:hello@trillionaitech.com">hello@trillionaitech.com</a>
+              <a href="mailto:support@trillionaitech.com">support@trillionaitech.com</a>
+              <a href={BRAND_URL} target="_blank" rel="noreferrer">trillionaitech.com</a>
+              <a href={APPFORGE_URL} target="_blank" rel="noreferrer">AppForge</a>
+            </div>
+            <p className="fine" style={{ marginTop: '0.9rem' }}>{t('copyright')}</p>
+          </div>
         </div>
       </footer>
     </div>
