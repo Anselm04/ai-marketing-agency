@@ -1,10 +1,12 @@
-# AI Marketing Agency
+# TrillionAI Marketing
 
-An autonomous, full-stack, AI-driven marketing system designed to run your entire business's promotional engine with minimal human intervention. Engineered for maximum scalability, performance, and revenue generation.
+Autonomous marketing across social, ads, and SEO. A product of **TrillionAI Tech** (not Ltd), alongside **AppForge** (generate real live apps, games, agents, tools, software, and websites at https://appforge-unfurling-moon-9058.fly.dev). Brand site: https://trillionaitech.com.
+
+This app does not advertise a six-product catalog until AppForge has generated products that actually work. Campaigns are not claimed as already running until they are launched from this app.
 
 ## What This App Does
 
-- Autonomously markets iOS and Android apps on App Store and Google Play
+- Autonomously markets apps, products, and services on social, ads, and SEO channels
 - Runs full-stack advertising, social media, SEO, legal compliance, and revenue optimization
 - Generates and optimizes campaigns across TikTok, Instagram, Facebook, YouTube, LinkedIn, Twitter/X, Reddit, and Google Ads
 - Provides real-time analytics, AI content generation, and automated customer engagement
@@ -21,7 +23,7 @@ An autonomous, full-stack, AI-driven marketing system designed to run your entir
 | Database | MongoDB + File-based store (development) |
 | Real-time | Socket.IO |
 | Monitoring | Prometheus metrics + health checks |
-| DevOps | Docker + Docker Compose + GitHub Actions CI/CD |
+| DevOps | Docker + Docker Compose + Fly.io (Sydney) |
 
 ## Production Features
 
@@ -121,7 +123,8 @@ See `backend/ENV.md` for full environment documentation.
 
 Required:
 - `JWT_SECRET` - Authentication secret
-- `PORT` - Backend port (default: 3001)
+- `PORT` - Backend port (default: 3001; Fly production uses 8080)
+- `APP_URL` - Public URL (set on Fly to https://trillionai-marketing.fly.dev)
 
 Optional (for AI providers):
 - `OPENAI_API_KEY`
@@ -134,6 +137,9 @@ Optional (for AI providers):
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
 - `OLLAMA_BASE_URL`
 
+Optional billing:
+- `STRIPE_SECRET_KEY` - live Checkout Sessions. Payment-link fallback works without it.
+
 ## Testing
 
 ```bash
@@ -145,6 +151,12 @@ cd frontend && npm test
 ```
 
 ## Deployment
+
+### Fly.io (production)
+
+Hosted in Sydney (`syd`) as a single Fly app named `trillionai-marketing`. The Docker `production` target builds the React SPA and the Node API serves `/api` plus the static frontend. Not deployed to Vercel.
+
+`APP_URL` is set in `fly.toml`. Auth requires `JWT_SECRET` as a Fly secret (do not commit it). Stripe Checkout payment links work without `STRIPE_SECRET_KEY`.
 
 ### Docker Compose (Production)
 ```bash
@@ -178,9 +190,10 @@ docker-compose -f docker-compose.yml up -d
 
 MIT License
 
-## Developer
+## Founder
 
-Built by Anselm Stephen John Perkins
+Anselm Perkins, Founder & CEO, TrillionAI Tech.
+hello@trillionaitech.com · support@trillionaitech.com · anselm@trillionaitech.com
 
 ## Vision
 
