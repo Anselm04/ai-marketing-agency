@@ -5,6 +5,9 @@ import morgan from 'morgan';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 
@@ -44,11 +47,16 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { sanitizeBody } from './middleware/sanitize.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const frontendDist = process.env.FRONTEND_DIST || path.resolve(__dirname, '../../frontend/dist');
+
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 
-const whitelist = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173').split(',').map(s => s.trim());
+const defaultOrigins = 'http://localhost:3000,http://localhost:5173,http://localhost:8080';
+const originSource = process.env.CORS_ORIGIN || [process.env.APP_URL, defaultOrigins].filter(Boolean).join(',');
+const whitelist = originSource.split(',').map(s => s.trim()).filter(Boolean);
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || whitelist.includes(origin)) {
@@ -62,7 +70,10 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan('combined'));
@@ -83,7 +94,10 @@ app.get('/metrics', metricsRouteHandler);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/billing', billingPublicRoutes);
-app.use(authenticate);
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) return authenticate(req, res, next);
+  return next();
+});
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/analytics', analyticsRoutes);
@@ -109,11 +123,26 @@ app.use('/api/search', searchRoutes);
 app.use('/api/realtime', realtimeRoutes);
 app.use('/api/affiliate', affiliateRoutes);
 
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist, { index: false, maxAge: '1h' }));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/metrics') {
+      return next();
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
+      if (err) next(err);
+    });
+  });
+}
+
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-httpServer.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`, { environment: process.env.NODE_ENV });
+httpServer.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Server running on port ${PORT}`, {
+    environment: process.env.NODE_ENV,
+    frontendDist: fs.existsSync(frontendDist) ? frontendDist : 'none',
+  });
 });
 
 export default app;

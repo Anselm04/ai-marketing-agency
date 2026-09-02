@@ -4,10 +4,12 @@ import LanguageSelector from '../components/LanguageSelector'
 import { CATALOG } from '../config/stripeCatalog'
 import {
   Bot, Megaphone, Globe, Shield, Zap, TrendingUp, BarChart3,
-  Users, Sparkles, ArrowRight, Moon, Sun,
-  Gamepad2, Smartphone, Heart, Cpu,
+  Users, Sparkles, ArrowRight, Moon, Sun, Heart, ExternalLink,
   Check, Star, Crown, Building2, CreditCard
 } from 'lucide-react'
+
+const APPFORGE_URL = 'https://appforge-unfurling-moon-9058.fly.dev'
+const BRAND_URL = 'https://trillionaitech.com'
 
 const features = [
   { icon: Bot, title: '13 AI Agents', desc: 'Autonomous agents for strategy, content, video, SEO, legal, and more' },
@@ -21,14 +23,6 @@ const features = [
   { icon: Heart, title: 'Creator Economy', desc: 'Patreon, Ko-fi, Buy Me a Coffee, and OnlyFans' },
 ]
 
-const categories = [
-  { icon: Smartphone, title: 'Apps', desc: 'Mobile and desktop applications for productivity and entertainment', path: '/apps' },
-  { icon: Bot, title: 'Agents', desc: 'Autonomous AI agents for strategy, content, video, SEO, legal, and more', path: '/agents' },
-  { icon: Zap, title: 'Tools', desc: 'Utility tools and software to streamline your workflow', path: '/tools' },
-  { icon: Gamepad2, title: 'Games', desc: 'Interactive games and entertainment experiences', path: '/games' },
-  { icon: Cpu, title: 'Software', desc: 'Full-featured software solutions for business and personal use', path: '/software' },
-]
-
 const planIcons = { starter: Zap, growth: Star, agency: Crown, enterprise: Building2 }
 const dollars = (item) => item.amount / 100
 
@@ -37,14 +31,14 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
       <header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="text-blue-600" size={24} />
-            <span className="font-bold text-lg text-gray-900 dark:text-white">Trillion AI Tech</span>
+            <span className="font-bold text-lg text-gray-900 dark:text-white">TrillionAI Tech</span>
           </div>
           <div className="flex items-center gap-4">
+            <a href={BRAND_URL} target="_blank" rel="noreferrer" className="hidden sm:inline text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">trillionaitech.com</a>
             <LanguageSelector />
             <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
               {theme === 'dark' ? <Sun size={18} className="text-gray-400" /> : <Moon size={18} className="text-gray-400" />}
@@ -55,35 +49,78 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Hero */}
       <section className="py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-sm font-semibold uppercase tracking-wide text-blue-600 mb-4">TrillionAI Tech</p>
           <h1 className="text-4xl sm:text-6xl font-bold text-gray-900 dark:text-white tracking-tight">
-            The World's Most Advanced<br />
-            <span className="text-blue-600">Trillion AI Tech</span>
+            Two live products.<br />
+            <span className="text-blue-600">Build with AppForge. Grow with Marketing.</span>
           </h1>
           <p className="mt-6 text-lg sm:text-xl text-gray-500 dark:text-gray-400 max-w-3xl mx-auto">
-            Autonomous AI agents that market your apps, products, and services across every platform on Earth.
-            From TikTok to Steam, from the App Store to Amazon — fully automated.
+            AppForge generates real live apps, games, agents, tools, software, and websites.
+            TrillionAI Marketing is this app: autonomous marketing across social, ads, and SEO.
+            Create an account to subscribe and launch campaigns — we do not claim campaigns are already running.
           </p>
-          <div className="mt-10 flex items-center justify-center gap-4">
-            <Link to="/register" className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
-              Start Free <ArrowRight size={18} />
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+            <a href={APPFORGE_URL} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+              Open AppForge <ExternalLink size={18} />
+            </a>
+            <Link to="/register" className="flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              Start marketing <ArrowRight size={18} />
             </Link>
-            <Link to="/login" className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              Sign In
+            <Link to="/dashboard/billing" className="px-6 py-3 text-blue-600 font-medium hover:underline">
+              Plans &amp; billing
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Features */}
       <section className="py-20 bg-white dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">Everything You Need to Market Anything</h2>
+          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">The live TrillionAI Tech lineup</h2>
+          <p className="text-center text-gray-500 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
+            We only advertise products that exist today. There is no six-product catalog until AppForge generates apps, games, and agents that actually work.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            <div className="p-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex flex-col">
+              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4">
+                <Bot className="text-blue-600" size={24} />
+              </div>
+              <h3 className="font-semibold text-2xl text-gray-900 dark:text-white mb-2">AppForge</h3>
+              <p className="text-gray-500 dark:text-gray-400 flex-1">
+                Generate real, live apps, games, agents, tools, software, and websites. A product of TrillionAI Tech — see the brand at trillionaitech.com.
+              </p>
+              <a href={APPFORGE_URL} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+                Open AppForge <ExternalLink size={16} />
+              </a>
+            </div>
+            <div className="p-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex flex-col">
+              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4">
+                <Megaphone className="text-blue-600" size={24} />
+              </div>
+              <h3 className="font-semibold text-2xl text-gray-900 dark:text-white mb-2">TrillionAI Marketing</h3>
+              <p className="text-gray-500 dark:text-gray-400 flex-1">
+                This app. Autonomous marketing across social, ads, and SEO. Register, pick a plan, and launch campaigns from the dashboard when you are ready.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link to="/register" className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+                  Create account <ArrowRight size={16} />
+                </Link>
+                <Link to="/dashboard/billing" className="inline-flex items-center justify-center px-5 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-white dark:hover:bg-gray-800 transition-colors">
+                  Plans &amp; billing
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">What TrillionAI Marketing does</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {features.map((f, i) => (
-              <div key={i} className="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:shadow-md transition-shadow">
+              <div key={i} className="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
                 <f.icon className="text-blue-600 mb-4" size={28} />
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{f.title}</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{f.desc}</p>
@@ -93,40 +130,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Categories */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">Explore Our Universe</h2>
-          <p className="text-center text-gray-500 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
-            Discover apps, agents, tools, games, and software built for the future.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {categories.map((cat) => (
-              <Link
-                key={cat.title}
-                to={cat.path}
-                className="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-lg transition-shadow flex flex-col items-center text-center"
-              >
-                <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4">
-                  <cat.icon className="text-blue-600" size={24} />
-                </div>
-                <h3 className="font-semibold text-lg text-gray-900 dark:text-white mb-2">{cat.title}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{cat.desc}</p>
-                <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-600">
-                  Explore <ArrowRight size={16} />
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
       <section className="py-20 bg-white dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">Pricing</h2>
           <p className="text-center text-gray-500 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
-            Monthly plans and one-time credit packs. Checkout works even if the API is down.
+            Monthly plans and one-time credit packs for TrillionAI Marketing. Checkout works even if the API is down.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {CATALOG.plans.map((plan) => {
@@ -193,7 +201,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -201,11 +208,14 @@ export default function LandingPage() {
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
             <a href="mailto:hello@trillionaitech.com" className="hover:text-blue-600">hello@trillionaitech.com</a>
-            {' · '}
+            {' \u00b7 '}
             <a href="mailto:support@trillionaitech.com" className="hover:text-blue-600">support@trillionaitech.com</a>
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-            Autonomous growth engine for apps, products, and services.
+            <a href={BRAND_URL} target="_blank" rel="noreferrer" className="hover:text-blue-600">trillionaitech.com</a>
+            {' \u00b7 '}
+            <a href={APPFORGE_URL} target="_blank" rel="noreferrer" className="hover:text-blue-600">AppForge</a>
+            {' \u00b7 '}Autonomous marketing for social, ads, and SEO.
           </p>
         </div>
       </footer>
