@@ -2,8 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
+:root, html.dark {
+  --bg: #07080b;
+  --bg-elev: #0c0e14;
+  --bg-card: #0a0c11;
+  --gold: #c4a35a;
+  --gold-bright: #e8d5a3;
+  --gold-deep: #8d6e32;
+  --cyan: #6ec9d0;
+  --cyan-bright: #9ee7ec;
+  --text: #efeae0;
+  --text-muted: #9a9488;
+  --text-dim: #6e6a62;
+  --line: rgba(196, 163, 90, 0.22);
+  --line-strong: rgba(196, 163, 90, 0.45);
+  --font-serif: "Cormorant Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+  --font-sans: "Outfit", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+}
+
+html:not(.dark) {
+  --bg: #f3e6c8;
+  --bg-elev: #fbf3e1;
+  --bg-card: #fff8ea;
+  --gold: #c4a35a;
+  --gold-bright: #8d6e32;
+  --gold-deep: #8d6e32;
+  --cyan: #3e8e94;
+  --cyan-bright: #2f6f74;
+  --text: #241c10;
+  --text-muted: #6b5a3c;
+  --text-dim: #8a7550;
+  --line: rgba(141, 110, 50, 0.28);
+  --line-strong: rgba(141, 110, 50, 0.55);
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html[dir="rtl"] .studio-nav,
+html[dir="rtl"] .studio-header .wrap {
+  direction: rtl;
 }

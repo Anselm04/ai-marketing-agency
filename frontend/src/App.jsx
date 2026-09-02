@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { LanguageProvider } from './context/LanguageContext'
 import { ToastProvider } from './context/ToastContext'
 import { OrchestratorProvider } from './context/OrchestratorContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -94,13 +95,15 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <OrchestratorProvider>
-              <AppRoutes />
-            </OrchestratorProvider>
-          </AuthProvider>
-        </ToastProvider>
+        <LanguageProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <OrchestratorProvider>
+                <AppRoutes />
+              </OrchestratorProvider>
+            </AuthProvider>
+          </ToastProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </ErrorBoundary>
   )

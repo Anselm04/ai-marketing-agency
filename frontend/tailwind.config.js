@@ -8,18 +8,37 @@ export default {
   theme: {
     extend: {
       colors: {
+        gold: {
+          DEFAULT: '#c4a35a',
+          bright: '#e8d5a3',
+          deep: '#8d6e32',
+        },
+        cyan: {
+          DEFAULT: '#6ec9d0',
+          bright: '#9ee7ec',
+        },
+        studio: {
+          bg: '#07080b',
+          elev: '#0c0e14',
+          card: '#0a0c11',
+          text: '#efeae0',
+        },
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#f7f1e4',
+          100: '#ead9b3',
+          200: '#e8d5a3',
+          300: '#c4a35a',
+          400: '#c4a35a',
+          500: '#c4a35a',
+          600: '#8d6e32',
+          700: '#8d6e32',
+          800: '#3d3016',
+          900: '#07080b',
         }
+      },
+      fontFamily: {
+        serif: ['"Cormorant Garamond"', 'Georgia', 'serif'],
+        sans: ['Outfit', 'system-ui', 'sans-serif'],
       }
     },
   },
