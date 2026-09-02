@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CreditCard, Check, Zap, Crown, Building2, Star } from 'lucide-react'
 import api from '../services/api'
 import { CATALOG } from '../config/stripeCatalog'
+import { useLanguage } from '../context/LanguageContext'
 
 const dollars = (item) => item.price ?? (item.amount != null ? item.amount / 100 : 0)
 
@@ -10,6 +11,9 @@ export default function Billing() {
   const [credits, setCredits] = useState([])
   const [subscription, setSubscription] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [code, setCode] = useState('')
+  const [redeemMsg, setRedeemMsg] = useState('')
+  const { t } = useLanguage()
 
   useEffect(() => {
     api.get('/billing/plans')
@@ -53,12 +57,43 @@ export default function Billing() {
 
   const planIcons = { starter: Zap, growth: Star, agency: Crown, enterprise: Building2 }
 
+  const handleRedeem = async (e) => {
+    e.preventDefault()
+    setRedeemMsg('')
+    try {
+      const res = await api.post('/billing/redeem', { code })
+      setRedeemMsg(res.data?.name ? `Granted ${res.data.name}` : 'Redeemed')
+      setCode('')
+      const sub = await api.get('/billing/subscription')
+      setSubscription(sub.data)
+    } catch (err) {
+      setRedeemMsg(err.response?.data?.error || 'Unable to redeem that code.')
+    }
+  }
+
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Billing</h2>
-        <p className="text-gray-500 mt-1">Manage your subscription and billing</p>
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Billing</h2>
+        <p className="mt-1" style={{ color: 'var(--text-muted)' }}>Manage your subscription and billing</p>
       </div>
+
+      <form onSubmit={handleRedeem} className="p-5 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+        <h3 className="font-semibold" style={{ color: 'var(--gold-bright)' }}>{t('redeemTitle')}</h3>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('redeemHint')}</p>
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder={t('codePlaceholder')}
+            className="px-3 py-2 text-sm flex-1 min-w-[16rem]"
+            style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--gold)' }}
+          />
+          <button type="submit" className="px-4 py-2 text-sm tracking-widest uppercase" style={{ background: 'var(--gold)', color: '#140f08' }}>{t('redeem')}</button>
+        </div>
+        {redeemMsg && <p className="text-sm" style={{ color: 'var(--gold-bright)' }}>{redeemMsg}</p>}
+      </form>
 
       {subscription && subscription.status !== 'none' && (
         <div className="bg-white rounded-lg border border-gray-200 p-5">
