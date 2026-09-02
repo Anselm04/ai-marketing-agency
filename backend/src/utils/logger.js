@@ -18,4 +18,16 @@ const logger = winston.createLogger({
   ],
 });
 
+export function logAIRequest(provider, model, operation, durationMs, tokens, cost, status = 'ok', err = null) {
+  const payload = { provider, model, operation, durationMs, tokens, cost, status };
+  if (err) logger.error('ai_request', { ...payload, error: err?.message || String(err) });
+  else logger.info('ai_request', payload);
+}
+
+export function logConnectorRequest(connector, operation, durationMs, status = 'ok', err = null) {
+  const payload = { connector, operation, durationMs, status };
+  if (err) logger.error('connector_request', { ...payload, error: err?.message || String(err) });
+  else logger.info('connector_request', payload);
+}
+
 export { logger };
