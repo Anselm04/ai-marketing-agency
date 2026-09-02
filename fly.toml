@@ -36,6 +36,7 @@ primary_region = "syd"
   APP_URL = "https://trillionai-marketing.fly.dev"
   CORS_ORIGIN = "https://trillionai-marketing.fly.dev,https://trillionaitech.com"
   USE_MONGO = "false"
+  USE_REDIS_QUEUE = "false"
   FRONTEND_DIST = "/app/frontend/dist"
 
 [[vm]]
