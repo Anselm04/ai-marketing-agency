@@ -1,163 +1,178 @@
 import { useEffect, useState } from 'react'
-import { Shield, Users, Bot, Activity, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
 
+const SKU_LABELS = {
+  starter: 'Starter $149/mo',
+  growth: 'Growth $399/mo',
+  agency: 'Agency $999/mo',
+  enterprise: 'Enterprise $2499/mo',
+  credits_100: '100 credits $79',
+  credits_300: '300 credits $199',
+  credits_750: '750 credits $449',
+}
+
 export default function Admin() {
-  const [overview, setOverview] = useState(null)
-  const [users, setUsers] = useState([])
-  const [health, setHealth] = useState([])
-  const [review, setReview] = useState(null)
-  const [optimize, setOptimize] = useState(null)
+  const { isOwner, user } = useAuth()
+  const [tab, setTab] = useState('analytics')
+  const [analytics, setAnalytics] = useState(null)
+  const [codes, setCodes] = useState([])
+  const [sku, setSku] = useState('starter')
+  const [minted, setMinted] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (!isOwner) return
+    api.get('/admin/analytics').then(res => setAnalytics(res.data)).catch(() => setError('Access denied'))
+  }, [isOwner])
 
-  const fetchData = async () => {
-    const [ov, us, hl] = await Promise.all([
-      api.get('/admin/overview'),
-      api.get('/admin/users'),
-      api.get('/admin/meta-agents/health'),
-    ])
-    setOverview(ov.data)
-    setUsers(us.data)
-    setHealth(hl.data)
+  useEffect(() => {
+    if (!isOwner || tab !== 'codes') return
+    api.get('/admin/god-codes').then(res => setCodes(res.data)).catch(() => {})
+  }, [isOwner, tab, minted])
+
+  const mint = async () => {
+    setBusy(true)
+    setError('')
+    setMinted(null)
+    try {
+      const res = await api.post('/admin/god-codes', { sku })
+      setMinted(res.data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Mint failed')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const handleReview = async () => {
-    const res = await api.get('/admin/meta-agents/review')
-    setReview(res.data)
+  if (!isOwner) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Access denied</h2>
+        <p style={{ color: 'var(--text-muted)' }}>Owner only.</p>
+      </div>
+    )
   }
 
-  const handleOptimize = async () => {
-    const res = await api.get('/admin/meta-agents/optimize')
-    setOptimize(res.data)
-  }
-
-  const handleRetrain = async (agentId) => {
-    await api.post(`/admin/meta-agents/retrain/${agentId}`, { feedback: 'Improve accuracy and reduce response time' })
-    fetchData()
-  }
+  const counts = analytics?.counts || {}
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Admin</h2>
-        <p className="text-gray-500 mt-1">System administration and meta-agent oversight</p>
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Admin</h2>
+        <p style={{ color: 'var(--text-muted)' }}>Signed in as {user?.email}. God codes test every Marketing tier without paying. Shown once. One-use. Bound to the redeemer.</p>
       </div>
 
-      {overview && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-500">Users</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{overview.users}</div>
+      <div className="flex gap-2">
+        {['analytics', 'codes'].map((item) => (
+          <button key={item} type="button" onClick={() => setTab(item)}
+            className="px-4 py-2 text-sm tracking-widest uppercase"
+            style={tab === item
+              ? { background: 'var(--gold)', color: '#140f08' }
+              : { border: '1px solid var(--line)', color: 'var(--gold-bright)' }}>
+            {item}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'analytics' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              ['Users', counts.totalUsers],
+              ['Signups 7d', counts.recentSignups7d],
+              ['Active subs', counts.activeSubscriptions],
+              ['Unused codes', counts.unusedCodes],
+            ].map(([label, value]) => (
+              <div key={label} className="p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+                <div className="text-sm" style={{ color: 'var(--text-muted)' }}>{label}</div>
+                <div className="text-2xl font-bold" style={{ color: 'var(--gold-bright)' }}>{value ?? 0}</div>
+              </div>
+            ))}
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-500">Campaigns</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{overview.campaigns}</div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-500">Agents</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{overview.agents}</div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-500">Tasks</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{overview.tasks}</div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-500">Leads</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{overview.leads}</div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-500">Subscriptions</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{overview.subscriptions}</div>
+          <h3 className="font-semibold" style={{ color: 'var(--gold-bright)' }}>Recent users</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ color: 'var(--cyan)' }}>
+                  <th className="text-left p-2">Email</th>
+                  <th className="text-left p-2">Plan</th>
+                  <th className="text-left p-2">Status</th>
+                  <th className="text-left p-2">Credits</th>
+                  <th className="text-left p-2">Grant</th>
+                  <th className="text-left p-2">Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(analytics?.recentUsers || []).map((u) => (
+                  <tr key={u.id} style={{ borderTop: '1px solid var(--line)' }}>
+                    <td className="p-2">{u.email}</td>
+                    <td className="p-2">{u.plan}</td>
+                    <td className="p-2">{u.status}</td>
+                    <td className="p-2">{u.credits}</td>
+                    <td className="p-2">{u.godGrant || '—'}</td>
+                    <td className="p-2">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2"><Shield size={18} /> Overseer Review</h3>
-            <button onClick={handleReview} className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"><RefreshCw size={14} /> Run</button>
+      {tab === 'codes' && (
+        <div className="space-y-6">
+          <div className="p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+            <h3 className="font-semibold" style={{ color: 'var(--gold-bright)' }}>Mint a one-use god code</h3>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Pick the Marketing SKU to grant. The plaintext is shown once. It is hashed and encrypted on the server. Redeeming binds it to that user forever.</p>
+            <div className="flex flex-wrap gap-3 items-end">
+              <label className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                SKU
+                <select value={sku} onChange={(e) => setSku(e.target.value)} className="block mt-1 px-3 py-2"
+                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--gold)' }}>
+                  {Object.entries(SKU_LABELS).map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={mint} disabled={busy}
+                className="px-4 py-2 text-sm tracking-widest uppercase"
+                style={{ background: 'var(--gold)', color: '#140f08' }}>
+                {busy ? 'Minting…' : 'Mint code'}
+              </button>
+            </div>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            {minted?.code && (
+              <div className="p-4" style={{ border: '1px solid var(--gold)' }}>
+                <div className="text-xs tracking-widest uppercase" style={{ color: 'var(--cyan)' }}>Shown once — copy now</div>
+                <div className="text-2xl font-mono mt-2" style={{ color: 'var(--gold-bright)' }}>{minted.code}</div>
+                <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{SKU_LABELS[minted.sku] || minted.sku}</div>
+              </div>
+            )}
           </div>
-          {review && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm">
-                <AlertTriangle size={16} className="text-yellow-500" />
-                <span className="text-gray-700">Flagged Agents: {review.flaggedAgents?.length || 0}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <AlertTriangle size={16} className="text-yellow-500" />
-                <span className="text-gray-700">Flagged Tasks: {review.flaggedTasks?.length || 0}</span>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700 whitespace-pre-wrap">{review.review?.content || 'Review complete'}</div>
-            </div>
-          )}
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2"><Activity size={18} /> Agent Coordinator</h3>
-            <button onClick={handleOptimize} className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"><RefreshCw size={14} /> Optimize</button>
-          </div>
-          {optimize && (
-            <div className="space-y-3">
-              <div className="text-sm text-gray-700">Suggested task order: {optimize.suggestedOrder?.length || 0} tasks</div>
-              <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700 whitespace-pre-wrap">{optimize.optimization?.content || 'Optimization complete'}</div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><Bot size={18} /> Agent Health</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {health.map(agent => (
-            <div key={agent.agentId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <div className="text-sm font-medium text-gray-900">{agent.name}</div>
-                <div className="text-xs text-gray-500">{agent.agentId}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${agent.healthy ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                  {agent.healthy ? 'Healthy' : 'Issue'}
-                </span>
-                <button onClick={() => handleRetrain(agent.agentId)} className="p-1 hover:bg-gray-200 rounded" title="Retrain">
-                  <RefreshCw size={14} className="text-blue-600" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><Users size={18} /> Users</h3>
-        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-700">Email</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-700">Role</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-700">Company</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-700">Last Login</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-700">Created</th>
+            <thead>
+              <tr style={{ color: 'var(--cyan)' }}>
+                <th className="text-left p-2">SKU</th>
+                <th className="text-left p-2">Status</th>
+                <th className="text-left p-2">Created</th>
+                <th className="text-left p-2">Redeemed</th>
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
-                <tr key={u._id} className="border-b border-gray-100 last:border-0">
-                  <td className="px-4 py-3 text-gray-900">{u.email}</td>
-                  <td className="px-4 py-3"><span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700 capitalize">{u.role}</span></td>
-                  <td className="px-4 py-3 text-gray-600">{u.profile?.company || '-'}</td>
-                  <td className="px-4 py-3 text-gray-600">{u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : '-'}</td>
-                  <td className="px-4 py-3 text-gray-600">{new Date(u.createdAt).toLocaleDateString()}</td>
+              {codes.map((c) => (
+                <tr key={c.id} style={{ borderTop: '1px solid var(--line)' }}>
+                  <td className="p-2">{SKU_LABELS[c.sku] || c.sku}</td>
+                  <td className="p-2">{c.status}</td>
+                  <td className="p-2">{c.createdAt ? new Date(c.createdAt).toLocaleString() : '—'}</td>
+                  <td className="p-2">{c.redeemedAt ? new Date(c.redeemedAt).toLocaleString() : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </div>
   )
 }
