@@ -1,13 +1,19 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
+import LanguageSelector from '../components/LanguageSelector';
+import { Mail, Lock, ArrowRight, Moon, Sun } from 'lucide-react';
+import './landing.css';
 
 export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -25,25 +31,39 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Trillion AI Tech</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to your account</p>
+    <div className="studio min-h-screen flex flex-col">
+      <header className="studio-header">
+        <div className="wrap">
+          <Link className="studio-brand" to="/">
+            <img src="/appforge-logo.png" width="36" height="36" alt="" />
+            <span className="studio-brand-name">
+              <strong>TrillionAI</strong>
+              <span>Tech</span>
+            </span>
+          </Link>
+          <nav className="studio-nav">
+            <LanguageSelector />
+            <button type="button" onClick={toggleTheme} className="studio-nav-cta" style={{ background: 'transparent', cursor: 'pointer' }}>
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+              {theme === 'dark' ? t('day') : t('night')}
+            </button>
+          </nav>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">{error}</div>
-          )}
-          <form onSubmit={handleSubmit} className="space-y-4">
+      </header>
+      <div className="flex-1 flex items-center justify-center px-4 py-16">
+        <div className="w-full max-w-md studio-card">
+          <h1 style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--gold-bright)', fontSize: '2rem', margin: 0 }}>{t('signIn')}</h1>
+          {error && <div className="mt-4 p-3 text-sm text-red-400">{error}</div>}
+          <form onSubmit={handleSubmit} className="space-y-4 mt-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                <Mail className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
                 <input
                   type="email"
                   required
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-3 py-2 text-sm"
+                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }}
                   placeholder="you@company.com"
                   value={form.email}
                   onChange={e => setForm({ ...form, email: e.target.value })}
@@ -51,31 +71,27 @@ export default function Login() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                <Lock className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
                 <input
                   type="password"
                   required
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-3 py-2 text-sm"
+                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }}
                   placeholder="••••••••"
                   value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
                 />
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
+            <button type="submit" disabled={loading} className="studio-btn studio-btn-gold w-full">
+              {loading ? '…' : t('signIn')}
               <ArrowRight size={16} />
             </button>
           </form>
-          <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-blue-600 font-medium hover:underline">Create one</Link>
+          <div className="mt-6 text-sm" style={{ color: 'var(--text-muted)' }}>
+            <Link to="/register" style={{ color: 'var(--gold)' }}>{t('createAccount')}</Link>
           </div>
         </div>
       </div>

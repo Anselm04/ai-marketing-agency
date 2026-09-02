@@ -1,13 +1,19 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, User, ArrowRight } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
+import LanguageSelector from '../components/LanguageSelector';
+import { Mail, Lock, User, ArrowRight, Moon, Sun } from 'lucide-react';
+import './landing.css';
 
 export default function Register() {
   const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -25,85 +31,63 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Trillion AI Tech</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Create your account</p>
+    <div className="studio min-h-screen flex flex-col">
+      <header className="studio-header">
+        <div className="wrap">
+          <Link className="studio-brand" to="/">
+            <img src="/appforge-logo.png" width="36" height="36" alt="" />
+            <span className="studio-brand-name">
+              <strong>TrillionAI</strong>
+              <span>Tech</span>
+            </span>
+          </Link>
+          <nav className="studio-nav">
+            <LanguageSelector />
+            <button type="button" onClick={toggleTheme} className="studio-nav-cta" style={{ background: 'transparent', cursor: 'pointer' }}>
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+              {theme === 'dark' ? t('day') : t('night')}
+            </button>
+            <Link to="/login">{t('signIn')}</Link>
+          </nav>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">{error}</div>
-          )}
-          <form onSubmit={handleSubmit} className="space-y-4">
+      </header>
+      <div className="flex-1 flex items-center justify-center px-4 py-16">
+        <div className="w-full max-w-md studio-card">
+          <h1 style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--gold-bright)', fontSize: '2rem', margin: 0 }}>{t('createAccount')}</h1>
+          {error && <div className="mt-4 p-3 text-sm text-red-400">{error}</div>}
+          <form onSubmit={handleSubmit} className="space-y-4 mt-6">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First name</label>
+                <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>First name</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="John"
-                    value={form.firstName}
-                    onChange={e => setForm({ ...form, firstName: e.target.value })}
-                  />
+                  <User className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
+                  <input type="text" className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="Anselm" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last name</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Doe"
-                  value={form.lastName}
-                  onChange={e => setForm({ ...form, lastName: e.target.value })}
-                />
+                <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Last name</label>
+                <input type="text" className="w-full px-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="Perkins" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                <input
-                  type="email"
-                  required
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="you@company.com"
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                />
+                <Mail className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
+                <input type="email" required className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="you@company.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="••••••••"
-                  value={form.password}
-                  onChange={e => setForm({ ...form, password: e.target.value })}
-                />
+                <Lock className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
+                <input type="password" required className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="••••••••" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
               </div>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Must be at least 6 characters</p>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Creating account...' : 'Create account'}
+            <button type="submit" disabled={loading} className="studio-btn studio-btn-gold w-full">
+              {loading ? '…' : t('createAccount')}
               <ArrowRight size={16} />
             </button>
           </form>
-          <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            Already have an account?{' '}
-            <Link to="/login" className="text-blue-600 font-medium hover:underline">Sign in</Link>
-          </div>
         </div>
       </div>
     </div>
