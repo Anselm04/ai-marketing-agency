@@ -29,7 +29,7 @@ jobs:
       - name: Backend lint
         run: npm run lint --workspace=backend
       - name: Backend tests
-        run: npm test --workspace=backend -- --passWithNoTests
+        run: timeout 8m npm test --workspace=backend -- --runInBand --detectOpenHandles --passWithNoTests
       - name: Frontend tests
         run: npm test --workspace=frontend
       - name: Frontend build
