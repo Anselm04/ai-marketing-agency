@@ -47,15 +47,13 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { sanitizeBody } from './middleware/sanitize.js';
 
-// Never allow the current local JSON persistence layer to masquerade as a
-// production database. Fly/Vercel filesystems are not the durable source of
-// truth for customer, campaign, lead, billing, or authentication records.
-// This guard stays until the active route store is migrated to Supabase/Postgres.
-if (process.env.NODE_ENV === 'production' && store.isMongo?.() === false) {
+if (process.env.NODE_ENV === 'production' && store.isPostgres?.() !== true) {
   throw new Error(
-    'Production startup blocked: Marketing Agency still uses local JSON persistence. Migrate the active store to Supabase/PostgreSQL before production deployment.',
+    'Production startup blocked: Marketing Agency must use Supabase/PostgreSQL persistence.',
   );
 }
+
+await store.connectDB();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = process.env.FRONTEND_DIST || path.resolve(__dirname, '../../frontend/dist');
@@ -66,7 +64,7 @@ const PORT = process.env.PORT || 3001;
 
 const defaultOrigins = 'http://localhost:3000,http://localhost:5173,http://localhost:8080';
 const originSource = process.env.CORS_ORIGIN || [process.env.APP_URL, defaultOrigins].filter(Boolean).join(',');
-const whitelist = originSource.split(',').map(s => s.trim()).filter(Boolean);
+const whitelist = originSource.split(',').map((s) => s.trim()).filter(Boolean);
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || whitelist.includes(origin)) {
@@ -80,10 +78,12 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan('combined'));
@@ -92,12 +92,24 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeBody);
 app.use(rateLimit);
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (_req, res) => {
+  try {
+    await store.connectDB();
+    res.json({ status: 'ok', database: store.isPostgres?.() ? 'postgres' : 'local', timestamp: new Date().toISOString() });
+  } catch (error) {
+    logger.error('Health check failed', { error: error?.message });
+    res.status(503).json({ status: 'degraded', database: 'unavailable', timestamp: new Date().toISOString() });
+  }
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (_req, res) => {
+  try {
+    await store.connectDB();
+    res.json({ status: 'ok', database: store.isPostgres?.() ? 'postgres' : 'local', timestamp: new Date().toISOString() });
+  } catch (error) {
+    logger.error('API health check failed', { error: error?.message });
+    res.status(503).json({ status: 'degraded', database: 'unavailable', timestamp: new Date().toISOString() });
+  }
 });
 
 app.get('/metrics', metricsRouteHandler);
@@ -152,7 +164,19 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server running on port ${PORT}`, {
     environment: process.env.NODE_ENV,
     frontendDist: fs.existsSync(frontendDist) ? frontendDist : 'none',
+    persistence: store.isPostgres?.() ? 'supabase-postgres' : 'local-json',
   });
 });
+
+const shutdown = async () => {
+  try {
+    await store.disconnectDB();
+  } finally {
+    httpServer.close(() => process.exit(0));
+  }
+};
+
+process.once('SIGTERM', shutdown);
+process.once('SIGINT', shutdown);
 
 export default app;
