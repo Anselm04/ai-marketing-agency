@@ -17,18 +17,26 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path('backend/src/services/intelligentOrchestrator.js')
           text = path.read_text()
-          old = """    // Score each model for this specific task\n    const scoredModels = availableModels.map((model) => {\n"""
-          new = """    // Score each model for this specific task\n    const contentLength = content.length;\n    const estimatedTokens = Math.ceil(contentLength / 4);\n    const scoredModels = availableModels.map((model) => {\n"""
+
+          pattern = r"(\s*// Score each model for this specific task\s*)const scoredModels = availableModels\.map\(\(model\) => \{"
+          replacement = r"\1const contentLength = content.length;\n    const estimatedTokens = Math.ceil(contentLength / 4);\n    const scoredModels = availableModels.map((model) => {"
+          text, count = re.subn(pattern, replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one model-scoring block, found {count}')
+
+          inner = r"(\s*// Context window fit \(for long content\)\s*)const contentLength = content\.length;\s*const estimatedTokens = Math\.ceil\(contentLength / 4\);"
+          text, count = re.subn(inner, r"\1", text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one inner content-length block, found {count}')
+
+          old = 'estimatedTokens: Math.ceil(content.length / 4),'
           if old not in text:
-              raise SystemExit('Expected model-scoring block not found')
-          text = text.replace(old, new, 1)
-          old_inner = """      // Context window fit (for long content)\n      const contentLength = content.length;\n      const estimatedTokens = Math.ceil(contentLength / 4);\n"""
-          if old_inner not in text:
-              raise SystemExit('Expected inner content-length block not found')
-          text = text.replace(old_inner, "      // Context window fit (for long content)\n", 1)
-          text = text.replace("estimatedTokens: Math.ceil(content.length / 4),", "estimatedTokens,", 1)
+              raise SystemExit('Expected return estimatedTokens expression not found')
+          text = text.replace(old, 'estimatedTokens,', 1)
           path.write_text(text)
           PY
       - name: Commit fix
