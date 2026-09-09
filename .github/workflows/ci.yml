@@ -19,6 +19,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Block cross-project lane contamination
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RniE --exclude-dir=node_modules --exclude-dir=.git --exclude='package-lock.json' \
+            '(ride[-_ ]?global|rideglobal|\bBMX\b|ghost recording|track editor|anti-cheat)' \
+            backend frontend; then
+            echo 'Cross-project Ride Global/game contamination detected in Marketing Agency source.' >&2
+            exit 1
+          fi
+          if grep -RniE --exclude-dir=node_modules --exclude-dir=.git \
+            '(MONGODB_URI|MONGODB_DB_NAME|USE_MONGO|MongoClient|ObjectId)' backend/src; then
+            echo 'Obsolete MongoDB persistence detected in Marketing Agency runtime source.' >&2
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
