@@ -183,6 +183,8 @@ export class IntelligentOrchestrator {
     }
 
     // Score each model for this specific task
+    const contentLength = content.length;
+    const estimatedTokens = Math.ceil(contentLength / 4);
     const scoredModels = availableModels.map((model) => {
       let score = 0;
 
@@ -218,8 +220,6 @@ export class IntelligentOrchestrator {
       }
 
       // Context window fit (for long content)
-      const contentLength = content.length;
-      const estimatedTokens = Math.ceil(contentLength / 4);
       if (model.context && estimatedTokens > model.context * 0.8) {
         score -= 0.3; // Penalize if content is too long for context window
       }
@@ -257,7 +257,7 @@ export class IntelligentOrchestrator {
         taskType,
         classification,
         contentLength,
-        estimatedTokens: Math.ceil(content.length / 4),
+        estimatedTokens,
       },
     };
   }
