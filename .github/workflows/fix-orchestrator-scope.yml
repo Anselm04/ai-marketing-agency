@@ -25,10 +25,9 @@ jobs:
               raise SystemExit('Expected model-scoring block not found')
           text = text.replace(old, new, 1)
           old_inner = """      // Context window fit (for long content)\n      const contentLength = content.length;\n      const estimatedTokens = Math.ceil(contentLength / 4);\n"""
-          new_inner = """      // Context window fit (for long content)\n"""
           if old_inner not in text:
               raise SystemExit('Expected inner content-length block not found')
-          text = text.replace(old_inner, new_inner, 1)
+          text = text.replace(old_inner, "      // Context window fit (for long content)\n", 1)
           text = text.replace("estimatedTokens: Math.ceil(content.length / 4),", "estimatedTokens,", 1)
           path.write_text(text)
           PY
