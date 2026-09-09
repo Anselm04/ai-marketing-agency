@@ -1,0 +1,43 @@
+name: Refresh lock for PostgreSQL
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/package.json'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Refresh root workspace lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify persistence dependency tree
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm ls pg --workspace=backend
+          if npm ls mongodb --all --omit=dev 2>/dev/null | grep -q 'mongodb@'; then
+            echo 'mongodb reappeared in the production dependency tree' >&2
+            exit 1
+          fi
+      - name: Commit refreshed lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo 'No lockfile changes required'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'chore: refresh lockfile for PostgreSQL persistence'
+          git push
