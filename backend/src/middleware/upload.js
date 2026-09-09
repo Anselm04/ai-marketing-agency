@@ -24,5 +24,15 @@ const fileFilter = (req, file, cb) => {
   else cb(new Error(`File type not allowed: ${file.mimetype}`), false);
 };
 
-export const upload = multer({ storage, fileFilter, limits: { fileSize: 50 * 1024 * 1024 } });
-export const uploadMemory = multer({ storage: multer.memoryStorage(), fileFilter, limits: { fileSize: 50 * 1024 * 1024 } });
+const limits = {
+  fileSize: 50 * 1024 * 1024,
+  files: 10,
+  fields: 20,
+  parts: 30,
+  fieldSize: 1024 * 1024,
+  fieldNestingDepth: 3,
+  fieldArrayIndexLimit: 100,
+};
+
+export const upload = multer({ storage, fileFilter, limits });
+export const uploadMemory = multer({ storage: multer.memoryStorage(), fileFilter, limits });
