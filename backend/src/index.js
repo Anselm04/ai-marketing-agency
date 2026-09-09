@@ -47,6 +47,16 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { sanitizeBody } from './middleware/sanitize.js';
 
+// Never allow the current local JSON persistence layer to masquerade as a
+// production database. Fly/Vercel filesystems are not the durable source of
+// truth for customer, campaign, lead, billing, or authentication records.
+// This guard stays until the active route store is migrated to Supabase/Postgres.
+if (process.env.NODE_ENV === 'production' && store.isMongo?.() === false) {
+  throw new Error(
+    'Production startup blocked: Marketing Agency still uses local JSON persistence. Migrate the active store to Supabase/PostgreSQL before production deployment.',
+  );
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = process.env.FRONTEND_DIST || path.resolve(__dirname, '../../frontend/dist');
 
