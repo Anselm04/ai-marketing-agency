@@ -22,9 +22,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Sync latest main
+        run: git pull --rebase origin main
       - name: Generate workspace lockfile
         run: npm install --package-lock-only --ignore-scripts
       - name: Commit lockfile when changed
@@ -37,4 +41,5 @@ jobs:
             exit 0
           fi
           git commit -m 'chore(deps): refresh marketing lockfile'
+          git pull --rebase origin main
           git push
