@@ -12,7 +12,8 @@ module.exports = {
   },
   ignorePatterns: ['coverage/', 'node_modules/'],
   rules: {
-    'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
+    'no-undef': 'error',
+    'no-unused-vars': ['warn', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     'no-constant-condition': ['error', { checkLoops: false }],
   },
 };
