@@ -40,6 +40,7 @@ import uploadsRoutes from './routes/uploads.js';
 import searchRoutes from './routes/search.js';
 import realtimeRoutes from './routes/realtime.js';
 import affiliateRoutes from './routes/affiliate.js';
+import appforgeIntegrationRoutes from './routes/appforgeIntegration.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
 import { authenticate } from './middleware/auth.js';
@@ -75,7 +76,14 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-Trillion-Source',
+    'X-Trillion-Timestamp',
+    'X-Trillion-Signature',
+  ],
 };
 
 app.use(
@@ -116,6 +124,7 @@ app.get('/metrics', metricsRouteHandler);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/billing', billingPublicRoutes);
+app.use('/api/integrations/appforge', appforgeIntegrationRoutes);
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return authenticate(req, res, next);
   return next();
