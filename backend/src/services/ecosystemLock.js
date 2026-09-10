@@ -16,18 +16,19 @@ const localLocks = new Map();
 
 async function withLocalLock(key, task) {
   const previous = localLocks.get(key) || Promise.resolve();
-  let release;
+  let release = () => {};
   const current = new Promise((resolve) => {
     release = resolve;
   });
-  localLocks.set(key, previous.then(() => current));
+  const queued = previous.then(() => current);
+  localLocks.set(key, queued);
 
   await previous;
   try {
     return await task();
   } finally {
     release();
-    if (localLocks.get(key) === current) localLocks.delete(key);
+    if (localLocks.get(key) === queued) localLocks.delete(key);
   }
 }
 
