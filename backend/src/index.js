@@ -114,6 +114,9 @@ app.use('/api', (req, res, next) => {
 });
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/integrations/appforge')) return next();
+  // OAuth provider redirects have no Bearer token
+  if (/^\/api\/connectors\/[^/]+\/callback$/.test(req.path)) return next();
+  if (/^\/api\/social\/oauth\/[^/]+\/callback$/.test(req.path)) return next();
   if (req.path.startsWith('/api')) return authenticate(req, res, next);
   return next();
 });
