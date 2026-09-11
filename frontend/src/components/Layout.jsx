@@ -6,30 +6,17 @@ import SearchBar from './SearchBar'
 import LanguageSelector from './LanguageSelector'
 import { NotificationBell } from './RealtimeNotifications'
 import {
-  LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
-  FileText, Video, Users, TrendingUp, Settings,
-  Lock, LogOut, ChevronDown, Globe, Sun, Moon, Menu, X, ShoppingCart,
-  Cpu, Plug
+  LayoutDashboard, Megaphone, Settings,
+  Lock, LogOut, ChevronDown, Sun, Moon, Menu, X, CreditCard
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 const navItems = [
-  { path: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard', label: 'Dashboard' },
-  { path: '/dashboard/agents', icon: Bot, label: 'Agents' },
-  { path: '/dashboard/campaigns', icon: Megaphone, label: 'Campaigns' },
-  { path: '/dashboard/products', icon: ShoppingCart, label: 'Product Marketing' },
-  { path: '/dashboard/social', icon: Share2, label: 'Social' },
-  { path: '/dashboard/content', icon: FileText, label: 'Content Studio' },
-  { path: '/dashboard/video', icon: Video, label: 'Video Studio' },
-  { path: '/dashboard/translation', icon: Globe, label: 'Translation' },
-  { path: '/dashboard/crm', icon: Users, label: 'CRM' },
-  { path: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
-  { path: '/dashboard/trends', icon: TrendingUp, label: 'Trends' },
-  { path: '/dashboard/legal', icon: Shield, label: 'Legal' },
-  { path: '/dashboard/ai-models', icon: Cpu, label: 'AI Models' },
-  { path: '/dashboard/connectors', icon: Plug, label: 'Connectors' },
+  { path: '/dashboard', icon: LayoutDashboard, label: 'Start campaign' },
+  { path: '/dashboard/campaigns', icon: Megaphone, label: "It's running" },
+  { path: '/dashboard/advanced', icon: Settings, label: 'Advanced' },
+  { path: '/dashboard/billing', icon: CreditCard, label: 'Billing' },
   { path: '/dashboard/settings', icon: Settings, label: 'Settings' },
-  { path: '/dashboard/team', icon: Users, label: 'Team' },
   { path: '/dashboard/admin', icon: Lock, labelKey: 'admin', label: 'Admin', ownerOnly: true },
 ]
 
@@ -57,7 +44,7 @@ export default function Layout() {
         style={{ background: 'var(--bg-elev)', borderBottom: '1px solid var(--line)' }}>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 rounded-lg"
+          className="p-3 rounded-lg min-h-[48px] min-w-[48px] inline-flex items-center justify-center"
           aria-label="Toggle menu"
         >
           {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -76,10 +63,10 @@ export default function Layout() {
         style={{ background: 'var(--bg-elev)', borderRight: '1px solid var(--line)' }}
       >
         <div className="p-6 flex items-center gap-3" style={{ borderBottom: '1px solid var(--line)' }}>
-          <img src="/appforge-logo.png" alt="" width="32" height="32" />
+          <img src="/marketing-logo.svg" alt="TrillionAI Marketing" width="32" height="32" />
           <div>
-            <h1 className="text-xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>TrillionAI Tech</h1>
-            <p className="text-xs mt-1 tracking-widest uppercase" style={{ color: 'var(--cyan)' }}>Marketing</p>
+            <h1 className="text-xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>TrillionAI Marketing</h1>
+            <p className="text-xs mt-1 tracking-widest uppercase" style={{ color: 'var(--cyan)' }}>Campaigns · Organic · Ads</p>
           </div>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -89,7 +76,7 @@ export default function Layout() {
               <Link
                 key={path}
                 to={path}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors min-h-[48px]"
                 style={active
                   ? { background: 'rgba(196,163,90,0.15)', color: 'var(--gold-bright)' }
                   : { color: 'var(--text-muted)' }}
@@ -105,7 +92,7 @@ export default function Layout() {
           <div className="flex items-center justify-between mb-3 gap-2">
             <button
               onClick={toggleTheme}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
+              className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm min-h-[48px]"
               style={{ color: 'var(--text-muted)' }}
               aria-label={theme === 'dark' ? t('day') : t('night')}
             >
@@ -117,7 +104,7 @@ export default function Layout() {
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg min-h-[48px]"
               aria-label="User menu"
             >
               <div className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm"
@@ -136,7 +123,7 @@ export default function Layout() {
                 style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500"
+                  className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-500 min-h-[48px]"
                 >
                   <LogOut size={16} />
                   {t('signOut')}
