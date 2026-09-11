@@ -1,311 +1,142 @@
 import { useEffect, useState } from 'react'
-import { Share2, CheckCircle, XCircle, Send, Globe, Gamepad2, Briefcase, MessageCircle, ShoppingCart, Smartphone, Star, FileText, Megaphone, Headphones, Heart, ChevronDown, ChevronUp, Zap, Monitor, Youtube, Twitch, Music, Radio } from 'lucide-react'
+import { Share2, Send } from 'lucide-react'
 import api from '../services/api'
+import { ORGANIC_NETWORKS, ORGANIC_LABELS } from '../config/organic'
 
-const platformIcons = {
-  TikTok: Music,
-  Instagram: Share2,
-  Facebook: Globe,
-  'Twitter/X': Zap,
-  LinkedIn: Briefcase,
-  Pinterest: Star,
-  Snapchat: MessageCircle,
-  Reddit: Globe,
-  Threads: FileText,
-  Bluesky: Globe,
-  Mastodon: Globe,
-  YouTube: Youtube,
-  Twitch: Monitor,
-  Vimeo: Monitor,
-  Rumble: Monitor,
-  Steam: Gamepad2,
-  Discord: MessageCircle,
-  Roblox: Gamepad2,
-  'Epic Games': Gamepad2,
-  'itch.io': Gamepad2,
-  'Game Jolt': Gamepad2,
-  'Nintendo eShop': Gamepad2,
-  'PlayStation Store': Gamepad2,
-  'Xbox Store': Gamepad2,
-  'Product Hunt': Star,
-  'Hacker News': Globe,
-  Crunchbase: Briefcase,
-  G2: Star,
-  Capterra: Star,
-  Clutch: Briefcase,
-  WhatsApp: MessageCircle,
-  Telegram: MessageCircle,
-  Slack: Briefcase,
-  Messenger: MessageCircle,
-  WeChat: MessageCircle,
-  LINE: MessageCircle,
-  Amazon: ShoppingCart,
-  eBay: ShoppingCart,
-  Etsy: ShoppingCart,
-  Shopify: ShoppingCart,
-  Gumroad: ShoppingCart,
-  AppSumo: ShoppingCart,
-  Alibaba: ShoppingCart,
-  Rakuten: ShoppingCart,
-  'App Store': Smartphone,
-  'Google Play': Smartphone,
-  'Galaxy Store': Smartphone,
-  'Huawei AppGallery': Smartphone,
-  'Amazon Appstore': Smartphone,
-  Trustpilot: Star,
-  Yelp: Star,
-  'Google Business': Briefcase,
-  TripAdvisor: Star,
-  BBB: Briefcase,
-  Medium: FileText,
-  Substack: FileText,
-  Quora: Globe,
-  'Dev.to': FileText,
-  Hashnode: FileText,
-  'Indie Hackers': Globe,
-  'Stack Overflow': Globe,
-  Spotify: Music,
-  'Apple Podcasts': Headphones,
-  SoundCloud: Music,
-  Clubhouse: Radio,
-  Patreon: Heart,
-  'Ko-fi': Heart,
-  'Buy Me a Coffee': Heart,
-  OnlyFans: Heart,
-  'Google Ads': Megaphone,
-  'Meta Ads': Megaphone,
-  'TikTok Ads': Megaphone,
-  'LinkedIn Ads': Megaphone,
-  'Twitter Ads': Megaphone,
-  'Pinterest Ads': Megaphone,
-  'Snapchat Ads': Megaphone,
-  'Reddit Ads': Megaphone,
-  'Amazon Ads': Megaphone,
-  'Microsoft Ads': Megaphone,
-  Taboola: Megaphone,
-  Outbrain: Megaphone,
-};
-
-const categoryColors = {
-  Social: 'bg-pink-50 text-pink-700 border-pink-200',
-  Video: 'bg-red-50 text-red-700 border-red-200',
-  Gaming: 'bg-purple-50 text-purple-700 border-purple-200',
-  Professional: 'bg-blue-50 text-blue-700 border-blue-200',
-  Messaging: 'bg-green-50 text-green-700 border-green-200',
-  'E-commerce': 'bg-orange-50 text-orange-700 border-orange-200',
-  'App Store': 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  Reviews: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  Content: 'bg-teal-50 text-teal-700 border-teal-200',
-  Ads: 'bg-rose-50 text-rose-700 border-rose-200',
-  Audio: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-  Creator: 'bg-amber-50 text-amber-700 border-amber-200',
-};
+const inputCls = 'w-full px-3 py-2 rounded-lg text-sm bg-[#0a0c11] border border-[#c4a35a]/40 text-[#efeae0] focus:outline-none focus:ring-1 focus:ring-[#c4a35a]'
 
 export default function Social() {
   const [platforms, setPlatforms] = useState([])
-  const [form, setForm] = useState({
-    caption: '',
-    hashtags: '',
-    videoUrl: '',
-    imageUrl: '',
-    selectedPlatforms: {},
-  })
-  const [results, setResults] = useState(null)
+  const [posts, setPosts] = useState([])
+  const [types, setTypes] = useState([])
+  const [brief, setBrief] = useState({ product: '', audience: '', description: '', contentType: '' })
   const [loading, setLoading] = useState(false)
-  const [expandedCategories, setExpandedCategories] = useState({
-    Social: true,
-    Video: true,
-    Gaming: true,
-    Ads: true,
-  })
+  const [msg, setMsg] = useState('')
+  const [copied, setCopied] = useState('')
 
-  useEffect(() => {
-    api.get('/social/status').then(res => setPlatforms(res.data))
-  }, [])
-
-  const groupedPlatforms = platforms.reduce((acc, p) => {
-    if (!acc[p.category]) acc[p.category] = []
-    acc[p.category].push(p)
-    return acc
-  }, {})
-
-  const togglePlatform = (platform) => {
-    setForm(prev => ({
-      ...prev,
-      selectedPlatforms: {
-        ...prev.selectedPlatforms,
-        [platform]: !prev.selectedPlatforms[platform]
-      }
-    }))
+  const refresh = async () => {
+    const [st, po, ty] = await Promise.all([
+      api.get('/social/status'),
+      api.get('/social/posts'),
+      api.get('/content/types').catch(() => ({ data: { platforms: [] } })),
+    ])
+    setPlatforms(st.data || [])
+    setPosts(po.data || [])
+    setTypes(ty.data?.platforms || [])
   }
 
-  const toggleCategory = (category) => {
-    setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }))
+  useEffect(() => { refresh().catch(() => {}) }, [])
+
+  const organic = platforms.filter((p) => p.organic)
+  const shown = organic.length ? organic : ORGANIC_NETWORKS.map((n) => ({ platform: n.id, name: n.name, organic: true, setup: false, connected: false }))
+
+  const connect = async (plat) => {
+    await api.post('/social/connect', { platform: plat })
+    await refresh()
+    setMsg(`${plat} set up. Organic is included. Add a token later to publish.`)
   }
 
-  const handlePublish = async (e) => {
+  const generate = async (e) => {
     e.preventDefault()
+    if (!brief.product.trim() && !brief.description.trim()) {
+      setMsg('Describe the product and audience first.')
+      return
+    }
     setLoading(true)
+    setMsg('')
     try {
-      const payload = {
-        caption: form.caption,
-        hashtags: form.hashtags.split(',').map(h => h.trim()).filter(Boolean),
-        videoUrl: form.videoUrl,
-        imageUrl: form.imageUrl,
-      }
-      Object.keys(form.selectedPlatforms).forEach(key => {
-        if (form.selectedPlatforms[key]) payload[key] = true
-      })
-      const res = await api.post('/social/publish', payload)
-      setResults(res.data.results)
+      const res = await api.post('/social/generate', brief)
+      setPosts(res.data.posts || [])
+      const keyNote = res.data.missingKey ? ` Templates used — missing ${res.data.missingKey}.` : ''
+      setMsg((res.data.disclaimer || `Generated ${res.data.uniqueBodies} unique native posts. Not published.`) + keyNote)
+      await refresh()
     } catch (err) {
-      console.error(err)
+      setMsg(err.response?.data?.error || 'Could not generate')
     } finally {
       setLoading(false)
     }
   }
 
-  const selectedCount = Object.values(form.selectedPlatforms).filter(Boolean).length
+  const copyText = async (text, id) => {
+    await navigator.clipboard.writeText(text)
+    setCopied(id)
+    setTimeout(() => setCopied(''), 1200)
+  }
+
+  const queue = async (id) => {
+    await api.post('/social/queue', { id })
+    await refresh()
+  }
+
+  const publishOne = async (id) => {
+    const res = await api.post(`/social/posts/${id}/publish`)
+    setMsg(res.data?.message || (res.data?.published ? 'Published' : 'Queued — no token yet'))
+    await refresh()
+  }
+
+  const typeOptions = types.flatMap((p) => (p.types || []).map((t) => ({ ...t, platform: p.id, platformName: p.name })))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-organic-network="20-platforms">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Social Media & Platforms</h2>
-        <p className="text-gray-500 mt-1">Publish across all platforms — social, gaming, e-commerce, app stores, reviews, and more</p>
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Organic social (included)</h2>
+        <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+          20 networks on your plan: {ORGANIC_LABELS}.
+          Connect, pick a pre-made content type, then one-click generate / queue / publish.
+          Platform-specific posts — never an identical blast. Paid Meta/Google ads are an add-on with a spend cap.
+        </p>
       </div>
 
-      {Object.entries(groupedPlatforms).map(([category, items]) => {
-        const isExpanded = expandedCategories[category] !== false
-        const Icon = platformIcons[items[0]?.name] || Globe
-        return (
-          <div key={category} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <button
-              onClick={() => toggleCategory(category)}
-              className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-1 rounded-full font-medium border ${categoryColors[category] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>
-                  {category}
-                </span>
-                <span className="text-sm text-gray-500">{items.length} platforms</span>
-              </div>
-              {isExpanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
-            </button>
-            {isExpanded && (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 p-4 pt-0">
-                {items.map(p => {
-                  const PlatformIcon = platformIcons[p.name] || Globe
-                  const isSelected = form.selectedPlatforms[p.platform]
-                  return (
-                    <button
-                      key={p.platform}
-                      onClick={() => togglePlatform(p.platform)}
-                      className={`flex items-center gap-2 p-3 rounded-lg border transition-all text-left ${
-                        isSelected
-                          ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
-                          : 'border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <PlatformIcon size={16} className={isSelected ? 'text-blue-600' : p.connected ? 'text-green-600' : 'text-gray-400'} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-gray-900 truncate">{p.name}</div>
-                        <div className={`text-[10px] ${p.connected ? 'text-green-600' : 'text-gray-400'}`}>
-                          {p.connected ? 'Connected' : 'Not configured'}
-                        </div>
-                      </div>
-                      {isSelected && <CheckCircle size={14} className="text-blue-600" />}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )
-      })}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
+        {shown.map((p) => (
+          <button key={p.platform} type="button" onClick={() => connect(p.platform)}
+            className="text-left p-3 rounded-lg text-sm"
+            style={{ background: 'var(--bg-card)', border: `1px solid ${p.setup || p.connected ? '#c4a35a' : 'var(--line)'}`, color: 'var(--text)' }}>
+            <div className="font-medium" style={{ color: 'var(--gold-bright)' }}>{p.name || p.platform}</div>
+            <div className="text-[11px]" style={{ color: p.connected ? 'var(--cyan)' : 'var(--text-dim)' }}>
+              {p.connected ? 'Token on file' : p.setup ? 'Set up — needs token' : 'Set up (included)'}
+            </div>
+          </button>
+        ))}
+      </div>
 
-      <form onSubmit={handlePublish} className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <Send size={18} className="text-blue-600" />
-            Publish Content
-          </h3>
-          <span className="text-sm text-gray-500">{selectedCount} platform{selectedCount !== 1 ? 's' : ''} selected</span>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Caption / Text</label>
-          <textarea
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            rows={3}
-            value={form.caption}
-            onChange={e => setForm({ ...form, caption: e.target.value })}
-            placeholder="Write your post caption here..."
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Hashtags (comma separated)</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            value={form.hashtags}
-            onChange={e => setForm({ ...form, hashtags: e.target.value })}
-            placeholder="#marketing, #ai, #growth"
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Video URL</label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              value={form.videoUrl}
-              onChange={e => setForm({ ...form, videoUrl: e.target.value })}
-              placeholder="https://..."
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              value={form.imageUrl}
-              onChange={e => setForm({ ...form, imageUrl: e.target.value })}
-              placeholder="https://..."
-            />
-          </div>
-        </div>
-        <button
-          type="submit"
-          disabled={loading || selectedCount === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Send size={16} />
-          {loading ? 'Publishing to ' + selectedCount + ' platforms...' : `Publish to ${selectedCount} platform${selectedCount !== 1 ? 's' : ''}`}
+      <form onSubmit={generate} className="rounded-lg p-5 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+        <h3 className="font-semibold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Generate native posts</h3>
+        <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Each network gets its own body. We will not blast one caption to all 20.</p>
+        <input className={inputCls} placeholder="Product" value={brief.product} onChange={(e) => setBrief({ ...brief, product: e.target.value })} />
+        <input className={inputCls} placeholder="Audience" value={brief.audience} onChange={(e) => setBrief({ ...brief, audience: e.target.value })} />
+        <textarea className={inputCls + ' min-h-[90px]'} placeholder="Brief — what it is, who it is for, what it must not claim" value={brief.description} onChange={(e) => setBrief({ ...brief, description: e.target.value })} />
+        <select className={inputCls} value={brief.contentType} onChange={(e) => setBrief({ ...brief, contentType: e.target.value })}>
+          <option value="">Pre-made content type (optional)</option>
+          {typeOptions.map((t) => (
+            <option key={`${t.platform}-${t.id}`} value={t.id}>{t.platformName}: {t.name}</option>
+          ))}
+        </select>
+        <button type="submit" disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: '#c4a35a', color: '#07080b' }}>
+          <Share2 size={16} /> {loading ? 'Writing native posts…' : 'Generate 20-network posts'}
         </button>
       </form>
 
-      {results && (
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <h3 className="font-semibold text-gray-900 mb-3">Publish Results</h3>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {results.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm p-2 rounded-lg bg-gray-50">
-                {r.fallback ? (
-                  <XCircle size={16} className="text-yellow-500" />
-                ) : r.success ? (
-                  <CheckCircle size={16} className="text-green-600" />
-                ) : (
-                  <XCircle size={16} className="text-red-600" />
-                )}
-                <span className="font-medium text-gray-900 min-w-[120px]">{r.platform}</span>
-                <span className="text-gray-600">
-                  {r.fallback ? r.message : r.success ? 'Published successfully' : r.error}
-                </span>
+      {msg && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{msg}</p>}
+
+      <div className="space-y-3">
+        {posts.map((p) => (
+          <article key={p.id} className="rounded-lg p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-widest" style={{ color: 'var(--cyan)' }}>
+              <span>{p.platformName || p.platform} · {p.contentType || 'native'} · {p.status || 'draft'} · {p.published ? 'live' : 'not published'}</span>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => copyText(p.body, p.id)} style={{ color: 'var(--gold)' }}>{copied === p.id ? 'Copied' : 'Copy'}</button>
+                <button type="button" onClick={() => queue(p.id)} style={{ color: 'var(--gold)' }}>Queue</button>
+                <button type="button" onClick={() => publishOne(p.id)} style={{ color: 'var(--gold)' }} className="inline-flex items-center gap-1"><Send size={12} /> Publish if token</button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+            <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>{p.body}</p>
+          </article>
+        ))}
+        {!posts.length && (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No drafts yet. Generate from your brief. Posts stay private to you.</p>
+        )}
+      </div>
     </div>
   )
 }
