@@ -34,7 +34,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # --- Combined Fly production: API + static frontend ---
 FROM node:20-alpine AS production
-RUN apk add --no-cache wget
+RUN apk add --no-cache wget ffmpeg font-dejavu
 WORKDIR /app/backend
 COPY backend/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
