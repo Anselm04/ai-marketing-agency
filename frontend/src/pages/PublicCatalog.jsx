@@ -15,9 +15,9 @@ export default function PublicCatalog({ kind, title, lede }) {
       <header className="studio-header">
         <div className="wrap">
           <Link className="studio-brand" to="/">
-            <img src="/appforge-logo.png" width="36" height="36" alt="" />
+            <img src="/marketing-logo.svg" width="36" height="36" alt="" />
             <span className="studio-brand-name">
-              <strong>TrillionAI</strong>
+              <strong>TrillionAI Marketing</strong>
               <span>Tech</span>
             </span>
           </Link>
@@ -48,10 +48,12 @@ export default function PublicCatalog({ kind, title, lede }) {
                 <p className="studio-kicker">{item.kind}</p>
                 <h3>{item.name}</h3>
                 <p>{item.blurb}</p>
-                <p className="studio-price">${item.price} <span>{t('usdMonth')}</span></p>
+                <p className="studio-price">{item.price > 0 ? <>${item.price} <span>{t('usdMonth')}</span></> : 'Free'}</p>
                 <div className="studio-lib-actions">
                   <a className="studio-btn studio-btn-ghost" href={item.open} target="_blank" rel="noreferrer">{t('open')}</a>
-                  <a className="studio-btn studio-btn-gold" href={item.subscribe} target="_blank" rel="noreferrer">{t('subscribe')}</a>
+                  {item.subscribe ? (
+                    <a className="studio-btn studio-btn-gold" href={item.subscribe} target="_blank" rel="noreferrer">{t('subscribe')}</a>
+                  ) : null}
                 </div>
               </article>
             ))}
