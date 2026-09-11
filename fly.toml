@@ -44,11 +44,11 @@ primary_region = "syd"
   USE_MONGO = "false"
   USE_REDIS_QUEUE = "false"
   FRONTEND_DIST = "/app/frontend/dist"
-  # DATA_DIR = "/data"   # uncomment with [[mounts]] after volume exists
+  DATA_DIR = "/data"   # uncomment with [[mounts]] after volume exists
 
-# [[mounts]]
-#   source = "mkt_data"
-#   destination = "/data"
+[[mounts]]
+  source = "mkt_data"
+  destination = "/data"
 
 [[vm]]
   memory = "512mb"
