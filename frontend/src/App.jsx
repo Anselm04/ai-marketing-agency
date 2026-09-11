@@ -32,6 +32,7 @@ import Games from './pages/Games'
 import Software from './pages/Software'
 import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
+import Advanced from './pages/Advanced'
 import AIModels from './pages/AIModels'
 import Connectors from './pages/Connectors'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
@@ -68,6 +69,7 @@ function AppRoutes() {
       <Route path="/software" element={<Software />} />
       <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
+        <Route path="advanced" element={<Advanced />} />
         <Route path="agents" element={<Agents />} />
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="products" element={<ProductMarketing />} />

@@ -1,57 +1,77 @@
-import { useEffect, useState } from 'react';
-import api from '../services/api';
-import { Plus, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react'
+import api from '../services/api'
+import { Link } from 'react-router-dom'
+import { Copy, Check } from 'lucide-react'
 
 export default function Campaigns() {
-  const [campaigns, setCampaigns] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [campaigns, setCampaigns] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [openId, setOpenId] = useState(null)
+  const [detail, setDetail] = useState(null)
+  const [copied, setCopied] = useState('')
 
   useEffect(() => {
-    api.get('/campaigns').then(res => {
-      setCampaigns(res.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    api.get('/campaigns').then((res) => {
+      setCampaigns(res.data)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  const openCampaign = async (id) => {
+    setOpenId(id)
+    const v = await api.get(`/campaigns/${id}/versions`)
+    setDetail(v.data)
+  }
+
+  const copyText = async (text, key) => {
+    await navigator.clipboard.writeText(text)
+    setCopied(key)
+    setTimeout(() => setCopied(''), 1500)
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-              <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
-            </Link>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Campaigns</h1>
-          </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-            <Plus size={16} /> New Campaign
-          </button>
-        </div>
-        {loading ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">Loading...</div>
-        ) : campaigns.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">No campaigns yet</div>
-        ) : (
-          <div className="grid gap-4">
-            {campaigns.map(c => (
-              <div key={c.id} className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-gray-900 dark:text-white">{c.name}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{c.status} • Budget: ${c.budget || 0}</p>
-                  </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    c.status === 'running' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' :
-                    c.status === 'draft' ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' :
-                    'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-                  }`}>{c.status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+    <div className="space-y-6 max-w-3xl">
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>It&apos;s running</h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+          Master campaigns and native posts. Copy to paste if a token is missing.
+        </p>
       </div>
+      <Link to="/dashboard" className="mkt-btn mkt-btn-gold inline-flex">Start campaign</Link>
+      {loading ? (
+        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>
+      ) : campaigns.length === 0 ? (
+        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Nothing running yet. Hit Start campaign.</div>
+      ) : (
+        <div className="grid gap-3">
+          {campaigns.map((c) => (
+            <div key={c.id} className="rounded-lg p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+              <button type="button" className="w-full text-left mkt-btn" style={{ background: 'transparent', border: 0, color: 'inherit', justifyContent: 'flex-start' }} onClick={() => openCampaign(c.id)}>
+                <div>
+                  <h3 className="font-medium" style={{ color: 'var(--text)' }}>{c.name}</h3>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{c.status} · {c.productName || 'campaign'} · {c.audienceLabel || c.targetAudience || ''}</p>
+                </div>
+              </button>
+              {openId === c.id && detail && (
+                <div className="mt-4 space-y-3">
+                  {(detail.versions || []).map((p) => (
+                    <article key={p.id} className="p-3 rounded" style={{ border: '1px solid var(--line)' }}>
+                      <div className="flex flex-wrap justify-between gap-2 text-xs uppercase tracking-widest" style={{ color: 'var(--cyan)' }}>
+                        <span>{p.platformName || p.platform} · {p.status}</span>
+                        <button type="button" onClick={() => copyText(p.body, p.id)} className="mkt-btn" style={{ color: 'var(--gold)', background: 'transparent', border: '1px solid var(--line)' }}>
+                          {copied === p.id ? <Check size={16} /> : <Copy size={16} />}
+                          {copied === p.id ? 'Copied' : 'Copy post'}
+                        </button>
+                      </div>
+                      <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>{p.body}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  );
+  )
 }
