@@ -35,9 +35,9 @@ export default function Login() {
       <header className="studio-header">
         <div className="wrap">
           <Link className="studio-brand" to="/">
-            <img src="/appforge-logo.png" width="36" height="36" alt="" />
+            <img src="/marketing-logo.svg" width="36" height="36" alt="TrillionAI Marketing" />
             <span className="studio-brand-name">
-              <strong>TrillionAI</strong>
+              <strong>TrillionAI Marketing</strong>
               <span>Tech</span>
             </span>
           </Link>
@@ -62,7 +62,7 @@ export default function Login() {
                 <input
                   type="email"
                   required
-                  className="w-full pl-10 pr-3 py-2 text-sm"
+                  className="w-full pl-10 pr-3 py-3 text-sm min-h-[52px]"
                   style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }}
                   placeholder="you@company.com"
                   value={form.email}
@@ -77,7 +77,7 @@ export default function Login() {
                 <input
                   type="password"
                   required
-                  className="w-full pl-10 pr-3 py-2 text-sm"
+                  className="w-full pl-10 pr-3 py-3 text-sm min-h-[52px]"
                   style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }}
                   placeholder="••••••••"
                   value={form.password}

@@ -35,9 +35,9 @@ export default function Register() {
       <header className="studio-header">
         <div className="wrap">
           <Link className="studio-brand" to="/">
-            <img src="/appforge-logo.png" width="36" height="36" alt="" />
+            <img src="/marketing-logo.svg" width="36" height="36" alt="TrillionAI Marketing" />
             <span className="studio-brand-name">
-              <strong>TrillionAI</strong>
+              <strong>TrillionAI Marketing</strong>
               <span>Tech</span>
             </span>
           </Link>
@@ -61,26 +61,26 @@ export default function Register() {
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>First name</label>
                 <div className="relative">
                   <User className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
-                  <input type="text" className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="Anselm" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
+                  <input type="text" className="w-full pl-10 pr-3 py-3 text-sm min-h-[52px]" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="Anselm" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
                 </div>
               </div>
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Last name</label>
-                <input type="text" className="w-full px-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="Perkins" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
+                <input type="text" className="w-full px-3 py-3 text-sm min-h-[52px]" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="Perkins" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
               </div>
             </div>
             <div>
               <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
-                <input type="email" required className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="you@company.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                <input type="email" required className="w-full pl-10 pr-3 py-3 text-sm min-h-[52px]" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="you@company.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
               </div>
             </div>
             <div>
               <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
-                <input type="password" required className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="••••••••" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+                <input type="password" required className="w-full pl-10 pr-3 py-3 text-sm min-h-[52px]" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="••••••••" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
               </div>
             </div>
             <button type="submit" disabled={loading} className="studio-btn studio-btn-gold w-full">
