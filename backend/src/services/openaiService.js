@@ -7,9 +7,33 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'no-key',
 });
 
+export function openaiStatus() {
+  const raw = process.env.OPENAI_API_KEY;
+  const configured = !!(raw && raw !== 'no-key');
+  return {
+    openaiConfigured: configured,
+    missingKey: configured ? null : 'OPENAI_API_KEY',
+    note: configured
+      ? 'OpenAI key present. Video and copy can use the model.'
+      : 'OPENAI_API_KEY is missing. Copy templates still generate. AI video/script needs the key.',
+  };
+}
+
+function fallbackFromError(err, agentType, task) {
+  const status = err?.status || err?.response?.status;
+  const missing = !process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'no-key' || status === 401;
+  return {
+    fallback: true,
+    missingKey: missing ? 'OPENAI_API_KEY' : null,
+    openaiConfigured: !missing,
+    error: err?.message || 'openai-unavailable',
+    content: `[AI offline${missing ? ': missing OPENAI_API_KEY' : ''}] ${agentType} would: ${task}`,
+  };
+}
+
 export async function generateAgentResponse(agentType, task, context = {}) {
   if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'no-key') {
-    return { fallback: true, content: `[AI offline] ${agentType} would: ${task}` };
+    return fallbackFromError({ status: 401, message: 'OPENAI_API_KEY missing' }, agentType, task);
   }
 
   const systemPrompts = {
@@ -49,13 +73,13 @@ export async function generateAgentResponse(agentType, task, context = {}) {
     };
   } catch (err) {
     console.error('OpenAI error:', err.message);
-    return { fallback: true, content: `[AI error: ${err.message}] ${agentType} would: ${task}` };
+    return fallbackFromError(err, agentType, task);
   }
 }
 
 export async function generateCampaignStrategy(product, budget, platforms, targetAudience) {
   if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'no-key') {
-    return { fallback: true, strategy: 'AI offline. Define campaign strategy manually.' };
+    return { fallback: true, missingKey: 'OPENAI_API_KEY', strategy: 'AI offline (OPENAI_API_KEY missing). Templates still generate.' };
   }
 
   const prompt = `Create a marketing campaign strategy for:
@@ -90,7 +114,8 @@ Return a structured JSON with:
     };
   } catch (err) {
     console.error('OpenAI strategy error:', err.message);
-    return { fallback: true, strategy: { error: err.message } };
+    const missing = err?.status === 401 || err?.response?.status === 401;
+    return { fallback: true, missingKey: missing ? 'OPENAI_API_KEY' : null, strategy: { error: err.message } };
   }
 }
 
