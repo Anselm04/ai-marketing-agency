@@ -169,23 +169,31 @@ if (fs.existsSync(frontendDist)) {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-httpServer.listen(PORT, '0.0.0.0', () => {
-  logger.info(`Server running on port ${PORT}`, {
-    environment: process.env.NODE_ENV,
-    frontendDist: fs.existsSync(frontendDist) ? frontendDist : 'none',
-    persistence: store.isPostgres?.() ? 'supabase-postgres' : 'local-json',
+if (process.env.NODE_ENV !== 'test') {
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    logger.info(`Server running on port ${PORT}`, {
+      environment: process.env.NODE_ENV,
+      frontendDist: fs.existsSync(frontendDist) ? frontendDist : 'none',
+      persistence: store.isPostgres?.() ? 'supabase-postgres' : 'local-json',
+    });
   });
-});
+}
 
 const shutdown = async () => {
   try {
     await store.disconnectDB();
   } finally {
-    httpServer.close(() => process.exit(0));
+    if (httpServer.listening) {
+      httpServer.close(() => process.exit(0));
+    } else {
+      process.exit(0);
+    }
   }
 };
 
-process.once('SIGTERM', shutdown);
-process.once('SIGINT', shutdown);
+if (process.env.NODE_ENV !== 'test') {
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
+}
 
 export default app;
