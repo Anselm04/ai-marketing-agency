@@ -15,68 +15,101 @@ function jsonToCsv(rows, fields) {
   return [header, ...lines].join('\n');
 }
 
-router.get('/leads', (req, res) => {
-  const format = req.query.format || 'json';
-  const leads = store.getLeads();
+router.get('/leads', async (req, res, next) => {
+  try {
+    const format = req.query.format || 'json';
+    const leads = await store.getLeads();
 
-  if (format === 'csv') {
-    const csv = jsonToCsv(leads, ['id', 'name', 'email', 'company', 'status', 'score', 'source', 'createdAt']);
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=leads.csv');
-    return res.send(csv);
+    if (format === 'csv') {
+      const csv = jsonToCsv(leads, ['id', 'name', 'email', 'company', 'status', 'score', 'source', 'createdAt']);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=leads.csv');
+      return res.send(csv);
+    }
+
+    return res.json({ exportedAt: new Date().toISOString(), count: leads.length, data: leads });
+  } catch (error) {
+    return next(error);
   }
-
-  res.json({ exportedAt: new Date().toISOString(), count: leads.length, data: leads });
 });
 
-router.get('/campaigns', (req, res) => {
-  const format = req.query.format || 'json';
-  const campaigns = store.getCampaigns();
+router.get('/campaigns', async (req, res, next) => {
+  try {
+    const format = req.query.format || 'json';
+    const campaigns = await store.getCampaigns();
 
-  if (format === 'csv') {
-    const csv = jsonToCsv(campaigns, ['id', 'name', 'status', 'budget', 'spent', 'channels', 'createdAt']);
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=campaigns.csv');
-    return res.send(csv);
+    if (format === 'csv') {
+      const csv = jsonToCsv(campaigns, ['id', 'name', 'status', 'budget', 'spent', 'channels', 'createdAt']);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=campaigns.csv');
+      return res.send(csv);
+    }
+
+    return res.json({ exportedAt: new Date().toISOString(), count: campaigns.length, data: campaigns });
+  } catch (error) {
+    return next(error);
   }
-
-  res.json({ exportedAt: new Date().toISOString(), count: campaigns.length, data: campaigns });
 });
 
-router.get('/content', (req, res) => {
-  const format = req.query.format || 'json';
-  const content = store.getContent();
+router.get('/content', async (req, res, next) => {
+  try {
+    const format = req.query.format || 'json';
+    const content = await store.getContent();
 
-  if (format === 'csv') {
-    const csv = jsonToCsv(content, ['id', 'title', 'type', 'status', 'language', 'createdAt']);
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=content.csv');
-    return res.send(csv);
+    if (format === 'csv') {
+      const csv = jsonToCsv(content, ['id', 'title', 'type', 'status', 'language', 'createdAt']);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=content.csv');
+      return res.send(csv);
+    }
+
+    return res.json({ exportedAt: new Date().toISOString(), count: content.length, data: content });
+  } catch (error) {
+    return next(error);
   }
-
-  res.json({ exportedAt: new Date().toISOString(), count: content.length, data: content });
 });
 
-router.get('/backup', (req, res) => {
-  const backup = {
-    exportedAt: new Date().toISOString(),
-    version: '1.0',
-    data: {
-      users: store.getUsers().map(u => { const { password, ...safe } = u; return safe; }),
-      agents: store.getAgents(),
-      campaigns: store.getCampaigns(),
-      content: store.getContent(),
-      leads: store.getLeads(),
-      legalDocs: store.getLegalDocs(),
-      tasks: store.getTasks(),
-      subscriptions: store.getSubscriptions(),
-      analytics: store.getAnalytics(),
-      settings: store.getSettings(),
-    },
-  };
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', 'attachment; filename=backup.json');
-  res.json(backup);
+router.get('/backup', async (req, res, next) => {
+  try {
+    const [users, agents, campaigns, content, leads, legalDocs, tasks, subscriptions, analytics, settings] = await Promise.all([
+      store.getUsers(),
+      store.getAgents(),
+      store.getCampaigns(),
+      store.getContent(),
+      store.getLeads(),
+      store.getLegalDocs(),
+      store.getTasks(),
+      store.getSubscriptions(),
+      store.getAnalytics(),
+      store.getSettings(),
+    ]);
+
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+      data: {
+        users: users.map(u => {
+          const { password, resetToken, resetTokenExpires, ...safe } = u;
+          return safe;
+        }),
+        agents,
+        campaigns,
+        content,
+        leads,
+        legalDocs,
+        tasks,
+        subscriptions,
+        analytics,
+        settings,
+      },
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename=backup.json');
+    return res.json(backup);
+  } catch (error) {
+    return next(error);
+  }
 });
 
 export default router;
