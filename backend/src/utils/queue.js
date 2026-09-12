@@ -15,7 +15,8 @@ let inMemoryFallback = new Map();
 let fallbackEnabled = false;
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const USE_REDIS_QUEUE = process.env.USE_REDIS_QUEUE !== 'false';
+const USE_REDIS_QUEUE =
+  process.env.NODE_ENV === 'test' ? false : process.env.USE_REDIS_QUEUE !== 'false';
 const JOB_ATTEMPTS = parseInt(process.env.JOB_ATTEMPTS, 10) || 3;
 const JOB_BACKOFF_MS = parseInt(process.env.JOB_BACKOFF_MS, 10) || 5000;
 
@@ -224,6 +225,7 @@ export async function closeAllQueues() {
     } catch (err) {
       logger.warn('Error closing Redis', { error: err.message });
     }
+    redisConnection = null;
   }
   workers.clear();
   inMemoryFallback.clear();
