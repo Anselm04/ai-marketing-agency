@@ -2,10 +2,10 @@ const requestCounts = new Map();
 const WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 60 * 1000;
 const MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100;
 
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, timestamps] of requestCounts.entries()) {
-    const valid = timestamps.filter(t => now - t < WINDOW_MS);
+    const valid = timestamps.filter((t) => now - t < WINDOW_MS);
     if (valid.length === 0) {
       requestCounts.delete(key);
     } else {
@@ -13,6 +13,10 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+
+// Housekeeping must never keep a test process or a graceful production shutdown
+// alive on its own. Node will still run it while the application is active.
+cleanupInterval.unref?.();
 
 export function rateLimit(req, res, next) {
   const key = req.user?.id || req.ip;
@@ -24,7 +28,7 @@ export function rateLimit(req, res, next) {
 
   const timestamps = requestCounts.get(key);
   const windowStart = now - WINDOW_MS;
-  const recentRequests = timestamps.filter(t => t > windowStart);
+  const recentRequests = timestamps.filter((t) => t > windowStart);
 
   if (recentRequests.length >= MAX_REQUESTS) {
     return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
