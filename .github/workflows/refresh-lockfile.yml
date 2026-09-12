@@ -1,0 +1,42 @@
+name: Refresh dependency lockfile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - backend/package.json
+      - frontend/package.json
+
+permissions:
+  contents: write
+
+concurrency:
+  group: marketing-lockfile-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Regenerate npm lockfile from manifests
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit refreshed lockfile when changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json already matches manifests"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: refresh dependency lockfile"
+          git push origin HEAD:main
