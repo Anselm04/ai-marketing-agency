@@ -45,6 +45,8 @@ jobs:
         run: npm run lint --workspace=backend
       - name: Backend tests
         run: timeout 8m npm test --workspace=backend -- --runInBand --detectOpenHandles --passWithNoTests
+      - name: Install frontend test runtime
+        run: npm install --no-save --no-package-lock --workspace=frontend jsdom@26.1.0 @testing-library/react@16.3.0 @testing-library/jest-dom@6.8.0
       - name: Frontend tests
         run: npm test --workspace=frontend
       - name: Frontend build
