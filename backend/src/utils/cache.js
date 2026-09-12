@@ -7,12 +7,13 @@ import IORedis from 'ioredis';
 import { logger } from './logger.js';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const USE_REDIS_CACHE = process.env.USE_REDIS_CACHE !== 'false';
+const USE_REDIS_CACHE =
+  process.env.NODE_ENV !== 'test' && process.env.USE_REDIS_CACHE !== 'false';
 const DEFAULT_TTL = parseInt(process.env.CACHE_TTL_SECONDS, 10) || 300;
 
 let redis = null;
 let memoryCache = new Map();
-let fallbackEnabled = false;
+let fallbackEnabled = !USE_REDIS_CACHE;
 
 /**
  * Initialize Redis connection for caching.
@@ -31,9 +32,12 @@ function getRedis() {
           fallbackEnabled = true;
           return null;
         }
-        return Math.min(times * 1000, 3000);
+        return Math.min(times * 500, 1500);
       },
       lazyConnect: true,
+      connectTimeout: Number(process.env.REDIS_CONNECT_TIMEOUT_MS || 3000),
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
     });
     redis.on('error', (err) => {
       logger.warn('Redis cache error', { error: err.message });
@@ -68,6 +72,7 @@ export async function get(key, prefix = 'ama') {
       const val = await client.get(fullKey);
       return val ? JSON.parse(val) : null;
     } catch (err) {
+      fallbackEnabled = true;
       logger.warn('Redis cache get failed, falling back to memory', { error: err.message });
     }
   }
@@ -96,6 +101,7 @@ export async function set(key, value, ttl = DEFAULT_TTL, prefix = 'ama') {
       }
       return;
     } catch (err) {
+      fallbackEnabled = true;
       logger.warn('Redis cache set failed, falling back to memory', { error: err.message });
     }
   }
@@ -115,6 +121,7 @@ export async function del(key, prefix = 'ama') {
     try {
       await client.del(fullKey);
     } catch (err) {
+      fallbackEnabled = true;
       logger.warn('Redis cache del failed', { error: err.message });
     }
   }
@@ -134,10 +141,10 @@ export async function delPattern(pattern, prefix = 'ama') {
         await client.del(...keys);
       }
     } catch (err) {
+      fallbackEnabled = true;
       logger.warn('Redis cache delPattern failed', { error: err.message });
     }
   }
-  // Memory fallback: iterate and delete matching keys
   for (const [key] of memoryCache) {
     if (key.startsWith(fullPattern)) {
       memoryCache.delete(key);
@@ -155,6 +162,7 @@ export async function exists(key, prefix = 'ama') {
     try {
       return (await client.exists(fullKey)) === 1;
     } catch (err) {
+      fallbackEnabled = true;
       logger.warn('Redis cache exists failed', { error: err.message });
     }
   }
@@ -177,6 +185,7 @@ export async function increment(key, amount = 1, prefix = 'ama') {
     try {
       return await client.incrby(fullKey, amount);
     } catch (err) {
+      fallbackEnabled = true;
       logger.warn('Redis cache increment failed', { error: err.message });
     }
   }
@@ -207,6 +216,7 @@ export async function flush() {
     try {
       await client.flushdb();
     } catch (err) {
+      fallbackEnabled = true;
       logger.warn('Redis cache flush failed', { error: err.message });
     }
   }
@@ -229,6 +239,7 @@ export async function getStats() {
         fallback: false,
       };
     } catch (err) {
+      fallbackEnabled = true;
       logger.warn('Redis cache stats failed', { error: err.message });
     }
   }
