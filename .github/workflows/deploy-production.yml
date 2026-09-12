@@ -1,0 +1,116 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows: ["CI/CD"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketing-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact validated revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up Fly.io
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+
+      - name: Require production token and critical secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "FLY_API_TOKEN is not configured; refusing a false production deploy."
+            exit 1
+          fi
+
+          APP="trillionai-marketing"
+          SECRET_JSON="$(flyctl secrets list --app "$APP" --json)"
+          SECRET_NAMES="$(printf '%s' "$SECRET_JSON" | jq -r '.[] | (.Name // .name // empty)')"
+
+          required=(
+            DATABASE_URL
+            JWT_SECRET
+            TRILLION_ECOSYSTEM_SHARED_SECRET
+          )
+          missing=0
+          for name in "${required[@]}"; do
+            if ! grep -Fxq "$name" <<<"$SECRET_NAMES"; then
+              echo "Missing Fly runtime secret required for production: $name"
+              missing=1
+            fi
+          done
+
+          ai_ready=0
+          for name in OPENAI_API_KEY ANTHROPIC_API_KEY GOOGLE_AI_API_KEY GROQ_API_KEY MISTRAL_API_KEY COHERE_API_KEY AZURE_OPENAI_API_KEY; do
+            if grep -Fxq "$name" <<<"$SECRET_NAMES"; then
+              ai_ready=1
+              break
+            fi
+          done
+          if [ "$ai_ready" -ne 1 ]; then
+            echo "No production AI provider secret is configured."
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            echo "Marketing production deploy blocked until database, auth, AppForge bridge, and AI runtime are configured."
+            exit 1
+          fi
+
+      - name: Deploy TrillionAI Marketing to Fly.io
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only --config fly.toml --app trillionai-marketing
+
+      - name: Verify production health and auth boundary
+        run: |
+          set -euo pipefail
+          URL="https://trillionai-marketing.fly.dev"
+          healthy=false
+          for i in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 10 "$URL/health" >/tmp/health.json; then
+              if jq -e '.status == "ok" and .database == "postgres"' /tmp/health.json >/dev/null; then
+                healthy=true
+                break
+              fi
+            fi
+            echo "Waiting for Marketing production health (attempt $i/30)..."
+            sleep 10
+          done
+
+          if [ "$healthy" != "true" ]; then
+            echo "Marketing production health/database verification failed"
+            cat /tmp/health.json 2>/dev/null || true
+            exit 1
+          fi
+
+          public_status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "$URL/")
+          if [ "$public_status" != "200" ]; then
+            echo "Expected public Marketing app to return 200, got $public_status"
+            exit 1
+          fi
+
+          protected_status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "$URL/api/agents")
+          if [ "$protected_status" != "401" ]; then
+            echo "Expected /api/agents to reject anonymous access with 401, got $protected_status"
+            exit 1
+          fi
+
+          echo "Marketing production health, PostgreSQL persistence, public UI, and auth boundary passed."
