@@ -38,6 +38,13 @@ primary_region = "syd"
   USE_MONGO = "false"
   USE_REDIS_QUEUE = "false"
   FRONTEND_DIST = "/app/frontend/dist"
+  UPLOAD_DIR = "/data/uploads"
+
+# Preserve the existing Fly volume (mkt_data) attached to the production machine.
+# User uploads stored on local disk live under /data/uploads and survive deploys.
+[mounts]
+  source = "mkt_data"
+  destination = "/data"
 
 [[vm]]
   memory = "512mb"
