@@ -55,7 +55,7 @@ export default function Admin() {
     setError('')
     setOwnerCodeMessage('')
     try {
-      const res = await api.post('/billing/redeem', { code: ownerCode.trim() })
+      const res = await api.post('/admin/god-codes/redeem-owner', { code: ownerCode.trim() })
       setOwnerCodeMessage(res.data?.name ? 'Owner access granted: ' + res.data.name : 'Owner code redeemed')
       setOwnerCode('')
       const [analyticsRes, codesRes] = await Promise.all([
