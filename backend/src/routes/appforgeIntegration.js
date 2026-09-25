@@ -4,7 +4,8 @@ import productMarketingService from '../services/productMarketingService.js';
 import { requireEcosystemSignature } from '../services/ecosystemSignature.js';
 import { withEcosystemLock } from '../services/ecosystemLock.js';
 import { logger } from '../utils/logger.js';
-import { canonicalOwnerEmail, isOwnerEmail } from '../utils/owner.js';
+import { isOwnerEmail } from '../utils/owner.js';
+import { getMarketingEntitlement } from '../services/marketingEntitlementService.js';
 
 const router = express.Router();
 
@@ -61,59 +62,47 @@ router.post('/campaign', async (req, res) => {
   }
 
   const normalizedEmail = sourceUserEmail.trim().toLowerCase();
-
-  // AppForge may build products for many customers, but automatic portfolio intake
-  // and advertising are deliberately restricted to the canonical TrillionAI owner.
-  // Non-owner AppForge products are acknowledged and ignored so they can never be
-  // silently added to or marketed from the owner's personal Marketing account.
-  if (!isOwnerEmail(normalizedEmail)) {
-    logger.info('Ignored non-owner AppForge product for automatic Marketing intake', {
-      sourceProjectId,
-    });
-    return res.status(202).json({
-      success: true,
-      accepted: true,
-      ownerPortfolioAdded: false,
-      automatedMarketing: false,
-      code: 'non_owner_appforge_product_ignored',
-    });
-  }
-
-  const marketingUser = await store.findUserByEmail(canonicalOwnerEmail());
+  const marketingUser = await store.findUserByEmail(normalizedEmail);
   if (!marketingUser) {
     return res.status(409).json({
-      error: 'Owner TrillionAI Marketing account required',
-      code: 'owner_marketing_account_required',
+      error: 'A matching TrillionAI Marketing account is required before this AppForge product can be marketed.',
+      code: 'marketing_account_required',
+      billingPath: '/register',
     });
   }
 
-  const sourceRequestId = `appforge:${sourceProjectId}:${sourceProjectCreatedAt || 'unknown'}`;
+  const entitlement = await getMarketingEntitlement(marketingUser);
+  const isOwner = isOwnerEmail(marketingUser.email);
+  const sourceRequestId = `appforge:${marketingUser.id}:${sourceProjectId}:${sourceProjectCreatedAt || 'unknown'}`;
   const portfolioKey = `appforge-product:${sourceProjectId}`;
 
   try {
     return await withEcosystemLock(sourceRequestId, async () => {
-      const ownerContent = await store.getContentByOwner(marketingUser.id);
-      const existingPortfolio = ownerContent.find(
-        (item) => item.kind === 'owner_portfolio_product' && item.portfolioKey === portfolioKey,
+      const userContent = await store.getContentByOwner(marketingUser.id);
+      const existingPortfolio = userContent.find(
+        (item) => item.kind === 'appforge_portfolio_product' && item.portfolioKey === portfolioKey,
       );
 
       const portfolioPayload = {
-        kind: 'owner_portfolio_product',
+        kind: 'appforge_portfolio_product',
         owner: marketingUser.id,
         ownerId: marketingUser.id,
         portfolioKey,
         source: 'appforge',
         sourceProjectId,
         sourceProjectCreatedAt: sourceProjectCreatedAt || null,
-        sourceUserEmail: canonicalOwnerEmail(),
+        sourceUserEmail: normalizedEmail,
         sourceUserName: typeof sourceUserName === 'string' ? sourceUserName : '',
         productName: productName.trim(),
         description: typeof description === 'string' ? description.trim() : '',
         techStack: typeof techStack === 'string' ? techStack : '',
         productUrl: typeof productUrl === 'string' ? productUrl : '',
-        autoMarketingEligible: true,
-        ownerOnly: true,
-        marketingStatus: mode === 'generate' ? 'campaign_requested' : 'ready',
+        autoMarketingEligible: entitlement.entitled,
+        ownerOnly: isOwner,
+        entitlementSource: entitlement.source,
+        marketingStatus: entitlement.entitled
+          ? (mode === 'generate' ? 'campaign_requested' : 'ready')
+          : 'payment_required',
         updatedAt: new Date().toISOString(),
       };
 
@@ -123,6 +112,23 @@ router.post('/campaign', async (req, res) => {
             ...portfolioPayload,
             createdAt: new Date().toISOString(),
           });
+
+      if (!entitlement.entitled) {
+        logger.info('AppForge product added to personal Marketing portfolio but marketing is locked', {
+          sourceProjectId,
+          marketingUserId: marketingUser.id,
+        });
+        return res.status(402).json({
+          success: true,
+          accepted: true,
+          portfolioAdded: true,
+          automatedMarketing: false,
+          code: 'marketing_entitlement_required',
+          error: 'An active Marketing subscription or valid plan god code is required to market this product.',
+          billingPath: '/dashboard/billing',
+          portfolioProduct,
+        });
+      }
 
       const campaigns = await store.getCampaignsByOwner(marketingUser.id);
       const existing = campaigns.find(
@@ -137,8 +143,13 @@ router.post('/campaign', async (req, res) => {
           replayed: true,
           campaign: existing,
           portfolioProduct,
-          ownerPortfolioAdded: true,
+          portfolioAdded: true,
           automatedMarketing: existing.status !== 'draft',
+          entitlement: {
+            reason: entitlement.reason,
+            source: entitlement.source,
+            plan: entitlement.subscription?.plan || null,
+          },
         });
       }
 
@@ -165,7 +176,8 @@ router.post('/campaign', async (req, res) => {
           techStack: typeof techStack === 'string' ? techStack : '',
           productUrl: typeof productUrl === 'string' ? productUrl : '',
           portfolioProductId: portfolioProduct.id,
-          ownerPortfolioProduct: true,
+          appforgePortfolioProduct: true,
+          entitlementSource: entitlement.source,
         });
 
         logger.info('Generated marketing campaign from AppForge project', {
@@ -183,9 +195,14 @@ router.post('/campaign', async (req, res) => {
         return res.status(201).json({
           success: true,
           replayed: false,
-          ownerPortfolioAdded: true,
+          portfolioAdded: true,
           automatedMarketing: true,
           portfolioProduct,
+          entitlement: {
+            reason: entitlement.reason,
+            source: entitlement.source,
+            plan: entitlement.subscription?.plan || null,
+          },
           campaign,
           generated: {
             contentItems: generated.contentItems?.length || 0,
@@ -216,7 +233,8 @@ router.post('/campaign', async (req, res) => {
         techStack: typeof techStack === 'string' ? techStack : '',
         productUrl: typeof productUrl === 'string' ? productUrl : '',
         portfolioProductId: portfolioProduct.id,
-        ownerPortfolioProduct: true,
+        appforgePortfolioProduct: true,
+        entitlementSource: entitlement.source,
       });
 
       logger.info('Created marketing draft from AppForge project', {
@@ -234,9 +252,14 @@ router.post('/campaign', async (req, res) => {
       return res.status(201).json({
         success: true,
         replayed: false,
-        ownerPortfolioAdded: true,
+        portfolioAdded: true,
         automatedMarketing: false,
         portfolioProduct,
+        entitlement: {
+          reason: entitlement.reason,
+          source: entitlement.source,
+          plan: entitlement.subscription?.plan || null,
+        },
         campaign,
       });
     });
