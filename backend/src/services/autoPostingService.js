@@ -172,7 +172,7 @@ class AutoPostingService {
     if (!plan.sourceAssetIds || !plan.sourceAssetIds.length) throw new Error('Auto-posting plan has no selected source media');
     if (!plan.platformIds || !plan.platformIds.length) throw new Error('Auto-posting plan has no selected platforms');
 
-    const allContent = await store.getContent();
+    const allContent = await store.getContentByOwner(plan.owner);
     let recommendation = null;
     if (plan.aiOptimizationEnabled !== false) {
       try {
