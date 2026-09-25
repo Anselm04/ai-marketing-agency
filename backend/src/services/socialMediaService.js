@@ -106,12 +106,125 @@ class SocialMediaService {
   }
 
   // --- Social Media ---
-  async publishTikTok(videoUrl, caption, hashtags = []) {
-    if (!this.isAvailable('tiktok')) return { fallback: true, platform: 'tiktok', message: 'TikTok API not configured. Would publish: ' + caption };
+  async getTikTokCreatorInfo() {
+    if (!this.isAvailable('tiktok')) {
+      return { success: false, platform: 'tiktok', blocked: true, error: 'TikTok access token is not configured' };
+    }
+
     try {
-      const res = await axios.post('https://open-api.tiktok.com/share/video/upload/', { access_token: this.tokens.tiktok, source_info: { source: 'PULL_FROM_URL', url: videoUrl }, title: caption + ' ' + hashtags.join(' ') });
-      return { success: true, platform: 'tiktok', postId: res.data.data.share_id };
-    } catch (err) { return { success: false, platform: 'tiktok', error: err.message }; }
+      const res = await axios.post(
+        'https://open.tiktokapis.com/v2/post/publish/creator_info/query/',
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${this.tokens.tiktok}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+          },
+          timeout: 15000,
+        },
+      );
+
+      if (res.data?.error?.code && res.data.error.code !== 'ok') {
+        return {
+          success: false,
+          platform: 'tiktok',
+          blocked: true,
+          error: res.data.error.message || res.data.error.code,
+          code: res.data.error.code,
+        };
+      }
+
+      return { success: true, platform: 'tiktok', creator: res.data?.data || {} };
+    } catch (err) {
+      return {
+        success: false,
+        platform: 'tiktok',
+        error: err.response?.data?.error?.message || err.message,
+        code: err.response?.data?.error?.code,
+      };
+    }
+  }
+
+  async publishTikTok(videoUrl, caption, hashtags = [], options = {}) {
+    if (!this.isAvailable('tiktok')) {
+      return { success: false, platform: 'tiktok', blocked: true, error: 'TikTok API not configured' };
+    }
+    if (!videoUrl) {
+      return { success: false, platform: 'tiktok', blocked: true, error: 'A public video URL is required' };
+    }
+
+    const creatorInfo = await this.getTikTokCreatorInfo();
+    if (!creatorInfo.success) return creatorInfo;
+
+    const configuredPrivacy = options.privacyLevel || process.env.TIKTOK_PRIVACY_LEVEL || 'SELF_ONLY';
+    const allowedPrivacy = creatorInfo.creator?.privacy_level_options || [];
+    if (!allowedPrivacy.includes(configuredPrivacy)) {
+      return {
+        success: false,
+        platform: 'tiktok',
+        blocked: true,
+        error: `TikTok privacy level ${configuredPrivacy} is not currently allowed for this creator`,
+        allowedPrivacy,
+      };
+    }
+
+    const title = [caption, ...(Array.isArray(hashtags) ? hashtags : [])]
+      .filter(Boolean)
+      .join(' ')
+      .slice(0, 2200);
+
+    try {
+      const res = await axios.post(
+        'https://open.tiktokapis.com/v2/post/publish/video/init/',
+        {
+          post_info: {
+            title,
+            privacy_level: configuredPrivacy,
+            disable_duet: options.disableDuet === true,
+            disable_comment: options.disableComment === true,
+            disable_stitch: options.disableStitch === true,
+            brand_organic_toggle: options.brandOrganic === true,
+            is_aigc: options.isAigc === true,
+          },
+          source_info: {
+            source: 'PULL_FROM_URL',
+            video_url: videoUrl,
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.tokens.tiktok}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+          },
+          timeout: 20000,
+        },
+      );
+
+      if (res.data?.error?.code && res.data.error.code !== 'ok') {
+        return {
+          success: false,
+          platform: 'tiktok',
+          blocked: true,
+          error: res.data.error.message || res.data.error.code,
+          code: res.data.error.code,
+        };
+      }
+
+      return {
+        success: true,
+        platform: 'tiktok',
+        publishId: res.data?.data?.publish_id,
+        status: 'processing',
+        privacyLevel: configuredPrivacy,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        platform: 'tiktok',
+        error: err.response?.data?.error?.message || err.message,
+        code: err.response?.data?.error?.code,
+      };
+    }
   }
 
   async publishInstagram(imageUrl, caption) {
