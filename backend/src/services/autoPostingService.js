@@ -25,7 +25,7 @@ function intervalMs(cadence, postsPerPeriod) {
 
 function parseMetadata(content, fallback) {
   if (!content || typeof content !== 'string') return fallback;
-  const fenced = content.match(/\`\`\`(?:json)?\\s*([\\s\\S]*?)\`\`\`/i);
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const raw = fenced ? fenced[1] : content;
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
