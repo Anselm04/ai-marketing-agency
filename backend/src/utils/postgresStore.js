@@ -447,12 +447,23 @@ const store = {
     const { rows } = await pool.query('select key, value from marketing.settings');
     return Object.fromEntries(rows.map((row) => [row.key, row.value]));
   },
+  async getSetting(key) {
+    const { rows } = await pool.query(
+      'select value from marketing.settings where key = $1 limit 1',
+      [key],
+    );
+    return rows[0]?.value ?? null;
+  },
   async setSettings(key, value) {
     await pool.query(
       `insert into marketing.settings (key, value) values ($1, $2::jsonb)
        on conflict (key) do update set value = excluded.value, updated_at = now()`,
       [key, value],
     );
+  },
+  async deleteSetting(key) {
+    const result = await pool.query('delete from marketing.settings where key = $1', [key]);
+    return result.rowCount > 0;
   },
 
   async getGodCodes() {
