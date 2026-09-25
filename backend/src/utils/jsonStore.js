@@ -234,6 +234,9 @@ const store = {
   getCampaigns() {
     return Promise.resolve(campaigns);
   },
+  getCampaignsByOwner(ownerId) {
+    return Promise.resolve(campaigns.filter((item) => item.owner === ownerId || item.ownerId === ownerId));
+  },
   getCampaignById(id) {
     return campaigns.find((c) => c.id === id);
   },
@@ -261,6 +264,9 @@ const store = {
   getContent() {
     return Promise.resolve(content);
   },
+  getContentByOwner(ownerId) {
+    return Promise.resolve(content.filter((item) => item.owner === ownerId || item.ownerId === ownerId));
+  },
   createContent(item) {
     const c = { id: this._id(), ...item, createdAt: new Date().toISOString() };
     content.push(c);
@@ -284,6 +290,9 @@ const store = {
 
   getLeads() {
     return Promise.resolve(leads);
+  },
+  getLeadsByOwner(ownerId) {
+    return Promise.resolve(leads.filter((item) => item.owner === ownerId || item.ownerId === ownerId));
   },
   createLead(lead) {
     const l = { id: this._id(), ...lead, createdAt: new Date().toISOString() };
