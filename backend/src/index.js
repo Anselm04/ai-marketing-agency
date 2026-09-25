@@ -41,6 +41,7 @@ import searchRoutes from './routes/search.js';
 import realtimeRoutes from './routes/realtime.js';
 import affiliateRoutes from './routes/affiliate.js';
 import appforgeIntegrationRoutes from './routes/appforgeIntegration.js';
+import clippingRoutes from './routes/clipping.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
 import { authenticate } from './middleware/auth.js';
@@ -153,6 +154,7 @@ app.use('/api/uploads', uploadsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/realtime', realtimeRoutes);
 app.use('/api/affiliate', affiliateRoutes);
+app.use('/api/clipping', clippingRoutes);
 
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist, { index: false, maxAge: '1h' }));
