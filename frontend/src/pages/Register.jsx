@@ -8,7 +8,7 @@ import { Mail, Lock, User, ArrowRight, Moon, Sun } from 'lucide-react';
 import './landing.css';
 
 export default function Register() {
-  const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '' });
+  const [form, setForm] = useState({ email: '', password: '', confirmPassword: '', firstName: '', lastName: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -19,9 +19,14 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (form.password !== form.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
     setLoading(true);
     try {
-      await register(form);
+      const { confirmPassword, ...payload } = form;
+      await register(payload);
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');
@@ -58,29 +63,36 @@ export default function Register() {
           <form onSubmit={handleSubmit} className="space-y-4 mt-6">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>First name</label>
+                <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{t('firstName')}</label>
                 <div className="relative">
                   <User className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
                   <input type="text" className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="Anselm" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
                 </div>
               </div>
               <div>
-                <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Last name</label>
+                <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{t('lastName')}</label>
                 <input type="text" className="w-full px-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="Perkins" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
               </div>
             </div>
             <div>
-              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Email</label>
+              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{t('email')}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
                 <input type="email" required className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="you@company.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
               </div>
             </div>
             <div>
-              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Password</label>
+              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{t('password')}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
-                <input type="password" required className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="••••••••" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+                <input type="password" required minLength={8} className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="••••••••" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{t('confirmPassword')}</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
+                <input type="password" required minLength={8} className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="••••••••" value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} />
               </div>
             </div>
             <button type="submit" disabled={loading} className="studio-btn studio-btn-gold w-full">
