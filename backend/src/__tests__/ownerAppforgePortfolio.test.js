@@ -4,12 +4,12 @@ import store from '../utils/store.js';
 import { signEcosystemPayload } from '../services/ecosystemSignature.js';
 import { canonicalOwnerEmail } from '../utils/owner.js';
 
-const SECRET = 'owner-portfolio-test-secret';
+const BRIDGE_SECRET = 'portfolio-test-bridge-secret';
 
 function signedPost(body) {
-  process.env.TRILLION_ECOSYSTEM_SHARED_SECRET = SECRET;
+  process.env.TRILLION_ECOSYSTEM_SHARED_SECRET = BRIDGE_SECRET;
   const timestamp = String(Date.now());
-  const signature = signEcosystemPayload(SECRET, timestamp, JSON.stringify(body));
+  const signature = signEcosystemPayload(BRIDGE_SECRET, timestamp, JSON.stringify(body));
   return request(app)
     .post('/api/integrations/appforge/campaign')
     .set('X-Trillion-Source', 'appforge')
@@ -18,81 +18,138 @@ function signedPost(body) {
     .send(body);
 }
 
-describe('Owner-only AppForge portfolio intake', () => {
+describe('Per-user AppForge Marketing portfolios', () => {
+  let locked;
+  let lockedToken;
+  let paid;
+  let paidToken;
+  let granted;
+  let owner;
+
   beforeAll(async () => {
-    const ownerEmail = canonicalOwnerEmail();
-    const existing = await store.findUserByEmail(ownerEmail);
-    if (!existing) {
-      await store.createUser({
-        email: ownerEmail,
+    const stamp = Date.now();
+
+    const lockedReg = await request(app).post('/api/auth/register').send({
+      email: `portfolio-locked-${stamp}@example.com`,
+      password: 'SecurePass123!',
+    });
+    lockedToken = lockedReg.body.token;
+    locked = await store.findUserByEmail(lockedReg.body.user.email);
+
+    const paidReg = await request(app).post('/api/auth/register').send({
+      email: `portfolio-paid-${stamp}@example.com`,
+      password: 'SecurePass123!',
+    });
+    paidToken = paidReg.body.token;
+    paid = await store.findUserByEmail(paidReg.body.user.email);
+
+    const grantedReg = await request(app).post('/api/auth/register').send({
+      email: `portfolio-granted-${stamp}@example.com`,
+      password: 'SecurePass123!',
+    });
+    granted = await store.findUserByEmail(grantedReg.body.user.email);
+
+    owner = await store.findUserByEmail(canonicalOwnerEmail());
+    if (!owner) {
+      owner = await store.createUser({
+        email: canonicalOwnerEmail(),
         password: 'OwnerPortfolioTest123!',
-        role: 'user',
-        profile: { firstName: 'Owner', lastName: 'Portfolio' },
       });
     }
+
+    await store.createSubscription({
+      userId: paid.id,
+      user: paid.id,
+      plan: 'growth',
+      status: 'active',
+      source: 'stripe',
+    });
+
+    await store.createSubscription({
+      userId: granted.id,
+      user: granted.id,
+      plan: 'agency',
+      status: 'active',
+      source: 'god-code',
+      lifetimeAccess: true,
+    });
   });
 
-  test('ignores another AppForge users product even when generate is requested', async () => {
-    const sourceProjectId = 800000000 + Math.floor(Math.random() * 1000000);
-    const body = {
+  test('unpaid user keeps their product privately but marketing is locked', async () => {
+    const sourceProjectId = 820000001;
+    const res = await signedPost({
       source: 'appforge',
       sourceProjectId,
-      sourceProjectCreatedAt: new Date().toISOString(),
-      sourceUserEmail: 'another-appforge-user@example.com',
-      sourceUserName: 'Other User',
-      productName: 'Other Users Product',
-      description: 'This product must never enter the owner portfolio or automatic advertising.',
-      productUrl: 'https://example.com/other-product',
+      sourceUserEmail: locked.email,
+      productName: 'Locked Product',
+      description: 'Private to this account.',
       mode: 'generate',
-    };
+    });
 
-    const res = await signedPost(body);
-
-    expect(res.status).toBe(202);
-    expect(res.body.ownerPortfolioAdded).toBe(false);
+    expect(res.status).toBe(402);
+    expect(res.body.portfolioAdded).toBe(true);
+    expect(res.body.billingRequired).toBe(true);
     expect(res.body.automatedMarketing).toBe(false);
-    expect(res.body.code).toBe('non_owner_appforge_product_ignored');
+    expect(res.body.portfolioProduct.owner).toBe(locked.id);
 
-    const owner = await store.findUserByEmail(canonicalOwnerEmail());
-    const ownerContent = await store.getContentByOwner(owner.id);
+    const lockedCampaigns = await store.getCampaignsByOwner(locked.id);
+    expect(lockedCampaigns.some((item) => item.sourceProjectId === sourceProjectId)).toBe(false);
+
     const ownerCampaigns = await store.getCampaignsByOwner(owner.id);
-
-    expect(ownerContent.some((item) => item.sourceProjectId === sourceProjectId)).toBe(false);
     expect(ownerCampaigns.some((item) => item.sourceProjectId === sourceProjectId)).toBe(false);
   });
 
-  test('adds only the canonical owners AppForge product to the personal portfolio', async () => {
-    const sourceProjectId = 810000000 + Math.floor(Math.random() * 1000000);
-    const body = {
+  test('paid user can market only inside their own account', async () => {
+    const sourceProjectId = 830000001;
+    const res = await signedPost({
       source: 'appforge',
       sourceProjectId,
-      sourceProjectCreatedAt: new Date().toISOString(),
-      sourceUserEmail: canonicalOwnerEmail(),
-      sourceUserName: 'Owner',
-      productName: 'Owner Portfolio Product',
-      description: 'A verified owner product ready to sit beside the owners other products.',
-      techStack: 'React, Node',
-      productUrl: 'https://example.com/owner-product',
-      mode: 'draft',
-    };
-
-    const res = await signedPost(body);
+      sourceUserEmail: paid.email,
+      productName: 'Paid Product',
+      description: 'Private paid-user product.',
+      mode: 'generate',
+    });
 
     expect(res.status).toBe(201);
-    expect(res.body.ownerPortfolioAdded).toBe(true);
-    expect(res.body.automatedMarketing).toBe(false);
-    expect(res.body.portfolioProduct).toEqual(expect.objectContaining({
+    expect(res.body.billingRequired).toBe(false);
+    expect(res.body.portfolioProduct.owner).toBe(paid.id);
+    expect(res.body.campaign.owner).toBe(paid.id);
+
+    const ownPortfolio = await request(app)
+      .get('/api/products/portfolio')
+      .set('Authorization', `Bearer ${paidToken}`);
+    expect(ownPortfolio.body.some((item) => item.sourceProjectId === sourceProjectId)).toBe(true);
+
+    const otherPortfolio = await request(app)
+      .get('/api/products/portfolio')
+      .set('Authorization', `Bearer ${lockedToken}`);
+    expect(otherPortfolio.body.some((item) => item.sourceProjectId === sourceProjectId)).toBe(false);
+  });
+
+  test('owner-issued plan access unlocks AppForge marketing for that user', async () => {
+    const sourceProjectId = 840000001;
+    const res = await signedPost({
       source: 'appforge',
       sourceProjectId,
-      ownerOnly: true,
-      autoMarketingEligible: true,
-      productName: 'Owner Portfolio Product',
-    }));
-    expect(res.body.campaign).toEqual(expect.objectContaining({
-      source: 'appforge',
-      sourceProjectId,
-      ownerPortfolioProduct: true,
-      status: 'draft',
-    }));
+      sourceUserEmail: granted.email,
+      productName: 'Granted Product',
+      description: 'Private granted-access product.',
+      mode: 'draft',
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.billingRequired).toBe(false);
+    expect(res.body.portfolioProduct.owner).toBe(granted.id);
+    expect(res.body.campaign.owner).toBe(granted.id);
+  });
+
+  test('manual product marketing is also locked for unpaid users', async () => {
+    const res = await request(app)
+      .post('/api/products/marketing')
+      .set('Authorization', `Bearer ${lockedToken}`)
+      .send({ productName: 'Manual Product', description: 'Locked before generation.' });
+
+    expect(res.status).toBe(402);
+    expect(res.body.code).toBe('marketing_access_required');
   });
 });
