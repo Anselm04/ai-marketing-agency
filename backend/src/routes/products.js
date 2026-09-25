@@ -3,7 +3,7 @@ import productMarketingService from '../services/productMarketingService.js';
 import store from '../utils/store.js';
 import { upload } from '../middleware/upload.js';
 import { authenticate } from '../middleware/auth.js';
-import { requireOwner } from '../utils/owner.js';
+import { requireMarketingEntitlement } from '../services/marketingEntitlementService.js';
 
 const router = express.Router();
 
@@ -12,7 +12,7 @@ router.use(authenticate);
 // POST /api/products/marketing
 // Accepts product photos (multipart) + text fields
 // Runs AI analysis and generates complete marketing campaign
-router.post('/marketing', upload.array('photos', 10), async (req, res) => {
+router.post('/marketing', requireMarketingEntitlement, upload.array('photos', 10), async (req, res) => {
   try {
     const {
       productName,
@@ -64,11 +64,11 @@ router.post('/marketing', upload.array('photos', 10), async (req, res) => {
 });
 
 // GET /api/products/portfolio
-// Owner-only portfolio of AppForge products eligible for automatic Marketing.
-router.get('/portfolio', requireOwner, async (req, res) => {
+// Personal AppForge portfolio. Every authenticated user can see only their own products.
+router.get('/portfolio', async (req, res) => {
   const content = await store.getContentByOwner(req.user.id);
   const products = content
-    .filter((item) => item.kind === 'owner_portfolio_product' && item.ownerOnly === true)
+    .filter((item) => item.kind === 'appforge_portfolio_product')
     .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
   res.json(products);
 });
