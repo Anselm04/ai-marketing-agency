@@ -115,6 +115,8 @@ export default function ClippingAgency() {
         await api.post(`/clipping/campaigns/${campaign.id}/activate`, {
           humanApprovalRequiredBeforeFirstPublish: false,
         })
+      } else if (action === 'cycle') {
+        await api.post(`/clipping/campaigns/${campaign.id}/run-cycle`, { batchSize: 1 })
       } else if (action === 'pause') {
         await api.post(`/clipping/campaigns/${campaign.id}/pause`, {})
       }
@@ -412,14 +414,24 @@ export default function ClippingAgency() {
                     </button>
                   )}
                   {campaign.status === 'running' ? (
-                    <button
-                      onClick={() => runAction(campaign, 'pause')}
-                      disabled={workingId === campaign.id}
-                      className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm"
-                      style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}
-                    >
-                      <Pause size={14} /> Pause
-                    </button>
+                    <>
+                      <button
+                        onClick={() => runAction(campaign, 'cycle')}
+                        disabled={workingId === campaign.id}
+                        className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm"
+                        style={{ background: 'rgba(6,182,212,0.12)', color: 'var(--cyan)', border: '1px solid rgba(6,182,212,0.25)' }}
+                      >
+                        <Bot size={14} /> Run automation
+                      </button>
+                      <button
+                        onClick={() => runAction(campaign, 'pause')}
+                        disabled={workingId === campaign.id}
+                        className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm"
+                        style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}
+                      >
+                        <Pause size={14} /> Pause
+                      </button>
+                    </>
                   ) : (
                     <button
                       onClick={() => runAction(campaign, 'activate')}
