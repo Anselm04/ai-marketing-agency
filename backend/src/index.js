@@ -21,7 +21,7 @@ import analyticsRoutes from './routes/analytics.js';
 import contentRoutes from './routes/content.js';
 import crmRoutes from './routes/crm.js';
 import billingPublicRoutes from './routes/billingPublic.js';
-import billingRoutes from './routes/billing.js';
+import billingRoutes, { stripeWebhookHandler } from './routes/billing.js';
 import adminRoutes from './routes/admin.js';
 import teamRoutes from './routes/team.js';
 import settingsRoutes from './routes/settings.js';
@@ -102,6 +102,7 @@ app.use(
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan('combined'));
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeBody);
