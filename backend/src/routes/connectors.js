@@ -27,6 +27,7 @@ import {
   deleteWebhook,
 } from '../services/appConnector.js';
 import { logger } from '../utils/logger.js';
+import { videoPlatformCatalog } from '../services/videoPlatformCatalog.js';
 
 const router = express.Router();
 
@@ -122,6 +123,44 @@ router.get('/', authenticate, async (req, res) => {
     connectors,
     connected: connected.length,
     total: connectors.length,
+  });
+});
+
+/**
+ * GET /api/connectors/video-platforms
+ * Complete social-video catalog with truthful connection/publishing capability.
+ */
+router.get('/video-platforms', authenticate, async (req, res) => {
+  const userId = req.user?.id;
+  const platforms = await Promise.all(videoPlatformCatalog.map(async (platform) => {
+    const connector = platform.connectorId ? getConnectorById(platform.connectorId) : null;
+    const tokens = connector ? await getTokens(userId, connector.id) : null;
+    const configured = connector?.auth?.type === 'oauth2'
+      ? Boolean(connectorClientId(connector) && connectorClientSecret(connector))
+      : Boolean(connector);
+
+    return {
+      ...platform,
+      connectorName: connector?.name || null,
+      authType: connector?.auth?.type || 'none',
+      connected: Boolean(tokens),
+      configured,
+      connectable: Boolean(
+        connector
+        && connector.auth?.type === 'oauth2'
+        && configured
+        && ['direct_api', 'adapter_pending', 'restricted_api', 'stream_or_vod_tools'].includes(platform.publish)
+      ),
+      directPublishingReady: platform.publish === 'direct_api',
+    };
+  }));
+
+  res.json({
+    success: true,
+    platforms,
+    total: platforms.length,
+    connected: platforms.filter((platform) => platform.connected).length,
+    directPublishingReady: platforms.filter((platform) => platform.directPublishingReady).length,
   });
 });
 
