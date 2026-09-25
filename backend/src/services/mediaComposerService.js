@@ -4,7 +4,7 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { isS3Configured, uploadToS3 } from './uploadService.js';
+import { isS3Configured, uploadToS3, getSignedDownloadUrl } from './uploadService.js';
 
 const PROCESS_TIMEOUT_MS = Number(process.env.MEDIA_COMPOSE_TIMEOUT_MS) || 15 * 60 * 1000;
 const MAX_ASSETS = Number(process.env.MEDIA_COMPOSE_MAX_ASSETS) || 20;
@@ -59,7 +59,12 @@ function extensionFor(mimetype = '') {
 }
 
 async function downloadAsset(asset, destination) {
-  const response = await axios.get(asset.url, {
+  const sourceUrl = asset.storageKey
+    ? await getSignedDownloadUrl(asset.storageKey, 15 * 60)
+    : asset.url;
+  if (!sourceUrl) throw new Error(`Asset ${asset.id} has no readable source`);
+
+  const response = await axios.get(sourceUrl, {
     responseType: 'arraybuffer',
     timeout: 60_000,
     maxRedirects: 3,
