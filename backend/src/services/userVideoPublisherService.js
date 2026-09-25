@@ -428,9 +428,9 @@ class UserVideoPublisherService {
     if (!mediaId || !uploadUrl || !uploadParameters) throw new Error('Pinterest did not return a media upload session');
 
     const { buffer, contentType } = await fetchMediaBuffer(mediaUrl);
-    const form = new FormData();
+    const form = new globalThis.FormData();
     for (const [key, value] of Object.entries(uploadParameters)) form.append(key, String(value));
-    form.append('file', new Blob([buffer], { type: contentType }), 'video.mp4');
+    form.append('file', new globalThis.Blob([buffer], { type: contentType }), 'video.mp4');
 
     await axios.post(uploadUrl, form, {
       timeout: 5 * 60_000,
