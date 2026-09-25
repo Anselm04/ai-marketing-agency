@@ -1,4 +1,5 @@
 import { generateAgentResponse } from './openaiService.js';
+import socialMediaService from './socialMediaService.js';
 
 const DEFAULT_PLATFORMS = ['TikTok', 'Instagram', 'YouTube'];
 
@@ -165,6 +166,36 @@ class ClippingAgencyService {
       scheduledAt: new Date(startAt.getTime() + index * intervalMinutes * 60_000).toISOString(),
       status: clip.mediaUrl ? 'ready' : 'awaiting_media',
     }));
+  }
+
+  async publishClip(clip = {}) {
+    const results = [];
+    const platforms = normalizePlatforms(clip.platforms);
+
+    for (const platform of platforms) {
+      const key = platform.toLowerCase();
+      if (!clip.mediaUrl) {
+        results.push({ platform: key, success: false, blocked: true, error: 'Rendered media URL is required' });
+        continue;
+      }
+
+      if (key === 'tiktok') {
+        results.push(await socialMediaService.publishTikTok(clip.mediaUrl, clip.caption, clip.hashtags));
+      } else if (key === 'vimeo') {
+        results.push(await socialMediaService.publishVimeo(clip.title, clip.caption, clip.mediaUrl));
+      } else if (key === 'rumble') {
+        results.push(await socialMediaService.publishRumble(clip.title, clip.mediaUrl));
+      } else {
+        results.push({
+          platform: key,
+          success: false,
+          blocked: true,
+          error: 'Video publishing adapter is not production-verified for this platform yet',
+        });
+      }
+    }
+
+    return results;
   }
 
   async optimize(performance = [], campaign = {}) {
