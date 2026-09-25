@@ -168,7 +168,7 @@ class ClippingAgencyService {
     }));
   }
 
-  async publishClip(clip = {}) {
+  async publishClip(clip = {}, publishingSettings = {}) {
     const results = [];
     const platforms = normalizePlatforms(clip.platforms);
 
@@ -180,17 +180,18 @@ class ClippingAgencyService {
       }
 
       if (key === 'tiktok') {
-        results.push(await socialMediaService.publishTikTok(clip.mediaUrl, clip.caption, clip.hashtags));
-      } else if (key === 'vimeo') {
-        results.push(await socialMediaService.publishVimeo(clip.title, clip.caption, clip.mediaUrl));
-      } else if (key === 'rumble') {
-        results.push(await socialMediaService.publishRumble(clip.title, clip.mediaUrl));
+        results.push(await socialMediaService.publishTikTok(
+          clip.mediaUrl,
+          clip.caption,
+          clip.hashtags,
+          publishingSettings.tiktok || {},
+        ));
       } else {
         results.push({
           platform: key,
           success: false,
           blocked: true,
-          error: 'Video publishing adapter is not production-verified for this platform yet',
+          error: 'Direct video publishing is not production-verified for this platform yet',
         });
       }
     }
