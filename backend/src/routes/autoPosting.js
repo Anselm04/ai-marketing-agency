@@ -4,6 +4,7 @@ import store from '../utils/store.js';
 import autoPostingService, { CADENCE_LIMITS } from '../services/autoPostingService.js';
 import { videoPlatformCatalog } from '../services/videoPlatformCatalog.js';
 import { getTokens } from '../services/appConnector.js';
+import autoPostingAnalyticsService from '../services/autoPostingAnalyticsService.js';
 
 const router = express.Router();
 
@@ -92,7 +93,16 @@ router.post('/', async (req, res) => {
     completedPosts: 0,
     rotationIndex: 0,
     nextRunAt: normalized.enabled
-      ? (normalized.startImmediately ? new Date(now).toISOString() : autoPostingService.nextRunAt(normalized, now))
+      ? (
+        normalized.startImmediately
+          && autoPostingService.isHourInWindow(
+            autoPostingService.localHourAt(now, normalized.timezone),
+            normalized.postingWindowStartHour,
+            normalized.postingWindowEndHour,
+          )
+          ? new Date(now).toISOString()
+          : autoPostingService.nextRunAt(normalized, now - (normalized.intervalMinutes * 60 * 1000))
+      )
       : null,
     recentRuns: [],
     createdAt: new Date().toISOString(),
@@ -129,6 +139,45 @@ router.patch('/:id', async (req, res) => {
     updatedAt: new Date().toISOString(),
   });
   res.json(updated);
+});
+
+
+router.get('/:id/analytics', async (req, res) => {
+  const plan = await ownedPlan(req, res);
+  if (!plan) return;
+
+  try {
+    const analytics = await autoPostingAnalyticsService.getPlanAnalytics(ownerId(req), plan.id);
+    const recommendation = await autoPostingAnalyticsService.recommend(ownerId(req), plan.id);
+    res.json({ analytics, recommendation });
+  } catch (error) {
+    res.status(422).json({ error: error.message });
+  }
+});
+
+router.post('/:id/metrics', async (req, res) => {
+  const plan = await ownedPlan(req, res);
+  if (!plan) return;
+
+  const { runId, platformId, metrics, observedAt } = req.body || {};
+  if (!runId || !platformId || !metrics || typeof metrics !== 'object') {
+    return res.status(400).json({ error: 'runId, platformId and metrics are required' });
+  }
+
+  try {
+    const record = await autoPostingAnalyticsService.recordMetrics({
+      owner: ownerId(req),
+      planId: plan.id,
+      runId,
+      platformId,
+      metrics,
+      observedAt,
+    });
+    const analytics = await autoPostingAnalyticsService.getPlanAnalytics(ownerId(req), plan.id);
+    res.status(201).json({ record, analytics });
+  } catch (error) {
+    res.status(422).json({ error: error.message });
+  }
 });
 
 router.post('/:id/run-now', async (req, res) => {
