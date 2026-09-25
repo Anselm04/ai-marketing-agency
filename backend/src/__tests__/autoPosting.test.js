@@ -2,6 +2,7 @@
 import request from 'supertest';
 import app from '../index.js';
 import autoPostingService, { CADENCE_LIMITS } from '../services/autoPostingService.js';
+import { scoreMetrics } from '../services/autoPostingAnalyticsService.js';
 
 describe('Automated posting scheduler', () => {
   let token;
@@ -41,13 +42,34 @@ describe('Automated posting scheduler', () => {
     expect(monthly.intervalMinutes).toBe(1440);
   });
 
-  test('computes the next recurring run from the selected cadence', () => {
+  test('keeps recurring runs inside the user preferred posting window', () => {
     const from = Date.parse('2026-09-25T00:00:00.000Z');
     const plan = autoPostingService.normalizePlan({
       cadence: 'daily',
       postsPerPeriod: 4,
+      timezone: 'UTC',
+      postingWindowStartHour: 8,
+      postingWindowEndHour: 21,
     });
-    expect(autoPostingService.nextRunAt(plan, from)).toBe('2026-09-25T06:00:00.000Z');
+    expect(autoPostingService.nextRunAt(plan, from)).toBe('2026-09-25T08:00:00.000Z');
+  });
+
+  test('can favor a learned best hour while remaining inside the allowed window', () => {
+    const from = Date.parse('2026-09-25T08:00:00.000Z');
+    const plan = autoPostingService.normalizePlan({
+      cadence: 'daily',
+      postsPerPeriod: 2,
+      timezone: 'UTC',
+      postingWindowStartHour: 8,
+      postingWindowEndHour: 21,
+    });
+    expect(autoPostingService.nextRunAt(plan, from, [19])).toBe('2026-09-25T19:00:00.000Z');
+  });
+
+  test('calculates a performance score from engagement and conversion metrics', () => {
+    const low = scoreMetrics({ views: 100, likes: 1, clicks: 1 });
+    const high = scoreMetrics({ views: 100, likes: 10, shares: 5, clicks: 10, conversions: 2 });
+    expect(high).toBeGreaterThan(low);
   });
 
   test('exposes cadence limits to authenticated users', async () => {
