@@ -96,13 +96,16 @@ router.post('/', async (req, res) => {
     nextRunAt: normalized.enabled
       ? (
         normalized.startImmediately
-          && autoPostingService.isHourInWindow(
-            autoPostingService.localHourAt(now, normalized.timezone),
-            normalized.postingWindowStartHour,
-            normalized.postingWindowEndHour,
+          ? (
+            autoPostingService.isHourInWindow(
+              autoPostingService.localHourAt(now, normalized.timezone),
+              normalized.postingWindowStartHour,
+              normalized.postingWindowEndHour,
+            )
+              ? new Date(now).toISOString()
+              : autoPostingService.nextRunAt(normalized, now - (normalized.intervalMinutes * 60 * 1000))
           )
-          ? new Date(now).toISOString()
-          : autoPostingService.nextRunAt(normalized, now - (normalized.intervalMinutes * 60 * 1000))
+          : autoPostingService.nextRunAt(normalized, now)
       )
       : null,
     recentRuns: [],
@@ -135,7 +138,22 @@ router.patch('/:id', async (req, res) => {
     ...normalized,
     status: normalized.enabled ? 'running' : 'paused',
     nextRunAt: normalized.enabled
-      ? (enabledChanged ? new Date().toISOString() : existing.nextRunAt || autoPostingService.nextRunAt(normalized))
+      ? (
+        enabledChanged
+          ? (
+            autoPostingService.isHourInWindow(
+              autoPostingService.localHourAt(Date.now(), normalized.timezone),
+              normalized.postingWindowStartHour,
+              normalized.postingWindowEndHour,
+            )
+              ? new Date().toISOString()
+              : autoPostingService.nextRunAt(
+                normalized,
+                Date.now() - (normalized.intervalMinutes * 60 * 1000),
+              )
+          )
+          : existing.nextRunAt || autoPostingService.nextRunAt(normalized)
+      )
       : null,
     updatedAt: new Date().toISOString(),
   });
