@@ -22,6 +22,13 @@ api.interceptors.response.use(
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
+    if (
+      error.response?.status === 402
+      && error.response?.data?.code === 'marketing_entitlement_required'
+      && !window.location.pathname.startsWith('/dashboard/billing')
+    ) {
+      window.location.href = '/dashboard/billing?access=required';
+    }
     return Promise.reject(error);
   }
 );
