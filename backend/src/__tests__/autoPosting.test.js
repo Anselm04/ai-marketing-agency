@@ -1,6 +1,7 @@
 
 import request from 'supertest';
 import app from '../index.js';
+import store from '../utils/store.js';
 import autoPostingService, { CADENCE_LIMITS } from '../services/autoPostingService.js';
 import { scoreMetrics } from '../services/autoPostingAnalyticsService.js';
 
@@ -18,6 +19,15 @@ describe('Automated posting scheduler', () => {
         lastName: 'Posting',
       });
     token = res.body.token;
+    const user = await store.findUserByEmail(email);
+    await store.createSubscription({
+      userId: user.id,
+      user: user.id,
+      plan: 'starter',
+      status: 'active',
+      source: 'test',
+      expiresAt: null,
+    });
   });
 
   test('normalizes cadence and enforces posting limits', () => {
