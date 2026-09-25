@@ -36,7 +36,7 @@ export const videoPlatformCatalog = [
   { id: 'bigo_live', name: 'BIGO LIVE', category: 'live', access: 'platform_specific', publish: 'stream_only', formats: ['live'] },
   { id: 'amazon_live', name: 'Amazon Live', category: 'live', access: 'creator_program', publish: 'restricted_api', formats: ['live'] },
   { id: 'bilibili', name: 'Bilibili', category: 'live', access: 'regional_platform', publish: 'restricted_api', formats: ['video', 'live'] },
-  { id: 'dailymotion', name: 'Dailymotion', category: 'live', connectorId: 'dailymotion', access: 'user_oauth', publish: 'direct_api', formats: ['video'] },
+  { id: 'dailymotion', name: 'Dailymotion', category: 'live', access: 'publisher_api', publish: 'restricted_api', formats: ['video'], note: 'Current API v2 uses private API keys/client credentials for publishing; user authorization-code support is not generally available yet.' },
   { id: 'rumble', name: 'Rumble', category: 'live', access: 'platform_specific', publish: 'no_verified_public_upload_api', formats: ['video', 'live'] },
   { id: 'kakaotv', name: 'KakaoTV', category: 'live', access: 'regional_platform', publish: 'restricted_api', formats: ['video', 'live'] },
   { id: 'naver_tv', name: 'Naver TV', category: 'live', access: 'regional_platform', publish: 'restricted_api', formats: ['video', 'live'] },
