@@ -18,6 +18,8 @@ export default function Admin() {
   const [analytics, setAnalytics] = useState(null)
   const [codes, setCodes] = useState([])
   const [sku, setSku] = useState('starter')
+  const [lifetimeAccess, setLifetimeAccess] = useState(true)
+  const [durationDays, setDurationDays] = useState(30)
   const [minted, setMinted] = useState(null)
   const [ownerCode, setOwnerCode] = useState('')
   const [ownerCodeMessage, setOwnerCodeMessage] = useState('')
@@ -39,7 +41,12 @@ export default function Admin() {
     setError('')
     setMinted(null)
     try {
-      const res = await api.post('/admin/god-codes', { sku })
+      const isPlan = !sku.startsWith('credits_')
+      const res = await api.post('/admin/god-codes', {
+        sku,
+        accessMode: isPlan && !lifetimeAccess ? 'timed' : 'lifetime',
+        durationDays: isPlan && !lifetimeAccess ? durationDays : undefined,
+      })
       setMinted(res.data)
     } catch (err) {
       setError(err.response?.data?.error || 'Mint failed')
@@ -190,18 +197,85 @@ export default function Admin() {
                   ))}
                 </select>
               </label>
-              <button type="button" onClick={mint} disabled={busy}
-                className="px-4 py-2 text-sm tracking-widest uppercase"
-                style={{ background: 'var(--gold)', color: '#140f08' }}>
-                {busy ? 'Minting…' : 'Mint code'}
-              </button>
             </div>
+
+            {!sku.startsWith('credits_') ? (
+              <div className="space-y-4 rounded-lg p-4" style={{ border: '1px solid var(--line)' }}>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--gold-bright)' }}>Access duration</div>
+                    <div className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      Choose temporary personal access or lifetime access before generating the code.
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs" style={{ color: !lifetimeAccess ? 'var(--cyan)' : 'var(--text-muted)' }}>Timed</span>
+                    <button
+                      type="button"
+                      aria-label="Toggle lifetime access"
+                      aria-pressed={lifetimeAccess}
+                      onClick={() => setLifetimeAccess((value) => !value)}
+                      className="relative h-7 w-12 rounded-full transition-colors"
+                      style={{ background: lifetimeAccess ? 'var(--gold)' : 'var(--cyan)' }}
+                    >
+                      <span
+                        className={'absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ' + (lifetimeAccess ? 'translate-x-6' : 'translate-x-1')}
+                      />
+                    </button>
+                    <span className="text-xs" style={{ color: lifetimeAccess ? 'var(--gold-bright)' : 'var(--text-muted)' }}>Lifetime</span>
+                  </div>
+                </div>
+
+                {!lifetimeAccess && (
+                  <label className="block text-sm">
+                    <div className="mb-2 flex items-center justify-between gap-3" style={{ color: 'var(--text-muted)' }}>
+                      <span>Personal access duration</span>
+                      <strong style={{ color: 'var(--cyan)' }}>{durationDays} day{durationDays === 1 ? '' : 's'}</strong>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="365"
+                      step="1"
+                      value={durationDays}
+                      onChange={(event) => setDurationDays(Number(event.target.value))}
+                      className="w-full"
+                    />
+                    <div className="mt-1 flex justify-between text-[11px]" style={{ color: 'var(--text-dim)' }}>
+                      <span>1 day</span>
+                      <span>365 days</span>
+                    </div>
+                  </label>
+                )}
+
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {lifetimeAccess
+                    ? 'This code will grant the selected Marketing plan with no access expiry.'
+                    : 'The access timer starts when the code is redeemed, not when you generate it.'}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg p-3 text-xs" style={{ border: '1px solid var(--line)', color: 'var(--text-muted)' }}>
+                Credit-pack codes add credits once. Access duration applies only to Marketing plan codes.
+              </div>
+            )}
+
+            <button type="button" onClick={mint} disabled={busy}
+              className="px-4 py-2 text-sm tracking-widest uppercase"
+              style={{ background: 'var(--gold)', color: '#140f08' }}>
+              {busy ? 'Minting…' : 'Mint code'}
+            </button>
             {error && <p className="text-sm text-red-500">{error}</p>}
             {minted?.code && (
               <div className="p-4" style={{ border: '1px solid var(--gold)' }}>
                 <div className="text-xs tracking-widest uppercase" style={{ color: 'var(--cyan)' }}>Shown once — copy now</div>
                 <div className="text-2xl font-mono mt-2" style={{ color: 'var(--gold-bright)' }}>{minted.code}</div>
                 <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{SKU_LABELS[minted.sku] || minted.sku}</div>
+                {!String(minted.sku || '').startsWith('credits_') && (
+                  <div className="text-sm mt-1" style={{ color: 'var(--cyan)' }}>
+                    {minted.accessMode === 'timed' ? minted.durationDays + ' days access from redemption' : 'Lifetime access'}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -210,6 +284,7 @@ export default function Admin() {
               <tr style={{ color: 'var(--cyan)' }}>
                 <th className="text-left p-2">SKU</th>
                 <th className="text-left p-2">Status</th>
+                <th className="text-left p-2">Access</th>
                 <th className="text-left p-2">Created</th>
                 <th className="text-left p-2">Redeemed</th>
               </tr>
@@ -219,6 +294,13 @@ export default function Admin() {
                 <tr key={c.id} style={{ borderTop: '1px solid var(--line)' }}>
                   <td className="p-2">{SKU_LABELS[c.sku] || c.sku}</td>
                   <td className="p-2">{c.status}</td>
+                  <td className="p-2">
+                    {String(c.sku || '').startsWith('credits_')
+                      ? 'One-time credits'
+                      : c.accessMode === 'timed'
+                        ? c.durationDays + ' days'
+                        : 'Lifetime'}
+                  </td>
                   <td className="p-2">{c.createdAt ? new Date(c.createdAt).toLocaleString() : '—'}</td>
                   <td className="p-2">{c.redeemedAt ? new Date(c.redeemedAt).toLocaleString() : '—'}</td>
                 </tr>
