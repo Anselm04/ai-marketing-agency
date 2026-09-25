@@ -16,7 +16,35 @@ const MAX_SOURCE_SECONDS = Number(process.env.CLIPPING_MAX_SOURCE_SECONDS) || 4 
 const TRANSCRIPTION_CHUNK_SECONDS = Number(process.env.CLIPPING_TRANSCRIPTION_CHUNK_SECONDS) || 15 * 60;
 const PROCESS_TIMEOUT_MS = Number(process.env.CLIPPING_PROCESS_TIMEOUT_MS) || 15 * 60 * 1000;
 
-function assertHttpSource(sourceUrl) {
+function configuredSourceHosts() {
+  const hosts = String(process.env.CLIPPING_SOURCE_HOST_ALLOWLIST || '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (process.env.S3_PUBLIC_BASE_URL) {
+    try {
+      hosts.push(new URL(process.env.S3_PUBLIC_BASE_URL).hostname.toLowerCase());
+    } catch {
+      // Environment validation elsewhere will surface malformed storage configuration.
+    }
+  }
+
+  return [...new Set(hosts)];
+}
+
+function hostAllowed(hostname, allowlist) {
+  const host = hostname.toLowerCase();
+  return allowlist.some((allowed) => {
+    if (allowed.startsWith('*.')) {
+      const suffix = allowed.slice(1);
+      return host.endsWith(suffix) && host.length > suffix.length;
+    }
+    return host === allowed;
+  });
+}
+
+export function assertHttpSource(sourceUrl) {
   let parsed;
   try {
     parsed = new URL(sourceUrl);
@@ -26,6 +54,29 @@ function assertHttpSource(sourceUrl) {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new Error('Source URL must use http or https');
   }
+  if (parsed.username || parsed.password) {
+    throw new Error('Source URL credentials are not allowed');
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const blockedHosts = new Set(['localhost', 'localhost.localdomain', '0.0.0.0', '::1']);
+  const privateIpv4 = /^(?:10\.|127\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
+  if (blockedHosts.has(host) || privateIpv4.test(host)) {
+    throw new Error('Private or loopback source URLs are not allowed');
+  }
+
+  const allowlist = configuredSourceHosts();
+  if (process.env.NODE_ENV === 'production') {
+    if (allowlist.length === 0) {
+      throw new Error('CLIPPING_SOURCE_HOST_ALLOWLIST or S3_PUBLIC_BASE_URL is required in production');
+    }
+    if (!hostAllowed(host, allowlist)) {
+      throw new Error('Source URL host is not approved for production clipping');
+    }
+  } else if (allowlist.length > 0 && !hostAllowed(host, allowlist)) {
+    throw new Error('Source URL host is not in CLIPPING_SOURCE_HOST_ALLOWLIST');
+  }
+
   return parsed.toString();
 }
 
