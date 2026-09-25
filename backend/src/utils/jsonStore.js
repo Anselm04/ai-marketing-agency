@@ -357,9 +357,18 @@ const store = {
   getSettings() {
     return Promise.resolve(settings);
   },
+  getSetting(key) {
+    return Promise.resolve(settings[key] ?? null);
+  },
   async setSettings(key, value) {
     settings[key] = value;
     this._save();
+  },
+  async deleteSetting(key) {
+    if (!(key in settings)) return false;
+    delete settings[key];
+    this._save();
+    return true;
   },
 
   getGodCodes() {
