@@ -30,7 +30,16 @@ export async function redeemGodCodeForUser(userId, rawCode) {
   const item = resolveGrantItem(found);
   if (!item) throw new Error(REDEEM_FAIL);
 
-  const now = new Date().toISOString();
+  const redeemedAt = new Date();
+  const now = redeemedAt.toISOString();
+  const accessMode = found.accessMode === 'timed' ? 'timed' : 'lifetime';
+  const durationDays = accessMode === 'timed' ? Number(found.durationDays) : null;
+  if (accessMode === 'timed' && (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365)) {
+    throw new Error(REDEEM_FAIL);
+  }
+  const expiresAt = accessMode === 'timed'
+    ? new Date(redeemedAt.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString()
+    : null;
   const updated = await store.updateGodCode(found.id, {
     encryptedCode: null,
     redeemedAt: now,
@@ -59,7 +68,10 @@ export async function redeemGodCodeForUser(userId, rawCode) {
       godGrant: item.id,
       lookup_key: item.lookup_key,
       unlimited: item.id === 'enterprise',
-      expiresAt: null,
+      accessMode,
+      lifetimeAccess: accessMode === 'lifetime',
+      durationDays,
+      expiresAt,
     };
     if (subscription) subscription = await store.updateSubscription(subscription.id, grant);
     else subscription = await store.createSubscription(grant);
@@ -80,8 +92,27 @@ export async function redeemGodCodeForUser(userId, rawCode) {
     name: item.name,
     credits: nextCredits,
     addedCredits: creditAdd,
+    accessMode,
+    durationDays,
+    expiresAt,
     subscription: subscription || { status: 'none' },
   };
+}
+
+export async function normalizeSubscriptionAccess(subscription) {
+  if (!subscription || subscription.status === 'none') return subscription;
+  if (
+    subscription.source === 'god-code'
+    && subscription.expiresAt
+    && new Date(subscription.expiresAt).getTime() <= Date.now()
+    && subscription.status === 'active'
+  ) {
+    return store.updateSubscription(subscription.id, {
+      status: 'expired',
+      expiredAt: new Date().toISOString(),
+    });
+  }
+  return subscription;
 }
 
 export { REDEEM_FAIL };
