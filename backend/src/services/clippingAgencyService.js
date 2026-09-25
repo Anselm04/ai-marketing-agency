@@ -1,5 +1,5 @@
 import { generateAgentResponse } from './openaiService.js';
-import socialMediaService from './socialMediaService.js';
+import userVideoPublisherService from './userVideoPublisherService.js';
 
 const DEFAULT_PLATFORMS = ['TikTok', 'Instagram', 'YouTube'];
 
@@ -168,48 +168,20 @@ class ClippingAgencyService {
     }));
   }
 
-  async publishClip(clip = {}, publishingSettings = {}) {
+  async publishClip(userId, clip = {}, publishingSettings = {}) {
     const results = [];
     const platforms = normalizePlatforms(clip.platforms);
 
     for (const platform of platforms) {
-      const key = platform.toLowerCase();
-      if (!clip.mediaUrl) {
-        results.push({ platform: key, success: false, blocked: true, error: 'Rendered media URL is required' });
-        continue;
-      }
-
-      if (key === 'tiktok') {
-        results.push(await socialMediaService.publishTikTok(
-          clip.mediaUrl,
-          clip.caption,
-          clip.hashtags,
-          publishingSettings.tiktok || {},
-        ));
-      } else if (key === 'instagram') {
-        results.push(await socialMediaService.publishInstagramReel(
-          clip.mediaUrl,
-          [clip.caption, ...(clip.hashtags || [])].filter(Boolean).join(' '),
-          publishingSettings.instagram || {},
-        ));
-      } else if (key === 'youtube') {
-        results.push(await socialMediaService.publishYouTube(
-          clip.title,
-          [clip.caption, ...(clip.hashtags || [])].filter(Boolean).join(' '),
-          clip.mediaUrl,
-          {
-            tags: (clip.hashtags || []).map((tag) => String(tag).replace(/^#/, '')),
-            ...(publishingSettings.youtube || {}),
-          },
-        ));
-      } else {
-        results.push({
-          platform: key,
-          success: false,
-          blocked: true,
-          error: 'Direct video publishing is not production-verified for this platform yet',
-        });
-      }
+      results.push(await userVideoPublisherService.publish({
+        userId,
+        platformId: platform,
+        mediaUrl: clip.mediaUrl,
+        title: clip.title,
+        caption: clip.caption,
+        hashtags: clip.hashtags,
+        settings: publishingSettings[String(platform).toLowerCase()] || {},
+      }));
     }
 
     return results;

@@ -42,6 +42,8 @@ import realtimeRoutes from './routes/realtime.js';
 import affiliateRoutes from './routes/affiliate.js';
 import appforgeIntegrationRoutes from './routes/appforgeIntegration.js';
 import clippingRoutes from './routes/clipping.js';
+import socialVideoRoutes from './routes/socialVideo.js';
+import mediaLibraryRoutes from './routes/mediaLibrary.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
@@ -156,6 +158,8 @@ app.use('/api/search', searchRoutes);
 app.use('/api/realtime', realtimeRoutes);
 app.use('/api/affiliate', affiliateRoutes);
 app.use('/api/clipping', clippingRoutes);
+app.use('/api/social-video', socialVideoRoutes);
+app.use('/api/media-library', mediaLibraryRoutes);
 
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist, { index: false, maxAge: '1h' }));

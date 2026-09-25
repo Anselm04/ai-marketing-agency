@@ -34,6 +34,8 @@ import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
 import AIModels from './pages/AIModels'
 import Connectors from './pages/Connectors'
+import SocialVideoPublisher from './pages/SocialVideoPublisher'
+import MediaLibrary from './pages/MediaLibrary'
 import ClippingAgency from './pages/ClippingAgency'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
 
@@ -86,6 +88,8 @@ function AppRoutes() {
         <Route path="admin" element={<Admin />} />
         <Route path="ai-models" element={<AIModels />} />
         <Route path="connectors" element={<Connectors />} />
+        <Route path="video-distribution" element={<SocialVideoPublisher />} />
+        <Route path="media-library" element={<MediaLibrary />} />
         <Route path="clipping" element={<ClippingAgency />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

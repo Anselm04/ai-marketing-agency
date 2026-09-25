@@ -230,6 +230,7 @@ router.post('/campaigns/:id/publish/:clipId', async (req, res) => {
   }
 
   const results = await clippingAgencyService.publishClip(
+    ownerId(req),
     clip,
     campaign.publishingSettings || {},
   );
