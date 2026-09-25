@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import api from '../services/api'
 import { useToast } from '../context/ToastContext'
+import { useAuth } from '../context/AuthContext'
 
 const platforms = [
   { id: 'TikTok', label: 'TikTok', icon: Zap },
@@ -44,7 +45,19 @@ export default function ProductMarketing() {
   const [copied, setCopied] = useState(null)
   const fileInputRef = useRef(null)
   const { addToast } = useToast()
+  const { isOwner } = useAuth()
+  const [ownerPortfolio, setOwnerPortfolio] = useState([])
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!isOwner) {
+      setOwnerPortfolio([])
+      return
+    }
+    api.get('/products/portfolio')
+      .then((res) => setOwnerPortfolio(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setOwnerPortfolio([]))
+  }, [isOwner])
 
   // Voice recording setup
   useEffect(() => {
@@ -470,6 +483,39 @@ export default function ProductMarketing() {
           <button type="button" onClick={() => setForm(prev => ({ ...prev, productName: 'TrillionAI Marketing', category: 'software', targetAudience: 'Founders and agencies who need autonomous social, ads, and SEO', description: 'TrillionAI Marketing by TrillionAI Tech is an autonomous marketing platform for social, ads, and SEO. Create an account, subscribe, and launch campaigns from this app. Campaigns are not already running.' }))} className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">Fill TrillionAI Marketing</button>
         </div>
       </div>
+
+      {isOwner && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-amber-300 dark:border-amber-800 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-medium text-gray-900 dark:text-gray-100">My AppForge Marketing Portfolio</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Only products created for your canonical AppForge owner account are admitted here. Other AppForge users' products are ignored by automatic portfolio intake and advertising.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+              {ownerPortfolio.length} product{ownerPortfolio.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          {ownerPortfolio.length > 0 && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {ownerPortfolio.slice(0, 6).map((product) => (
+                <div key={product.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                  <div className="font-medium text-gray-900 dark:text-gray-100">{product.productName}</div>
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    AppForge #{product.sourceProjectId} · {product.marketingStatus || 'ready'}
+                  </div>
+                  {product.productUrl && (
+                    <a href={product.productUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400">
+                      Open product <ArrowRight size={12} />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Photo Upload */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">

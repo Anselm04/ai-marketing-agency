@@ -4,6 +4,7 @@ import productMarketingService from '../services/productMarketingService.js';
 import { requireEcosystemSignature } from '../services/ecosystemSignature.js';
 import { withEcosystemLock } from '../services/ecosystemLock.js';
 import { logger } from '../utils/logger.js';
+import { canonicalOwnerEmail, isOwnerEmail } from '../utils/owner.js';
 
 const router = express.Router();
 
@@ -60,19 +61,70 @@ router.post('/campaign', async (req, res) => {
   }
 
   const normalizedEmail = sourceUserEmail.trim().toLowerCase();
-  const marketingUser = await store.findUserByEmail(normalizedEmail);
+
+  // AppForge may build products for many customers, but automatic portfolio intake
+  // and advertising are deliberately restricted to the canonical TrillionAI owner.
+  // Non-owner AppForge products are acknowledged and ignored so they can never be
+  // silently added to or marketed from the owner's personal Marketing account.
+  if (!isOwnerEmail(normalizedEmail)) {
+    logger.info('Ignored non-owner AppForge product for automatic Marketing intake', {
+      sourceProjectId,
+    });
+    return res.status(202).json({
+      success: true,
+      accepted: true,
+      ownerPortfolioAdded: false,
+      automatedMarketing: false,
+      code: 'non_owner_appforge_product_ignored',
+    });
+  }
+
+  const marketingUser = await store.findUserByEmail(canonicalOwnerEmail());
   if (!marketingUser) {
     return res.status(409).json({
-      error: 'Matching TrillionAI Marketing account required',
-      code: 'marketing_account_required',
+      error: 'Owner TrillionAI Marketing account required',
+      code: 'owner_marketing_account_required',
     });
   }
 
   const sourceRequestId = `appforge:${sourceProjectId}:${sourceProjectCreatedAt || 'unknown'}`;
+  const portfolioKey = `appforge-product:${sourceProjectId}`;
 
   try {
     return await withEcosystemLock(sourceRequestId, async () => {
-      const campaigns = await store.getCampaigns();
+      const ownerContent = await store.getContentByOwner(marketingUser.id);
+      const existingPortfolio = ownerContent.find(
+        (item) => item.kind === 'owner_portfolio_product' && item.portfolioKey === portfolioKey,
+      );
+
+      const portfolioPayload = {
+        kind: 'owner_portfolio_product',
+        owner: marketingUser.id,
+        ownerId: marketingUser.id,
+        portfolioKey,
+        source: 'appforge',
+        sourceProjectId,
+        sourceProjectCreatedAt: sourceProjectCreatedAt || null,
+        sourceUserEmail: canonicalOwnerEmail(),
+        sourceUserName: typeof sourceUserName === 'string' ? sourceUserName : '',
+        productName: productName.trim(),
+        description: typeof description === 'string' ? description.trim() : '',
+        techStack: typeof techStack === 'string' ? techStack : '',
+        productUrl: typeof productUrl === 'string' ? productUrl : '',
+        autoMarketingEligible: true,
+        ownerOnly: true,
+        marketingStatus: mode === 'generate' ? 'campaign_requested' : 'ready',
+        updatedAt: new Date().toISOString(),
+      };
+
+      const portfolioProduct = existingPortfolio
+        ? await store.updateContent(existingPortfolio.id, portfolioPayload)
+        : await store.createContent({
+            ...portfolioPayload,
+            createdAt: new Date().toISOString(),
+          });
+
+      const campaigns = await store.getCampaignsByOwner(marketingUser.id);
       const existing = campaigns.find(
         (campaign) =>
           campaign.owner === marketingUser.id &&
@@ -84,6 +136,9 @@ router.post('/campaign', async (req, res) => {
           success: true,
           replayed: true,
           campaign: existing,
+          portfolioProduct,
+          ownerPortfolioAdded: true,
+          automatedMarketing: existing.status !== 'draft',
         });
       }
 
@@ -109,6 +164,8 @@ router.post('/campaign', async (req, res) => {
           sourceUserName: typeof sourceUserName === 'string' ? sourceUserName : '',
           techStack: typeof techStack === 'string' ? techStack : '',
           productUrl: typeof productUrl === 'string' ? productUrl : '',
+          portfolioProductId: portfolioProduct.id,
+          ownerPortfolioProduct: true,
         });
 
         logger.info('Generated marketing campaign from AppForge project', {
@@ -117,9 +174,18 @@ router.post('/campaign', async (req, res) => {
           campaignId: campaign?.id,
         });
 
+        await store.updateContent(portfolioProduct.id, {
+          marketingStatus: 'campaign_generated',
+          campaignId: campaign?.id || null,
+          updatedAt: new Date().toISOString(),
+        });
+
         return res.status(201).json({
           success: true,
           replayed: false,
+          ownerPortfolioAdded: true,
+          automatedMarketing: true,
+          portfolioProduct,
           campaign,
           generated: {
             contentItems: generated.contentItems?.length || 0,
@@ -149,6 +215,8 @@ router.post('/campaign', async (req, res) => {
         sourceUserName: typeof sourceUserName === 'string' ? sourceUserName : '',
         techStack: typeof techStack === 'string' ? techStack : '',
         productUrl: typeof productUrl === 'string' ? productUrl : '',
+        portfolioProductId: portfolioProduct.id,
+        ownerPortfolioProduct: true,
       });
 
       logger.info('Created marketing draft from AppForge project', {
@@ -157,9 +225,18 @@ router.post('/campaign', async (req, res) => {
         campaignId: campaign.id,
       });
 
+      await store.updateContent(portfolioProduct.id, {
+        marketingStatus: 'draft_created',
+        campaignId: campaign.id,
+        updatedAt: new Date().toISOString(),
+      });
+
       return res.status(201).json({
         success: true,
         replayed: false,
+        ownerPortfolioAdded: true,
+        automatedMarketing: false,
+        portfolioProduct,
         campaign,
       });
     });
