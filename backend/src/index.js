@@ -145,6 +145,7 @@ app.use(async (req, res, next) => {
   const freeAccountPaths = [
     '/api/billing',
     '/api/settings',
+    '/api/admin',
   ];
   const isPersonalPortfolioRead =
     req.method === 'GET' && req.path === '/api/products/portfolio';
