@@ -5,6 +5,7 @@ import autoPostingService, { CADENCE_LIMITS } from '../services/autoPostingServi
 import { videoPlatformCatalog } from '../services/videoPlatformCatalog.js';
 import { getTokens } from '../services/appConnector.js';
 import autoPostingAnalyticsService from '../services/autoPostingAnalyticsService.js';
+import socialPerformanceSyncService from '../services/socialPerformanceSyncService.js';
 
 const router = express.Router();
 
@@ -141,6 +142,25 @@ router.patch('/:id', async (req, res) => {
   res.json(updated);
 });
 
+
+router.post('/:id/sync-analytics', async (req, res) => {
+  const plan = await ownedPlan(req, res);
+  if (!plan) return;
+
+  try {
+    const sync = await socialPerformanceSyncService.syncPlan(plan);
+    await store.updateContent(plan.id, {
+      lastMetricsSyncAt: sync.syncedAt,
+      lastMetricsSyncSummary: sync,
+      updatedAt: new Date().toISOString(),
+    });
+    const analytics = await autoPostingAnalyticsService.getPlanAnalytics(ownerId(req), plan.id);
+    const recommendation = await autoPostingAnalyticsService.recommend(ownerId(req), plan.id);
+    res.json({ sync, analytics, recommendation });
+  } catch (error) {
+    res.status(422).json({ error: error.message });
+  }
+});
 
 router.get('/:id/analytics', async (req, res) => {
   const plan = await ownedPlan(req, res);
