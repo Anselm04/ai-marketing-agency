@@ -47,7 +47,7 @@ function appforgeBody({ email, projectId, mode = 'draft', name = 'Portfolio Prod
 
 describe('Personal AppForge portfolio and Marketing entitlement', () => {
   beforeAll(async () => {
-    await ensureUser(canonicalOwnerEmail(), 'OwnerPortfolioTest123!');
+    await ensureUser(canonicalOwnerEmail(), 'OwnerSecurePass123!');
   });
 
   test('owner products retain permanent Marketing access without a paid subscription', async () => {
