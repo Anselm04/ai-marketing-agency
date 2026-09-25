@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { ArrowLeft, Database, LockKeyhole, Save, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 function hourLabel(hour) {
   const value = Number(hour);
@@ -11,6 +13,8 @@ function hourLabel(hour) {
 }
 
 export default function Settings() {
+  const { setTheme } = useTheme();
+  const { setLang, langs } = useLanguage();
   const [profile, setProfile] = useState(null);
   const [memory, setMemory] = useState(null);
   const [form, setForm] = useState(null);
@@ -59,6 +63,8 @@ export default function Settings() {
     try {
       const res = await api.patch('/settings/profile', form);
       setProfile(res.data);
+      setTheme(form.theme);
+      setLang(form.language);
       setMessage('Your account settings have been saved securely.');
       const memoryRes = await api.get('/settings/account-memory');
       setMemory(memoryRes.data);
@@ -135,11 +141,15 @@ export default function Settings() {
               </label>
               <label className="text-sm">
                 <span className="mb-1 block text-gray-600 dark:text-gray-300">Language</span>
-                <input
+                <select
                   value={form.language}
                   onChange={(e) => setForm({ ...form, language: e.target.value })}
                   className="w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 dark:border-gray-700"
-                />
+                >
+                  {langs.map((item) => (
+                    <option key={item.code} value={item.code}>{item.name}</option>
+                  ))}
+                </select>
               </label>
               <label className="text-sm">
                 <span className="mb-1 block text-gray-600 dark:text-gray-300">Time zone</span>

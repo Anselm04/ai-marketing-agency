@@ -41,7 +41,7 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, logout, isOwner } = useAuth()
-  const { theme, toggleTheme } = useTheme()
+  const { isDark, toggleTheme } = useTheme()
   const { t } = useLanguage()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -69,7 +69,7 @@ export default function Layout() {
         <h1 className="text-lg font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>TrillionAI Marketing</h1>
         <div className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm"
           style={{ background: 'rgba(196,163,90,0.2)', color: 'var(--gold)' }}>
-          {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+          {user?.profile?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
         </div>
       </div>
 
@@ -111,10 +111,10 @@ export default function Layout() {
               onClick={toggleTheme}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
               style={{ color: 'var(--text-muted)' }}
-              aria-label={theme === 'dark' ? t('day') : t('night')}
+              aria-label={isDark ? t('day') : t('night')}
             >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-              {theme === 'dark' ? t('day') : t('night')}
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              {isDark ? t('day') : t('night')}
             </button>
             <LanguageSelector />
           </div>
@@ -126,10 +126,10 @@ export default function Layout() {
             >
               <div className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm"
                 style={{ background: 'rgba(196,163,90,0.2)', color: 'var(--gold)' }}>
-                {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+                {user?.profile?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
               </div>
               <div className="flex-1 text-left min-w-0">
-                <div className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{user?.firstName || 'User'}</div>
+                <div className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{user?.profile?.firstName || 'User'}</div>
                 <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{user?.email}</div>
               </div>
               <ChevronDown size={16} className="flex-shrink-0" style={{ color: 'var(--text-dim)' }} />
@@ -170,7 +170,7 @@ export default function Layout() {
             </div>
             <div className="flex items-center gap-3">
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                {t('welcome')}, {user?.firstName || user?.email || 'User'}
+                {t('welcome')}, {user?.profile?.firstName || user?.email || 'User'}
               </div>
               <NotificationBell />
             </div>

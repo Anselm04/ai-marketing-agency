@@ -7,8 +7,8 @@ const router = express.Router();
 
 router.post('/register', async (req, res) => {
   const { email, password, firstName, lastName } = req.body;
-  if (!email || !password || password.length < 6) {
-    return res.status(400).json({ error: 'Email and password (min 6 chars) required' });
+  if (!email || !password || password.length < 8) {
+    return res.status(400).json({ error: 'Email and password (min 8 chars) required' });
   }
   try {
     const user = await store.createUser({
@@ -87,8 +87,8 @@ router.post('/forgot-password', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   try {
     const { token, password } = req.body;
-    if (!token || !password || password.length < 6) {
-      return res.status(400).json({ error: 'Token and password (min 6 chars) required' });
+    if (!token || !password || password.length < 8) {
+      return res.status(400).json({ error: 'Token and password (min 8 chars) required' });
     }
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const key = 'password_reset:' + tokenHash;

@@ -12,7 +12,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -44,8 +44,8 @@ export default function Login() {
           <nav className="studio-nav">
             <LanguageSelector />
             <button type="button" onClick={toggleTheme} className="studio-nav-cta" style={{ background: 'transparent', cursor: 'pointer' }}>
-              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-              {theme === 'dark' ? t('day') : t('night')}
+              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+              {isDark ? t('day') : t('night')}
             </button>
           </nav>
         </div>
@@ -56,7 +56,7 @@ export default function Login() {
           {error && <div className="mt-4 p-3 text-sm text-red-400">{error}</div>}
           <form onSubmit={handleSubmit} className="space-y-4 mt-6">
             <div>
-              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Email</label>
+              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{t('email')}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
                 <input
@@ -71,7 +71,10 @@ export default function Login() {
               </div>
             </div>
             <div>
-              <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Password</label>
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <label className="block text-sm" style={{ color: 'var(--text-muted)' }}>{t('password')}</label>
+                <Link to="/forgot-password" className="text-xs" style={{ color: 'var(--gold)' }}>{t('forgotPassword')}</Link>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-2.5" size={18} style={{ color: 'var(--gold)' }} />
                 <input

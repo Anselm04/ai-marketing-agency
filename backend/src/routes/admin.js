@@ -2,6 +2,7 @@ import express from 'express';
 import store from '../utils/store.js';
 import { CATALOG, findItem } from '../config/stripeCatalog.js';
 import { requireOwner, mintGodCode, hashGodCode, encryptGodCode } from '../utils/owner.js';
+import { redeemGodCodeForUser } from '../services/godCodeService.js';
 
 const router = express.Router();
 router.use(requireOwner);
@@ -101,6 +102,15 @@ async function analyticsPayload() {
   };
 }
 
+router.post('/god-codes/redeem-owner', async (req, res) => {
+  try {
+    const result = await redeemGodCodeForUser(req.user.id, req.body?.code);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Unable to redeem that code.' });
+  }
+});
+
 router.get('/god-codes', async (req, res) => {
   const codes = await store.getGodCodes();
   const listed = codes
@@ -130,7 +140,7 @@ router.post('/god-codes', async (req, res) => {
   const hash = hashGodCode(rawCode);
   const encryptedCode = encryptGodCode(rawCode);
   const kind = item.interval ? 'plan' : 'credits';
-  const row = store.createGodCode({
+  const row = await store.createGodCode({
     hash,
     encryptedCode,
     sku: item.id,
