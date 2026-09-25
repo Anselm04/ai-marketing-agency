@@ -2,6 +2,7 @@ import express from 'express';
 import store from '../utils/store.js';
 import clippingAgencyService from '../services/clippingAgencyService.js';
 import mediaClipperService from '../services/mediaClipperService.js';
+import clippingAutomationService from '../services/clippingAutomationService.js';
 
 const router = express.Router();
 
@@ -270,138 +271,24 @@ router.post('/campaigns/:id/activate', async (req, res) => {
 });
 
 router.post('/campaigns/:id/run-cycle', async (req, res) => {
-  let campaign = await getOwnedCampaign(req, res);
+  const campaign = await getOwnedCampaign(req, res);
   if (!campaign) return;
   if (!assertRights(campaign, res)) return;
   if (!campaign.autonomous?.enabled) {
     return res.status(409).json({ error: 'Activate autonomous mode before running an automation cycle' });
   }
 
-  const cycle = {
-    startedAt: new Date().toISOString(),
-    transcribed: false,
-    planned: false,
-    rendered: [],
-    published: [],
-    blocked: [],
-  };
-
   try {
-    if (!campaign.transcript && campaign.sourceUrl) {
-      const transcription = await mediaClipperService.transcribeSource(campaign.sourceUrl);
-      campaign = await store.updateCampaign(campaign.id, {
-        transcript: transcription.transcript,
-        sourceDurationSeconds: transcription.durationSeconds,
-        transcription: {
-          completedAt: new Date().toISOString(),
-          chunks: transcription.chunks,
-          model: transcription.model,
-        },
-      });
-      cycle.transcribed = true;
-    }
-
-    if (!campaign.clipPlan?.clips?.length) {
-      const plan = await clippingAgencyService.generateClipPlan(campaign);
-      const scheduledClips = clippingAgencyService.scheduleClips(plan.clips, {
-        intervalMinutes: campaign.autonomous?.intervalMinutes,
-      });
-      campaign = await store.updateCampaign(campaign.id, {
-        clipPlan: { ...plan, clips: scheduledClips },
-        status: 'running',
-      });
-      cycle.planned = true;
-    }
-
-    const now = Date.now();
-    const batchSize = Math.max(1, Math.min(Number(req.body?.batchSize) || 1, 3));
-    const dueIds = campaign.clipPlan.clips
-      .filter((clip) => {
-        if (['published', 'publishing'].includes(clip.status)) return false;
-        if (!clip.scheduledAt) return true;
-        return new Date(clip.scheduledAt).getTime() <= now;
-      })
-      .slice(0, batchSize)
-      .map((clip) => String(clip.id));
-
-    const clips = [];
-    for (const existing of campaign.clipPlan.clips) {
-      if (!dueIds.includes(String(existing.id))) {
-        clips.push(existing);
-        continue;
-      }
-
-      let clip = existing;
-      try {
-        if (!clip.mediaUrl) {
-          if (!campaign.sourceUrl) {
-            cycle.blocked.push({ clipId: clip.id, reason: 'sourceUrl missing' });
-            clips.push({ ...clip, status: 'awaiting_media' });
-            continue;
-          }
-
-          const rendered = await mediaClipperService.renderClip({
-            sourceUrl: campaign.sourceUrl,
-            startSeconds: clip.startSeconds,
-            endSeconds: clip.endSeconds,
-            ownerId: ownerId(req),
-            campaignId: campaign.id,
-            clipId: clip.id,
-          });
-          clip = {
-            ...clip,
-            mediaUrl: rendered.mediaUrl,
-            storage: rendered.storage,
-            storageKey: rendered.key || null,
-            localPath: rendered.localPath || null,
-            renderedAt: new Date().toISOString(),
-            status: rendered.mediaUrl ? 'ready' : 'rendered_private',
-          };
-          cycle.rendered.push(clip.id);
-        }
-
-        if (!clip.mediaUrl) {
-          cycle.blocked.push({ clipId: clip.id, reason: 'public durable media URL unavailable' });
-          clips.push(clip);
-          continue;
-        }
-
-        if (campaign.autonomous?.humanApprovalRequiredBeforeFirstPublish === true) {
-          cycle.blocked.push({ clipId: clip.id, reason: 'first-publish approval required' });
-          clips.push(clip);
-          continue;
-        }
-
-        const results = await clippingAgencyService.publishClip(clip);
-        const published = results.some((result) => result?.success === true);
-        clip = {
-          ...clip,
-          publishResults: [...(clip.publishResults || []), ...results],
-          lastPublishAttemptAt: new Date().toISOString(),
-          status: published ? 'published' : 'publish_blocked',
-        };
-        if (published) cycle.published.push(clip.id);
-        else cycle.blocked.push({ clipId: clip.id, reason: 'no production-verified platform publish succeeded' });
-      } catch (error) {
-        clip = { ...clip, status: 'automation_failed', automationError: error.message };
-        cycle.blocked.push({ clipId: clip.id, reason: error.message });
-      }
-      clips.push(clip);
-    }
-
-    const completedAt = new Date().toISOString();
-    const updated = await store.updateCampaign(campaign.id, {
-      clipPlan: { ...campaign.clipPlan, clips },
-      lastAutomationCycle: { ...cycle, completedAt },
+    const result = await clippingAutomationService.runCampaignCycle(campaign, {
+      batchSize: req.body?.batchSize,
     });
-
-    res.json({ campaign: updated, cycle: { ...cycle, completedAt } });
+    res.json(result);
   } catch (error) {
-    const failedAt = new Date().toISOString();
-    await store.updateCampaign(campaign.id, {
-      lastAutomationCycle: { ...cycle, failedAt, error: error.message },
+    res.status(422).json({
+      error: error.message,
+      details: error.details,
+      cycle: error.cycle,
     });
-    res.status(422).json({ error: error.message, cycle: { ...cycle, failedAt } });
   }
 });
 
