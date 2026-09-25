@@ -364,6 +364,13 @@ const store = {
   getCampaigns() {
     return listEntities('campaigns');
   },
+  async getCampaignsByOwner(ownerId) {
+    const { rows } = await pool.query(
+      'select * from marketing.campaigns where owner_id = $1 order by created_at desc',
+      [ownerId],
+    );
+    return rows.map(entity);
+  },
   getCampaignById(campaignId) {
     return getEntity('campaigns', campaignId);
   },
@@ -380,6 +387,13 @@ const store = {
   getContent() {
     return listEntities('content_items');
   },
+  async getContentByOwner(ownerId) {
+    const { rows } = await pool.query(
+      'select * from marketing.content_items where owner_id = $1 order by created_at desc',
+      [ownerId],
+    );
+    return rows.map(entity);
+  },
   createContent(item) {
     return createEntity('content_items', item, { owner_id: item.ownerId || item.owner || null });
   },
@@ -392,6 +406,13 @@ const store = {
 
   getLeads() {
     return listEntities('leads');
+  },
+  async getLeadsByOwner(ownerId) {
+    const { rows } = await pool.query(
+      'select * from marketing.leads where owner_id = $1 order by created_at desc',
+      [ownerId],
+    );
+    return rows.map(entity);
   },
   createLead(lead) {
     return createEntity('leads', lead, { owner_id: lead.ownerId || lead.owner || null });
