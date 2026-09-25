@@ -18,8 +18,8 @@ function mediaType(mimetype = '') {
 
 router.get('/', async (req, res) => {
   const owner = ownerId(req);
-  const assets = (await store.getContent())
-    .filter((item) => item.owner === owner && ['media_asset', 'generated_video'].includes(item.kind))
+  const assets = (await store.getContentByOwner(owner))
+    .filter((item) => ['media_asset', 'generated_video'].includes(item.kind))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json({ assets });
 });
@@ -65,7 +65,7 @@ router.post('/compose', async (req, res) => {
   const assetIds = Array.isArray(req.body?.assetIds) ? req.body.assetIds.map(String) : [];
   if (!assetIds.length) return res.status(400).json({ error: 'assetIds must be a non-empty array' });
 
-  const all = await store.getContent();
+  const all = await store.getContentByOwner(owner);
   const assets = assetIds
     .map((id) => all.find((item) => String(item.id) === id && item.owner === owner && item.kind === 'media_asset'))
     .filter(Boolean);
@@ -106,7 +106,7 @@ router.post('/compose', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   const owner = ownerId(req);
-  const asset = (await store.getContent()).find(
+  const asset = (await store.getContentByOwner(owner)).find(
     (item) => String(item.id) === String(req.params.id)
       && item.owner === owner
       && ['media_asset', 'generated_video'].includes(item.kind),
