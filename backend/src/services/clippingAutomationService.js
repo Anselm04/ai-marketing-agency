@@ -135,6 +135,7 @@ class ClippingAutomationService {
           }
 
           const results = await clippingAgencyService.publishClip(
+            campaignOwnerId(campaign),
             clip,
             campaign.publishingSettings || {},
           );
