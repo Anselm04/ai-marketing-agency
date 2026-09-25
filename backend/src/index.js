@@ -42,6 +42,7 @@ import realtimeRoutes from './routes/realtime.js';
 import affiliateRoutes from './routes/affiliate.js';
 import appforgeIntegrationRoutes from './routes/appforgeIntegration.js';
 import clippingRoutes from './routes/clipping.js';
+import clippingSchedulerService from './services/clippingSchedulerService.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
 import { authenticate } from './middleware/auth.js';
@@ -173,6 +174,7 @@ app.use(errorHandler);
 
 if (process.env.NODE_ENV !== 'test') {
   httpServer.listen(PORT, '0.0.0.0', () => {
+    clippingSchedulerService.start();
     logger.info(`Server running on port ${PORT}`, {
       environment: process.env.NODE_ENV,
       frontendDist: fs.existsSync(frontendDist) ? frontendDist : 'none',
@@ -183,6 +185,7 @@ if (process.env.NODE_ENV !== 'test') {
 
 const shutdown = async () => {
   try {
+    clippingSchedulerService.stop();
     await store.disconnectDB();
   } finally {
     if (httpServer.listening) {
