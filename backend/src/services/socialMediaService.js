@@ -6,8 +6,8 @@ class SocialMediaService {
       // Social
       tiktok: process.env.TIKTOK_ACCESS_TOKEN,
       meta: process.env.META_ACCESS_TOKEN,
-      instagram: process.env.INSTAGRAM_ACCESS_TOKEN,
-      facebook: process.env.FACEBOOK_ACCESS_TOKEN,
+      instagram: process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN,
+      facebook: process.env.FACEBOOK_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN,
       twitter: process.env.TWITTER_BEARER_TOKEN,
       linkedin: process.env.LINKEDIN_ACCESS_TOKEN,
       pinterest: process.env.PINTEREST_ACCESS_TOKEN,
@@ -17,7 +17,7 @@ class SocialMediaService {
       bluesky: process.env.BLUESKY_HANDLE,
       mastodon: process.env.MASTODON_ACCESS_TOKEN,
       // Video
-      youtube: process.env.YOUTUBE_API_KEY,
+      youtube: process.env.YOUTUBE_ACCESS_TOKEN,
       twitch: process.env.TWITCH_CLIENT_ID,
       vimeo: process.env.VIMEO_ACCESS_TOKEN,
       rumble: process.env.RUMBLE_API_KEY,
@@ -235,6 +235,107 @@ class SocialMediaService {
     } catch (err) { return { success: false, platform: 'instagram', error: err.message }; }
   }
 
+  async publishInstagramReel(videoUrl, caption, options = {}) {
+    const accessToken = this.tokens.instagram;
+    const userId = options.userId || process.env.INSTAGRAM_USER_ID;
+    const graphVersion = process.env.META_GRAPH_VERSION || 'v26.0';
+
+    if (!accessToken || !userId) {
+      return {
+        success: false,
+        platform: 'instagram',
+        blocked: true,
+        error: 'INSTAGRAM_ACCESS_TOKEN (or META_ACCESS_TOKEN) and INSTAGRAM_USER_ID are required',
+      };
+    }
+    if (!videoUrl) {
+      return { success: false, platform: 'instagram', blocked: true, error: 'A public video URL is required' };
+    }
+
+    try {
+      const createParams = new URLSearchParams({
+        media_type: 'REELS',
+        video_url: videoUrl,
+        caption: String(caption || '').slice(0, 2200),
+        share_to_feed: options.shareToFeed === false ? 'false' : 'true',
+        access_token: accessToken,
+      });
+      const createRes = await axios.post(
+        `https://graph.facebook.com/${graphVersion}/${userId}/media`,
+        createParams,
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 20000,
+        },
+      );
+
+      const containerId = createRes.data?.id;
+      if (!containerId) {
+        return { success: false, platform: 'instagram', error: 'Instagram did not return a media container id' };
+      }
+
+      let statusCode = 'IN_PROGRESS';
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 5000));
+        const statusRes = await axios.get(
+          `https://graph.facebook.com/${graphVersion}/${containerId}`,
+          {
+            params: { fields: 'status_code,status', access_token: accessToken },
+            timeout: 15000,
+          },
+        );
+        statusCode = statusRes.data?.status_code || statusCode;
+        if (statusCode === 'FINISHED') break;
+        if (['ERROR', 'EXPIRED'].includes(statusCode)) {
+          return {
+            success: false,
+            platform: 'instagram',
+            error: statusRes.data?.status || `Instagram container status: ${statusCode}`,
+            containerId,
+          };
+        }
+      }
+
+      if (statusCode !== 'FINISHED') {
+        return {
+          success: false,
+          platform: 'instagram',
+          pending: true,
+          containerId,
+          error: 'Instagram is still processing the Reel container',
+        };
+      }
+
+      const publishParams = new URLSearchParams({
+        creation_id: containerId,
+        access_token: accessToken,
+      });
+      const publishRes = await axios.post(
+        `https://graph.facebook.com/${graphVersion}/${userId}/media_publish`,
+        publishParams,
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 20000,
+        },
+      );
+
+      return {
+        success: true,
+        published: true,
+        platform: 'instagram',
+        postId: publishRes.data?.id,
+        containerId,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        platform: 'instagram',
+        error: err.response?.data?.error?.message || err.message,
+        code: err.response?.data?.error?.code,
+      };
+    }
+  }
+
   async publishFacebook(message, link) {
     if (!this.isAvailable('facebook')) return { fallback: true, platform: 'facebook', message: 'Facebook API not configured. Would publish: ' + message };
     try {
@@ -308,12 +409,108 @@ class SocialMediaService {
   }
 
   // --- Video ---
-  async publishYouTube(videoTitle, videoDescription, videoUrl) {
-    if (!this.isAvailable('youtube')) return { fallback: true, platform: 'youtube', message: 'YouTube API not configured. Would publish: ' + videoTitle };
+  async getYouTubeAccessToken() {
+    if (process.env.YOUTUBE_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      try {
+        const body = new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+          grant_type: 'refresh_token',
+        });
+        const res = await axios.post('https://oauth2.googleapis.com/token', body, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 15000,
+        });
+        return res.data?.access_token || null;
+      } catch {
+        return null;
+      }
+    }
+    return process.env.YOUTUBE_ACCESS_TOKEN || null;
+  }
+
+  async publishYouTube(videoTitle, videoDescription, videoUrl, options = {}) {
+    const accessToken = await this.getYouTubeAccessToken();
+    if (!accessToken) {
+      return {
+        success: false,
+        platform: 'youtube',
+        blocked: true,
+        error: 'YouTube OAuth credentials are not configured',
+      };
+    }
+    if (!videoUrl) {
+      return { success: false, platform: 'youtube', blocked: true, error: 'A public video URL is required' };
+    }
+
     try {
-      const res = await axios.post('https://www.googleapis.com/youtube/v3/videos', { snippet: { title: videoTitle, description: videoDescription }, status: { privacyStatus: 'public' } }, { headers: { Authorization: `Bearer ${this.tokens.youtube}`, 'Content-Type': 'application/json' } });
-      return { success: true, platform: 'youtube', postId: res.data.id };
-    } catch (err) { return { success: false, platform: 'youtube', error: err.message }; }
+      const sourceRes = await axios.get(videoUrl, {
+        responseType: 'stream',
+        timeout: 30000,
+        maxRedirects: 3,
+      });
+      const contentType = sourceRes.headers['content-type'] || 'video/mp4';
+      const contentLength = sourceRes.headers['content-length'];
+
+      const metadata = {
+        snippet: {
+          title: String(videoTitle || 'Short video').slice(0, 100),
+          description: String(videoDescription || '').slice(0, 5000),
+          ...(Array.isArray(options.tags) && options.tags.length ? { tags: options.tags.slice(0, 30) } : {}),
+        },
+        status: {
+          privacyStatus: options.privacyStatus || process.env.YOUTUBE_PRIVACY_STATUS || 'private',
+          selfDeclaredMadeForKids: options.madeForKids === true,
+        },
+      };
+
+      const initRes = await axios.post(
+        'https://www.googleapis.com/upload/youtube/v3/videos',
+        metadata,
+        {
+          params: { uploadType: 'resumable', part: 'snippet,status' },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+            'X-Upload-Content-Type': contentType,
+            ...(contentLength ? { 'X-Upload-Content-Length': contentLength } : {}),
+          },
+          timeout: 20000,
+          maxRedirects: 0,
+        },
+      );
+
+      const uploadUrl = initRes.headers.location;
+      if (!uploadUrl) {
+        return { success: false, platform: 'youtube', error: 'YouTube did not return a resumable upload URL' };
+      }
+
+      const uploadRes = await axios.put(uploadUrl, sourceRes.data, {
+        headers: {
+          'Content-Type': contentType,
+          ...(contentLength ? { 'Content-Length': contentLength } : {}),
+        },
+        timeout: 5 * 60 * 1000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      });
+
+      return {
+        success: true,
+        published: true,
+        platform: 'youtube',
+        postId: uploadRes.data?.id,
+        privacyStatus: metadata.status.privacyStatus,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        platform: 'youtube',
+        error: err.response?.data?.error?.message || err.message,
+        code: err.response?.status,
+      };
+    }
   }
 
   async publishTwitch(title, gameId) {
