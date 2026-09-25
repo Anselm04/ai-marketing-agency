@@ -126,6 +126,8 @@ router.get('/god-codes', async (req, res) => {
       createdAt: c.createdAt,
       redeemedAt: c.redeemedAt || c.usedAt || null,
       redeemedByUserId: c.redeemedByUserId || c.usedByUserId || null,
+      accessMode: c.accessMode || 'lifetime',
+      durationDays: c.durationDays || null,
     }));
   res.json(listed);
 });
@@ -136,6 +138,17 @@ router.post('/god-codes', async (req, res) => {
   if (!item) {
     return res.status(400).json({ error: 'Unknown SKU. Use starter, growth, agency, enterprise, credits_100, credits_300, or credits_750.' });
   }
+  const isPlan = Boolean(item.interval);
+  const requestedMode = String(req.body?.accessMode || 'lifetime').toLowerCase();
+  const accessMode = isPlan && requestedMode === 'timed' ? 'timed' : 'lifetime';
+  let durationDays = null;
+  if (accessMode === 'timed') {
+    durationDays = Number(req.body?.durationDays);
+    if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
+      return res.status(400).json({ error: 'Timed access duration must be between 1 and 365 days.' });
+    }
+  }
+
   const rawCode = mintGodCode();
   const hash = hashGodCode(rawCode);
   const encryptedCode = encryptGodCode(rawCode);
@@ -149,6 +162,8 @@ router.post('/god-codes', async (req, res) => {
     lookup_key: item.lookup_key,
     credits: item.credits || 0,
     isUsed: false,
+    accessMode,
+    durationDays,
   });
   res.status(201).json({
     id: row.id,
@@ -158,6 +173,8 @@ router.post('/god-codes', async (req, res) => {
     kind,
     name: item.name,
     credits: item.credits || 0,
+    accessMode,
+    durationDays,
     createdAt: row.createdAt,
   });
 });
