@@ -186,6 +186,22 @@ class ClippingAgencyService {
           clip.hashtags,
           publishingSettings.tiktok || {},
         ));
+      } else if (key === 'instagram') {
+        results.push(await socialMediaService.publishInstagramReel(
+          clip.mediaUrl,
+          [clip.caption, ...(clip.hashtags || [])].filter(Boolean).join(' '),
+          publishingSettings.instagram || {},
+        ));
+      } else if (key === 'youtube') {
+        results.push(await socialMediaService.publishYouTube(
+          clip.title,
+          [clip.caption, ...(clip.hashtags || [])].filter(Boolean).join(' '),
+          clip.mediaUrl,
+          {
+            tags: (clip.hashtags || []).map((tag) => String(tag).replace(/^#/, '')),
+            ...(publishingSettings.youtube || {}),
+          },
+        ));
       } else {
         results.push({
           platform: key,
