@@ -19,6 +19,8 @@ export default function Admin() {
   const [codes, setCodes] = useState([])
   const [sku, setSku] = useState('starter')
   const [minted, setMinted] = useState(null)
+  const [ownerCode, setOwnerCode] = useState('')
+  const [ownerCodeMessage, setOwnerCodeMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -41,6 +43,29 @@ export default function Admin() {
       setMinted(res.data)
     } catch (err) {
       setError(err.response?.data?.error || 'Mint failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const redeemOwnerCode = async (event) => {
+    event.preventDefault()
+    if (!ownerCode.trim()) return
+    setBusy(true)
+    setError('')
+    setOwnerCodeMessage('')
+    try {
+      const res = await api.post('/billing/redeem', { code: ownerCode.trim() })
+      setOwnerCodeMessage(res.data?.name ? 'Owner access granted: ' + res.data.name : 'Owner code redeemed')
+      setOwnerCode('')
+      const [analyticsRes, codesRes] = await Promise.all([
+        api.get('/admin/analytics'),
+        api.get('/admin/god-codes'),
+      ])
+      setAnalytics(analyticsRes.data)
+      setCodes(codesRes.data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Unable to redeem owner code')
     } finally {
       setBusy(false)
     }
@@ -123,6 +148,35 @@ export default function Admin() {
 
       {tab === 'codes' && (
         <div className="space-y-6">
+          <form onSubmit={redeemOwnerCode} className="p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--cyan)' }}>
+            <div>
+              <h3 className="font-semibold" style={{ color: 'var(--gold-bright)' }}>Owner code entry</h3>
+              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                This control is available only inside your owner Admin dashboard while signed in as {user?.email}.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={ownerCode}
+                onChange={(event) => setOwnerCode(event.target.value.toUpperCase())}
+                placeholder="TM-XXXX-XXXX-XXXX"
+                autoComplete="off"
+                spellCheck="false"
+                className="flex-1 min-w-[16rem] px-3 py-2 font-mono text-sm"
+                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--gold)' }}
+              />
+              <button
+                type="submit"
+                disabled={busy || !ownerCode.trim()}
+                className="px-4 py-2 text-sm tracking-widest uppercase disabled:opacity-50"
+                style={{ background: 'var(--cyan)', color: '#061014' }}
+              >
+                {busy ? 'Applying…' : 'Apply to my owner account'}
+              </button>
+            </div>
+            {ownerCodeMessage && <p className="text-sm text-green-500">{ownerCodeMessage}</p>}
+          </form>
+
           <div className="p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
             <h3 className="font-semibold" style={{ color: 'var(--gold-bright)' }}>Mint a one-use god code</h3>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Pick the Marketing SKU to grant. The plaintext is shown once. It is hashed and encrypted on the server. Redeeming binds it to that user forever.</p>
