@@ -33,6 +33,18 @@ export function AuthProvider({ children }) {
   const register = async (data) => {
     const res = await api.post('/auth/register', data);
     localStorage.setItem('token', res.data.token);
+
+    const initialPreferences = {};
+    const language = localStorage.getItem('language');
+    const theme = localStorage.getItem('theme');
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (language) initialPreferences.language = language;
+    if (theme) initialPreferences.theme = theme;
+    if (timezone) initialPreferences.timezone = timezone;
+    if (Object.keys(initialPreferences).length) {
+      await api.patch('/settings/preferences', initialPreferences).catch(() => {});
+    }
+
     setUser(res.data.user);
     window.dispatchEvent(new CustomEvent('trillionai:auth-changed', { detail: { authenticated: true } }));
     return res.data;
