@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import store from '../utils/store.js';
 import { CATALOG, findItem, publicCatalog } from '../config/stripeCatalog.js';
 import { redeemGodCodeForUser, REDEEM_FAIL, normalizeSubscriptionAccess } from '../services/godCodeService.js';
+import { markServiceFeePaid } from '../services/paidAdvertisingService.js';
 
 const router = express.Router();
 
@@ -111,12 +112,25 @@ export async function stripeWebhookHandler(req, res) {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       const userId = session.metadata?.marketingUserId || session.client_reference_id;
-      const item = findItem({
-        id: session.metadata?.itemId,
-        lookup_key: session.metadata?.lookup_key,
-      });
-      if (userId && item?.interval && session.payment_status !== 'unpaid') {
-        await activateStripePlan({ userId, item, session });
+      if (
+        session.metadata?.checkoutType === 'paid_ads_service_fee'
+        && userId
+        && session.metadata?.paidAdBudgetId
+        && session.payment_status === 'paid'
+      ) {
+        await markServiceFeePaid({
+          userId,
+          budgetId: session.metadata.paidAdBudgetId,
+          sessionId: session.id,
+        });
+      } else {
+        const item = findItem({
+          id: session.metadata?.itemId,
+          lookup_key: session.metadata?.lookup_key,
+        });
+        if (userId && item?.interval && session.payment_status !== 'unpaid') {
+          await activateStripePlan({ userId, item, session });
+        }
       }
     }
 
