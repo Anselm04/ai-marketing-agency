@@ -61,9 +61,9 @@ router.get('/account-memory', async (req, res) => {
   const owner = req.user.id;
   const [preferences, content, campaigns, leads, subscriptions] = await Promise.all([
     getUserPreferences(owner),
-    store.getContent(),
-    store.getCampaigns(),
-    store.getLeads(),
+    store.getContentByOwner(owner),
+    store.getCampaignsByOwner(owner),
+    store.getLeadsByOwner(owner),
     store.getSubscriptionsByUser(owner),
   ]);
 
@@ -71,15 +71,11 @@ router.get('/account-memory', async (req, res) => {
     userId: owner,
     preferences,
     savedData: {
-      mediaAndGeneratedContent: content.filter((item) => item.owner === owner || item.ownerId === owner).length,
-      automatedPostingPlans: content.filter(
-        (item) => (item.owner === owner || item.ownerId === owner) && item.kind === 'auto_post_plan',
-      ).length,
-      analyticsRecords: content.filter(
-        (item) => (item.owner === owner || item.ownerId === owner) && item.kind === 'auto_post_metric',
-      ).length,
-      campaigns: campaigns.filter((item) => item.owner === owner || item.ownerId === owner).length,
-      leads: leads.filter((item) => item.owner === owner || item.ownerId === owner).length,
+      mediaAndGeneratedContent: content.length,
+      automatedPostingPlans: content.filter((item) => item.kind === 'auto_post_plan').length,
+      analyticsRecords: content.filter((item) => item.kind === 'auto_post_metric').length,
+      campaigns: campaigns.length,
+      leads: leads.length,
       subscriptions: subscriptions.length,
     },
   });
