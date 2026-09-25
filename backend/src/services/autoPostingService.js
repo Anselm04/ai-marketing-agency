@@ -130,7 +130,10 @@ class AutoPostingService {
       .map((id) => source.find((asset) => String(asset.id) === String(id)))
       .filter(Boolean);
 
-    if (recommended.length && Math.random() >= (plan.explorationRate ?? 0.2)) {
+    const explorationRate = plan.explorationRate ?? 0.2;
+    const explorationEvery = Math.max(2, Math.round(1 / explorationRate));
+    const shouldExplore = (Number(plan.completedPosts) || 0) % explorationEvery === 0;
+    if (recommended.length && !shouldExplore) {
       return recommended.slice(0, Math.min(plan.assetsPerPost || 3, recommended.length));
     }
 
