@@ -25,8 +25,8 @@ const fileFilter = (req, file, cb) => {
 };
 
 const limits = {
-  fileSize: 50 * 1024 * 1024,
-  files: 10,
+  fileSize: Number(process.env.MEDIA_UPLOAD_MAX_BYTES) || 250 * 1024 * 1024,
+  files: Number(process.env.MEDIA_UPLOAD_MAX_FILES) || 20,
   fields: 20,
   parts: 30,
   fieldSize: 1024 * 1024,
