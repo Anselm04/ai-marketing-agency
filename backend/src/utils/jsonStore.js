@@ -103,6 +103,14 @@ const store = {
   async comparePassword(password, hash) {
     return bcrypt.compare(password, hash);
   },
+  async setUserPassword(userId, password) {
+    const idx = users.findIndex((u) => u.id === userId);
+    if (idx === -1) return false;
+    users[idx].password = await bcrypt.hash(password, 12);
+    users[idx].updatedAt = new Date().toISOString();
+    this._save();
+    return true;
+  },
   generateToken(userId) {
     if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
     return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
