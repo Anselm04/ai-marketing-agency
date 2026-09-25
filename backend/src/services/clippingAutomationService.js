@@ -32,6 +32,7 @@ class ClippingAutomationService {
       planned: false,
       rendered: [],
       published: [],
+      submitted: [],
       blocked: [],
     };
 
@@ -66,7 +67,7 @@ class ClippingAutomationService {
       const batchSize = Math.max(1, Math.min(Number(options.batchSize) || 1, 3));
       const dueIds = campaign.clipPlan.clips
         .filter((clip) => {
-          if (['published', 'publishing'].includes(clip.status)) return false;
+          if (['published', 'submitted', 'publishing'].includes(clip.status)) return false;
           if (clip.nextAutomationAttemptAt && new Date(clip.nextAutomationAttemptAt).getTime() > now) return false;
           if (!clip.scheduledAt) return true;
           return new Date(clip.scheduledAt).getTime() <= now;
@@ -137,17 +138,21 @@ class ClippingAutomationService {
             clip,
             campaign.publishingSettings || {},
           );
-          const published = results.some((result) => result?.success === true);
+          const accepted = results.some((result) => result?.success === true);
+          const confirmedPublished = results.some(
+            (result) => result?.success === true && result?.published === true,
+          );
           clip = {
             ...clip,
             publishResults: [...(clip.publishResults || []), ...results],
             lastPublishAttemptAt: new Date().toISOString(),
-            status: published ? 'published' : 'publish_blocked',
-            nextAutomationAttemptAt: published
+            status: confirmedPublished ? 'published' : accepted ? 'submitted' : 'publish_blocked',
+            nextAutomationAttemptAt: accepted
               ? null
               : new Date(now + 60 * 60 * 1000).toISOString(),
           };
-          if (published) cycle.published.push(clip.id);
+          if (confirmedPublished) cycle.published.push(clip.id);
+          else if (accepted) cycle.submitted.push(clip.id);
           else cycle.blocked.push({ clipId: clip.id, reason: 'no production-verified platform publish succeeded' });
         } catch (error) {
           clip = {
