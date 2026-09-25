@@ -7,7 +7,7 @@ import LanguageSelector from './LanguageSelector'
 import { NotificationBell } from './RealtimeNotifications'
 import {
   LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
-  FileText, Video, Users, TrendingUp, Settings,
+  FileText, Video, Users, TrendingUp, Settings, Scissors,
   Lock, LogOut, ChevronDown, Globe, Sun, Moon, Menu, X, ShoppingCart,
   Cpu, Plug
 } from 'lucide-react'
@@ -21,6 +21,7 @@ const navItems = [
   { path: '/dashboard/social', icon: Share2, label: 'Social' },
   { path: '/dashboard/content', icon: FileText, label: 'Content Studio' },
   { path: '/dashboard/video', icon: Video, label: 'Video Studio' },
+  { path: '/dashboard/clipping', icon: Scissors, label: 'AI Clipping Agency' },
   { path: '/dashboard/translation', icon: Globe, label: 'Translation' },
   { path: '/dashboard/crm', icon: Users, label: 'CRM' },
   { path: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },

@@ -4,20 +4,25 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const s3Client = process.env.S3_ENDPOINT ? new S3Client({
-  endpoint: process.env.S3_ENDPOINT,
+const hasStorageCredentials = Boolean(
+  process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY,
+);
+
+const s3Client = hasStorageCredentials ? new S3Client({
+  ...(process.env.S3_ENDPOINT ? { endpoint: process.env.S3_ENDPOINT } : {}),
   region: process.env.AWS_REGION || 'us-east-1',
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
-  forcePathStyle: true,
+  forcePathStyle: Boolean(process.env.S3_ENDPOINT),
 }) : null;
 
-const BUCKET = process.env.S3_BUCKET || 'ai-marketing-uploads';
+const BUCKET = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || 'ai-marketing-uploads';
+const PUBLIC_BASE_URL = process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, '') || null;
 
 export function isS3Configured() {
-  return !!s3Client && !!process.env.AWS_ACCESS_KEY_ID;
+  return !!s3Client && hasStorageCredentials;
 }
 
 export async function uploadToS3(key, body, contentType) {
@@ -28,7 +33,7 @@ export async function uploadToS3(key, body, contentType) {
     Body: body,
     ContentType: contentType,
   }));
-  return `https://${BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+  return getUploadUrl(key);
 }
 
 export async function getSignedDownloadUrl(key, expiresIn = 3600) {
@@ -38,5 +43,7 @@ export async function getSignedDownloadUrl(key, expiresIn = 3600) {
 
 export function getUploadUrl(key) {
   if (!isS3Configured()) return null;
+  if (PUBLIC_BASE_URL) return `${PUBLIC_BASE_URL}/${key}`;
+  if (process.env.S3_ENDPOINT) return null;
   return `https://${BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
 }
