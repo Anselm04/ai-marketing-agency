@@ -14,7 +14,7 @@ function ownerId(req) {
 }
 
 async function ownedPlan(req, res) {
-  const plan = (await store.getContent()).find(
+  const plan = (await store.getContentByOwner(ownerId(req))).find(
     (item) => String(item.id) === String(req.params.id)
       && item.owner === ownerId(req)
       && item.kind === 'auto_post_plan',
@@ -51,8 +51,8 @@ router.get('/limits', (req, res) => {
 
 router.get('/', async (req, res) => {
   const owner = ownerId(req);
-  const plans = (await store.getContent())
-    .filter((item) => item.owner === owner && item.kind === 'auto_post_plan')
+  const plans = (await store.getContentByOwner(owner))
+    .filter((item) => item.kind === 'auto_post_plan')
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json({ plans });
 });
@@ -68,7 +68,7 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Select at least one platform' });
   }
 
-  const media = (await store.getContent()).filter(
+  const media = (await store.getContentByOwner(owner)).filter(
     (item) => item.owner === owner
       && item.kind === 'media_asset'
       && normalized.sourceAssetIds.includes(String(item.id)),
