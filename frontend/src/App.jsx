@@ -36,6 +36,7 @@ import AIModels from './pages/AIModels'
 import Connectors from './pages/Connectors'
 import SocialVideoPublisher from './pages/SocialVideoPublisher'
 import MediaLibrary from './pages/MediaLibrary'
+import AutoPosting from './pages/AutoPosting'
 import ClippingAgency from './pages/ClippingAgency'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
 
@@ -90,6 +91,7 @@ function AppRoutes() {
         <Route path="connectors" element={<Connectors />} />
         <Route path="video-distribution" element={<SocialVideoPublisher />} />
         <Route path="media-library" element={<MediaLibrary />} />
+        <Route path="auto-posting" element={<AutoPosting />} />
         <Route path="clipping" element={<ClippingAgency />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
