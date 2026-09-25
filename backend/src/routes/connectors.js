@@ -15,6 +15,8 @@ import {
 import {
   storeTokens,
   getTokens,
+  createOAuthSession,
+  consumeOAuthSession,
   revokeTokens,
   getUserConnectors,
   healthCheckConnector,
@@ -27,6 +29,77 @@ import {
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
+
+
+function connectorClientId(connector) {
+  return connector.auth?.clientId
+    || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_ID`];
+}
+
+function connectorClientSecret(connector) {
+  return connector.auth?.clientSecret
+    || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_SECRET`];
+}
+
+function callbackUrl(connector) {
+  return `${process.env.API_URL || 'http://localhost:3001'}/api/connectors/${connector.id}/callback`;
+}
+
+function buildAuthorizationUrl(connector, state) {
+  const clientId = connectorClientId(connector);
+  if (!clientId) throw new Error('Connector client ID not configured');
+
+  const url = new URL(connector.auth.authorizationUrl);
+  url.searchParams.set(connector.auth.clientIdParam || 'client_id', clientId);
+  url.searchParams.set('redirect_uri', callbackUrl(connector));
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', (connector.auth.scopes || []).join(connector.auth.scopeSeparator || ' '));
+  url.searchParams.set('state', state);
+
+  for (const [key, value] of Object.entries(connector.auth.authorizationParams || {})) {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url.toString();
+}
+
+async function exchangeAuthorizationCode(connector, code, session) {
+  const clientId = connectorClientId(connector);
+  const clientSecret = connectorClientSecret(connector);
+  if (!clientId || !clientSecret) throw new Error('Connector credentials not configured');
+
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: callbackUrl(connector),
+  });
+  body.set(connector.auth.tokenClientIdParam || 'client_id', clientId);
+
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  if (connector.auth.tokenAuth === 'basic') {
+    body.delete(connector.auth.tokenClientIdParam || 'client_id');
+    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+  } else {
+    body.set(connector.auth.tokenClientSecretParam || 'client_secret', clientSecret);
+  }
+
+  if (session?.codeVerifier) body.set('code_verifier', session.codeVerifier);
+
+  const axios = (await import('axios')).default;
+  const response = await axios.post(connector.auth.tokenUrl, body, {
+    headers,
+    timeout: 30000,
+  });
+  return response.data;
+}
+
+function normalizeGrantedScopes(tokenData, connector) {
+  const raw = tokenData.scope || tokenData.scopes;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') return raw.split(/[\s,]+/).filter(Boolean);
+  return connector.auth?.scopes || [];
+}
 
 /**
  * GET /api/connectors
@@ -126,36 +199,32 @@ router.get('/:id', authenticate, (req, res) => {
  * GET /api/connectors/:id/auth
  * Get OAuth authorization URL for a connector.
  */
-router.get('/:id/auth', authenticate, (req, res) => {
+router.get('/:id/auth', authenticate, async (req, res) => {
   const connector = getConnectorById(req.params.id);
-  if (!connector) {
-    return res.status(404).json({ error: 'Connector not found' });
-  }
+  if (!connector) return res.status(404).json({ error: 'Connector not found' });
 
   if (connector.auth?.type !== 'oauth2' || !connector.auth.authorizationUrl) {
-    return res.status(400).json({ error: 'This connector does not use OAuth2' });
+    return res.status(400).json({
+      error: 'This platform does not support user OAuth through this connector',
+      authType: connector.auth?.type || 'none',
+    });
   }
 
-  const state = Buffer.from(JSON.stringify({ userId: req.user?.id, connectorId: connector.id })).toString('base64');
-  const clientId = connector.auth.clientId || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_ID`];
-
-  if (!clientId) {
-    return res.status(400).json({ error: 'Connector client ID not configured' });
+  try {
+    const state = await createOAuthSession(req.user?.id, connector.id);
+    res.json({
+      success: true,
+      authorizationUrl: buildAuthorizationUrl(connector, state),
+      connectorId: connector.id,
+      scopes: connector.auth.scopes || [],
+    });
+  } catch (error) {
+    logger.error('OAuth authorization initialization failed', {
+      connectorId: connector.id,
+      error: error.message,
+    });
+    res.status(400).json({ error: error.message });
   }
-
-  const url = new URL(connector.auth.authorizationUrl);
-  url.searchParams.set('client_id', clientId);
-  url.searchParams.set('redirect_uri', `${process.env.API_URL || 'http://localhost:3001'}/api/connectors/${connector.id}/callback`);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', connector.auth.scopes?.join(' ') || '');
-  url.searchParams.set('state', state);
-
-  res.json({
-    success: true,
-    authorizationUrl: url.toString(),
-    connectorId: connector.id,
-    scopes: connector.auth.scopes,
-  });
 });
 
 /**
@@ -163,51 +232,42 @@ router.get('/:id/auth', authenticate, (req, res) => {
  * OAuth callback endpoint for connector authorization.
  */
 router.get('/:id/callback', async (req, res) => {
-  const { code, state } = req.query;
+  const { code, state, error: providerError, error_description: providerErrorDescription } = req.query;
   const connector = getConnectorById(req.params.id);
+  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:3000';
 
-  if (!connector || !state) {
-    return res.status(400).json({ error: 'Invalid request' });
-  }
+  if (!connector || !state) return res.status(400).json({ error: 'Invalid OAuth callback' });
 
   try {
-    const { userId } = JSON.parse(Buffer.from(state, 'base64').toString());
-    const clientId = connector.auth.clientId || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_ID`];
-    const clientSecret = connector.auth.clientSecret || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_SECRET`];
-
-    if (!clientId || !clientSecret) {
-      return res.status(400).json({ error: 'Connector credentials not configured' });
+    const session = await consumeOAuthSession(state, connector.id);
+    if (providerError) {
+      const detail = providerErrorDescription || providerError;
+      return res.redirect(`${frontendUrl}/dashboard/connectors?connector_error=${encodeURIComponent(detail)}`);
     }
+    if (!code) throw new Error('Authorization code missing');
 
-    // Exchange code for token
-    const axios = (await import('axios')).default;
-    const tokenResponse = await axios.post(
-      connector.auth.tokenUrl,
-      new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: `${process.env.API_URL || 'http://localhost:3001'}/api/connectors/${connector.id}/callback`,
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
+    const tokenData = await exchangeAuthorizationCode(connector, code, session);
+    if (!tokenData?.access_token) throw new Error('Provider did not return an access token');
 
-    await storeTokens(userId, connector.id, {
-      accessToken: tokenResponse.data.access_token,
-      refreshToken: tokenResponse.data.refresh_token,
-      expiresAt: tokenResponse.data.expires_in ? Date.now() + tokenResponse.data.expires_in * 1000 : null,
-      scopes: tokenResponse.data.scope?.split(' ') || connector.auth.scopes || [],
+    await storeTokens(session.userId, connector.id, {
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token,
+      expiresAt: tokenData.expires_in ? Date.now() + Number(tokenData.expires_in) * 1000 : null,
+      scopes: normalizeGrantedScopes(tokenData, connector),
+      account: {
+        openId: tokenData.open_id || null,
+        userId: tokenData.user_id || null,
+      },
+      metadata: {
+        tokenType: tokenData.token_type || 'Bearer',
+      },
     });
 
-    logger.info(`Connector ${connector.id} connected for user ${userId}`);
-
-    // Redirect to frontend with success
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.redirect(`${frontendUrl}/dashboard/settings?connector_connected=${connector.id}`);
+    logger.info(`Connector ${connector.id} connected for user ${session.userId}`);
+    res.redirect(`${frontendUrl}/dashboard/connectors?connector_connected=${encodeURIComponent(connector.id)}`);
   } catch (err) {
-    logger.error('OAuth callback failed', { error: err.message, connectorId: connector.id });
-    res.status(400).json({ error: 'OAuth authorization failed', detail: err.message });
+    logger.error('OAuth callback failed', { error: err.message, connectorId: connector?.id });
+    res.redirect(`${frontendUrl}/dashboard/connectors?connector_error=${encodeURIComponent(err.message)}`);
   }
 });
 
