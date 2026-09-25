@@ -103,6 +103,14 @@ const store = {
   async comparePassword(password, hash) {
     return bcrypt.compare(password, hash);
   },
+  async setUserPassword(userId, password) {
+    const idx = users.findIndex((u) => u.id === userId);
+    if (idx === -1) return false;
+    users[idx].password = await bcrypt.hash(password, 12);
+    users[idx].updatedAt = new Date().toISOString();
+    this._save();
+    return true;
+  },
   generateToken(userId) {
     if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
     return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -234,6 +242,9 @@ const store = {
   getCampaigns() {
     return Promise.resolve(campaigns);
   },
+  getCampaignsByOwner(ownerId) {
+    return Promise.resolve(campaigns.filter((item) => item.owner === ownerId || item.ownerId === ownerId));
+  },
   getCampaignById(id) {
     return campaigns.find((c) => c.id === id);
   },
@@ -261,6 +272,9 @@ const store = {
   getContent() {
     return Promise.resolve(content);
   },
+  getContentByOwner(ownerId) {
+    return Promise.resolve(content.filter((item) => item.owner === ownerId || item.ownerId === ownerId));
+  },
   createContent(item) {
     const c = { id: this._id(), ...item, createdAt: new Date().toISOString() };
     content.push(c);
@@ -284,6 +298,9 @@ const store = {
 
   getLeads() {
     return Promise.resolve(leads);
+  },
+  getLeadsByOwner(ownerId) {
+    return Promise.resolve(leads.filter((item) => item.owner === ownerId || item.ownerId === ownerId));
   },
   createLead(lead) {
     const l = { id: this._id(), ...lead, createdAt: new Date().toISOString() };

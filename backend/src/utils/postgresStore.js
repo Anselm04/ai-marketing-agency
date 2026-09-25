@@ -167,6 +167,14 @@ const store = {
   comparePassword(password, hash) {
     return bcrypt.compare(password, hash);
   },
+  async setUserPassword(userId, password) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await pool.query(
+      'update marketing.users set password_hash = $2, updated_at = now() where id = $1',
+      [userId, passwordHash],
+    );
+    return result.rowCount > 0;
+  },
   generateToken(userId) {
     if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
     return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -364,14 +372,24 @@ const store = {
   getCampaigns() {
     return listEntities('campaigns');
   },
+  async getCampaignsByOwner(ownerId) {
+    const { rows } = await pool.query(
+      'select * from marketing.campaigns where owner_id = $1 order by created_at desc',
+      [ownerId],
+    );
+    return rows.map(entity);
+  },
   getCampaignById(campaignId) {
     return getEntity('campaigns', campaignId);
   },
   createCampaign(campaign) {
     return createEntity('campaigns', campaign, { owner_id: campaign.ownerId || campaign.owner || null });
   },
-  updateCampaign(campaignId, updates) {
-    return updateEntity('campaigns', campaignId, updates, { owner_id: updates.ownerId || updates.owner || null });
+  async updateCampaign(campaignId, updates) {
+    const current = await getEntity('campaigns', campaignId);
+    if (!current) return null;
+    const ownerId = updates.ownerId || updates.owner || current.ownerId || current.owner || null;
+    return updateEntity('campaigns', campaignId, updates, { owner_id: ownerId });
   },
   deleteCampaign(campaignId) {
     return deleteEntity('campaigns', campaignId);
@@ -380,11 +398,21 @@ const store = {
   getContent() {
     return listEntities('content_items');
   },
+  async getContentByOwner(ownerId) {
+    const { rows } = await pool.query(
+      'select * from marketing.content_items where owner_id = $1 order by created_at desc',
+      [ownerId],
+    );
+    return rows.map(entity);
+  },
   createContent(item) {
     return createEntity('content_items', item, { owner_id: item.ownerId || item.owner || null });
   },
-  updateContent(contentId, updates) {
-    return updateEntity('content_items', contentId, updates, { owner_id: updates.ownerId || updates.owner || null });
+  async updateContent(contentId, updates) {
+    const current = await getEntity('content_items', contentId);
+    if (!current) return null;
+    const ownerId = updates.ownerId || updates.owner || current.ownerId || current.owner || null;
+    return updateEntity('content_items', contentId, updates, { owner_id: ownerId });
   },
   deleteContent(contentId) {
     return deleteEntity('content_items', contentId);
@@ -393,11 +421,21 @@ const store = {
   getLeads() {
     return listEntities('leads');
   },
+  async getLeadsByOwner(ownerId) {
+    const { rows } = await pool.query(
+      'select * from marketing.leads where owner_id = $1 order by created_at desc',
+      [ownerId],
+    );
+    return rows.map(entity);
+  },
   createLead(lead) {
     return createEntity('leads', lead, { owner_id: lead.ownerId || lead.owner || null });
   },
-  updateLead(leadId, updates) {
-    return updateEntity('leads', leadId, updates, { owner_id: updates.ownerId || updates.owner || null });
+  async updateLead(leadId, updates) {
+    const current = await getEntity('leads', leadId);
+    if (!current) return null;
+    const ownerId = updates.ownerId || updates.owner || current.ownerId || current.owner || null;
+    return updateEntity('leads', leadId, updates, { owner_id: ownerId });
   },
   deleteLead(leadId) {
     return deleteEntity('leads', leadId);
@@ -423,8 +461,11 @@ const store = {
   createSubscription(subscription) {
     return createEntity('subscriptions', subscription, { user_id: subscription.userId || subscription.user || null });
   },
-  updateSubscription(subscriptionId, updates) {
-    return updateEntity('subscriptions', subscriptionId, updates, { user_id: updates.userId || updates.user || null });
+  async updateSubscription(subscriptionId, updates) {
+    const current = await getEntity('subscriptions', subscriptionId);
+    if (!current) return null;
+    const userId = updates.userId || updates.user || current.userId || null;
+    return updateEntity('subscriptions', subscriptionId, updates, { user_id: userId });
   },
   async getSubscriptionsByUser(userId) {
     const { rows } = await pool.query('select * from marketing.subscriptions where user_id = $1 order by created_at desc', [userId]);

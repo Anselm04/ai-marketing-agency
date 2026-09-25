@@ -19,13 +19,14 @@ const s3Client = hasStorageCredentials ? new S3Client({
 }) : null;
 
 const BUCKET = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || 'ai-marketing-uploads';
+const PRIVATE_BUCKET = process.env.S3_PRIVATE_BUCKET || BUCKET;
 const PUBLIC_BASE_URL = process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, '') || null;
 
 export function isS3Configured() {
   return !!s3Client && hasStorageCredentials;
 }
 
-export async function uploadToS3(key, body, contentType) {
+async function putObject(key, body, contentType) {
   if (!isS3Configured()) throw new Error('S3 not configured');
   await s3Client.send(new PutObjectCommand({
     Bucket: BUCKET,
@@ -33,12 +34,32 @@ export async function uploadToS3(key, body, contentType) {
     Body: body,
     ContentType: contentType,
   }));
+}
+
+export async function uploadToS3(key, body, contentType) {
+  await putObject(key, body, contentType);
   return getUploadUrl(key);
+}
+
+export async function uploadPrivateToS3(key, body, contentType) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  await s3Client.send(new PutObjectCommand({
+    Bucket: PRIVATE_BUCKET,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  }));
+  return { key };
 }
 
 export async function getSignedDownloadUrl(key, expiresIn = 3600) {
   if (!isS3Configured()) throw new Error('S3 not configured');
   return getSignedUrl(s3Client, new GetObjectCommand({ Bucket: BUCKET, Key: key }), { expiresIn });
+}
+
+export async function getPrivateSignedDownloadUrl(key, expiresIn = 3600) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  return getSignedUrl(s3Client, new GetObjectCommand({ Bucket: PRIVATE_BUCKET, Key: key }), { expiresIn });
 }
 
 export function getUploadUrl(key) {

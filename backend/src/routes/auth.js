@@ -1,5 +1,4 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import store from '../utils/store.js';
 import { isOwnerEmail } from '../utils/owner.js';
@@ -67,9 +66,19 @@ router.post('/forgot-password', async (req, res) => {
       return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
     }
     const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
     const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    await store.updateUser(user.id, { resetToken, resetTokenExpires });
-    res.json({ success: true, message: 'If an account exists, a reset link has been sent.', devToken: resetToken });
+    await store.setSettings('password_reset:' + tokenHash, {
+      userId: user.id,
+      expiresAt: resetTokenExpires,
+    });
+
+    const response = {
+      success: true,
+      message: 'If an account exists, a reset link has been sent.',
+    };
+    if (process.env.NODE_ENV !== 'production') response.devToken = resetToken;
+    res.json(response);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -81,13 +90,15 @@ router.post('/reset-password', async (req, res) => {
     if (!token || !password || password.length < 6) {
       return res.status(400).json({ error: 'Token and password (min 6 chars) required' });
     }
-    const allUsers = await store.getUsers();
-    const user = allUsers.find(u => u.resetToken === token);
-    if (!user || new Date(user.resetTokenExpires) < new Date()) {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const key = 'password_reset:' + tokenHash;
+    const reset = await store.getSetting(key);
+    await store.deleteSetting(key);
+    if (!reset?.userId || !reset.expiresAt || new Date(reset.expiresAt) < new Date()) {
       return res.status(400).json({ error: 'Invalid or expired token' });
     }
-    const hashed = await bcrypt.hash(password, 12);
-    await store.updateUser(user.id, { password: hashed, resetToken: null, resetTokenExpires: null });
+    const updated = await store.setUserPassword(reset.userId, password);
+    if (!updated) return res.status(400).json({ error: 'Invalid or expired token' });
     res.json({ success: true, message: 'Password updated successfully.' });
   } catch (err) {
     res.status(500).json({ error: err.message });

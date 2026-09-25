@@ -53,6 +53,7 @@ import { authenticate } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { sanitizeBody } from './middleware/sanitize.js';
+import { auditLog } from './middleware/auditLog.js';
 
 if (process.env.NODE_ENV === 'production' && store.isPostgres?.() !== true) {
   throw new Error(
@@ -128,13 +129,14 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/metrics', metricsRouteHandler);
 
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', auditLog, authRoutes);
 app.use('/api/billing', billingPublicRoutes);
 app.use('/api/integrations/appforge', appforgeIntegrationRoutes);
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) return authenticate(req, res, next);
   return next();
 });
+app.use('/api', auditLog);
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/analytics', analyticsRoutes);

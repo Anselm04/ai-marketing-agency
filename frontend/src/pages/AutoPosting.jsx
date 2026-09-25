@@ -67,10 +67,11 @@ export default function AutoPosting() {
 
   const load = async () => {
     try {
-      const [mediaRes, platformRes, plansRes] = await Promise.all([
+      const [mediaRes, platformRes, plansRes, preferenceRes] = await Promise.all([
         api.get('/media-library'),
         api.get('/social-video/platforms'),
         api.get('/auto-posting'),
+        api.get('/settings/preferences'),
       ])
       setAssets((mediaRes.data.assets || []).filter((asset) => asset.kind === 'media_asset'))
       setPlatforms(
@@ -80,6 +81,14 @@ export default function AutoPosting() {
       )
       const loadedPlans = plansRes.data.plans || []
       setPlans(loadedPlans)
+      const savedPreferences = preferenceRes.data?.preferences || {}
+      setForm((current) => ({
+        ...current,
+        timezone: savedPreferences.timezone || current.timezone,
+        postingWindowStartHour: savedPreferences.postingWindowStartHour ?? current.postingWindowStartHour,
+        postingWindowEndHour: savedPreferences.postingWindowEndHour ?? current.postingWindowEndHour,
+        aiOptimizationEnabled: savedPreferences.aiOptimizationEnabled ?? current.aiOptimizationEnabled,
+      }))
       const analyticsResults = await Promise.all(
         loadedPlans.map(async (plan) => {
           try {
