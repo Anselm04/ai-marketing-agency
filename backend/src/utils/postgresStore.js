@@ -536,6 +536,32 @@ const store = {
     );
     return { ...(rows[0].data || {}), id: rows[0].id, hash: rows[0].hash, createdAt: rows[0].created_at?.toISOString?.() || rows[0].created_at };
   },
+  async consumeGodCode(hash, userId, redeemedAt) {
+    const patch = {
+      encryptedCode: null,
+      redeemedAt,
+      redeemedByUserId: userId,
+      isUsed: true,
+      usedAt: redeemedAt,
+      usedByUserId: userId,
+    };
+    const { rows } = await pool.query(
+      `update marketing.god_codes
+       set data = coalesce(data, '{}'::jsonb) || $3::jsonb,
+           updated_at = now()
+       where hash = $1
+         and coalesce((data->>'isUsed')::boolean, false) = false
+         and nullif(data->>'redeemedAt', '') is null
+         and nullif(data->>'redeemedByUserId', '') is null
+         and nullif(data->>'usedByUserId', '') is null
+       returning *`,
+      [hash, userId, JSON.stringify(patch)],
+    );
+    const row = rows[0];
+    return row
+      ? { ...(row.data || {}), id: row.id, hash: row.hash, createdAt: row.created_at?.toISOString?.() || row.created_at }
+      : null;
+  },
 };
 
 export default store;

@@ -407,6 +407,27 @@ const store = {
     this._save();
     return godCodes[idx];
   },
+  consumeGodCode(hash, userId, redeemedAt) {
+    const idx = godCodes.findIndex((c) =>
+      c.hash === hash
+      && !c.isUsed
+      && !c.redeemedAt
+      && !c.redeemedByUserId
+      && !c.usedByUserId
+    );
+    if (idx === -1) return null;
+    godCodes[idx] = {
+      ...godCodes[idx],
+      encryptedCode: null,
+      redeemedAt,
+      redeemedByUserId: userId,
+      isUsed: true,
+      usedAt: redeemedAt,
+      usedByUserId: userId,
+    };
+    this._save();
+    return godCodes[idx];
+  },
 };
 
 export default store;

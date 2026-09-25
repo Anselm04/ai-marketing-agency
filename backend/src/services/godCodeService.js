@@ -40,15 +40,8 @@ export async function redeemGodCodeForUser(userId, rawCode) {
   const expiresAt = accessMode === 'timed'
     ? new Date(redeemedAt.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString()
     : null;
-  const updated = await store.updateGodCode(found.id, {
-    encryptedCode: null,
-    redeemedAt: now,
-    redeemedByUserId: userId,
-    isUsed: true,
-    usedAt: now,
-    usedByUserId: userId,
-  });
-  if (!updated) throw new Error(REDEEM_FAIL);
+  const consumed = await store.consumeGodCode(hash, userId, now);
+  if (!consumed) throw new Error(REDEEM_FAIL);
 
   const kind = item.interval ? 'plan' : 'credits';
   const user = await store.findUserById(userId);
