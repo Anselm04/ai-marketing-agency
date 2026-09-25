@@ -124,6 +124,27 @@ describe('Owner admin and account controls', () => {
     expect(res.status).toBe(400);
   });
 
+  test('simultaneous redemption attempts have exactly one winner', async () => {
+    const mint = await request(app)
+      .post('/api/admin/god-codes')
+      .set('Authorization', 'Bearer ' + ownerToken)
+      .send({ sku: 'starter', accessMode: 'lifetime' });
+
+    const [first, second] = await Promise.all([
+      request(app)
+        .post('/api/admin/god-codes/redeem-owner')
+        .set('Authorization', 'Bearer ' + ownerToken)
+        .send({ code: mint.body.code }),
+      request(app)
+        .post('/api/admin/god-codes/redeem-owner')
+        .set('Authorization', 'Bearer ' + ownerToken)
+        .send({ code: mint.body.code }),
+    ]);
+
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([200, 400]);
+  });
+
   test('god codes remain one-use after owner redemption', async () => {
     const mint = await request(app)
       .post('/api/admin/god-codes')
