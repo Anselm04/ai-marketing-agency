@@ -17,9 +17,11 @@ import axios from 'axios';
 import { logger, logConnectorRequest } from '../utils/logger.js';
 import { cache } from '../utils/cache.js';
 import { recordConnectorRequest } from '../utils/metrics.js';
+import store from '../utils/store.js';
 
-// In-memory token storage (replace with DB in production)
-const tokenStore = new Map(); // key: `${userId}:${connectorId}`, value: { accessToken, refreshToken, expiresAt, scopes }
+const TOKEN_PREFIX = 'connector_tokens';
+const OAUTH_SESSION_PREFIX = 'connector_oauth_session';
+const OAUTH_SESSION_TTL_MS = 10 * 60 * 1000;
 const healthStatus = new Map(); // key: connectorId, value: { status, lastChecked, failures, lastError }
 const rateLimitState = new Map(); // key: `${userId}:${connectorId}`, value: { requests, windowStart, limit }
 const webhookRegistrations = new Map(); // key: webhookId, value: { connectorId, userId, url, events, secret }
@@ -31,44 +33,129 @@ const HEALTH_CHECK_INTERVAL = parseInt(process.env.INTEGRATION_HEALTH_CHECK_INTE
 const CONNECTOR_TIMEOUT = parseInt(process.env.CONNECTOR_TIMEOUT_MS, 10) || 30000;
 
 /**
- * Encrypt sensitive token data.
+ * Connector secrets are encrypted at rest before entering the shared settings table.
+ * Production must provide ENCRYPTION_KEY; development can use a local-only fallback.
  */
-function encrypt(text) {
-  const key = process.env.ENCRYPTION_KEY || 'default-key-must-be-32-chars-long!!';
-  const cipher = crypto.createCipher('aes-256-cbc', key);
-  let encrypted = cipher.update(text, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return encrypted;
+function secretMaterial() {
+  const source = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production' && (!source || source.length < 32)) {
+    throw new Error('ENCRYPTION_KEY (or JWT_SECRET) must be at least 32 characters in production');
+  }
+  return source || 'development-only-connector-secret-do-not-use-in-production';
 }
 
-function decrypt(text) {
+function encryptionKey() {
+  return crypto.createHash('sha256').update(secretMaterial()).digest();
+}
+
+function encryptJson(value) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
+  const plaintext = Buffer.from(JSON.stringify(value), 'utf8');
+  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    version: 1,
+    algorithm: 'aes-256-gcm',
+    iv: iv.toString('base64url'),
+    tag: tag.toString('base64url'),
+    data: encrypted.toString('base64url'),
+  };
+}
+
+function decryptJson(payload) {
+  if (!payload || payload.version !== 1 || payload.algorithm !== 'aes-256-gcm') return null;
   try {
-    const key = process.env.ENCRYPTION_KEY || 'default-key-must-be-32-chars-long!!';
-    const decipher = crypto.createDecipher('aes-256-cbc', key);
-    let decrypted = decipher.update(text, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      encryptionKey(),
+      Buffer.from(payload.iv, 'base64url'),
+    );
+    decipher.setAuthTag(Buffer.from(payload.tag, 'base64url'));
+    const clear = Buffer.concat([
+      decipher.update(Buffer.from(payload.data, 'base64url')),
+      decipher.final(),
+    ]);
+    return JSON.parse(clear.toString('utf8'));
   } catch {
     return null;
   }
 }
 
+function tokenStorageKey(userId, connectorId) {
+  return `${TOKEN_PREFIX}:${userId}:${connectorId}`;
+}
+
+function oauthSessionStorageKey(nonce) {
+  return `${OAUTH_SESSION_PREFIX}:${nonce}`;
+}
+
+function stateSignature(nonce) {
+  return crypto
+    .createHmac('sha256', secretMaterial())
+    .update(nonce)
+    .digest('base64url');
+}
+
+export async function createOAuthSession(userId, connectorId, extra = {}) {
+  const nonce = crypto.randomBytes(24).toString('base64url');
+  const record = {
+    userId,
+    connectorId,
+    ...extra,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + OAUTH_SESSION_TTL_MS,
+  };
+  await store.setSettings(oauthSessionStorageKey(nonce), encryptJson(record));
+  return `${nonce}.${stateSignature(nonce)}`;
+}
+
+export async function consumeOAuthSession(state, connectorId) {
+  const [nonce, signature] = String(state || '').split('.');
+  if (!nonce || !signature) throw new Error('Invalid OAuth state');
+
+  const expected = stateSignature(nonce);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    providedBuffer.length !== expectedBuffer.length
+    || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)
+  ) {
+    throw new Error('Invalid OAuth state signature');
+  }
+
+  const key = oauthSessionStorageKey(nonce);
+  const encrypted = await store.getSetting(key);
+  await store.deleteSetting(key);
+  const session = decryptJson(encrypted);
+
+  if (!session) throw new Error('OAuth session not found or unreadable');
+  if (session.expiresAt < Date.now()) throw new Error('OAuth session expired');
+  if (session.connectorId !== connectorId) throw new Error('OAuth connector mismatch');
+  return session;
+}
+
 /**
- * Store OAuth tokens for a user/connector pair.
+ * Store OAuth tokens durably for a user/connector pair.
  */
 export async function storeTokens(userId, connectorId, tokens) {
+  if (!userId || !connectorId || !tokens?.accessToken) {
+    throw new Error('userId, connectorId and accessToken are required');
+  }
+
   const key = `${userId}:${connectorId}`;
-  const encryptedAccess = encrypt(tokens.accessToken);
-  const encryptedRefresh = tokens.refreshToken ? encrypt(tokens.refreshToken) : null;
-  tokenStore.set(key, {
-    accessToken: encryptedAccess,
-    refreshToken: encryptedRefresh,
+  const normalized = {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken || null,
     expiresAt: tokens.expiresAt ? new Date(tokens.expiresAt).getTime() : null,
-    scopes: tokens.scopes || [],
+    scopes: Array.isArray(tokens.scopes) ? tokens.scopes : [],
+    account: tokens.account || null,
+    metadata: tokens.metadata || {},
     updatedAt: Date.now(),
-  });
-  // Also cache decrypted version briefly for performance
-  await cache.set(`tokens:${key}`, tokens, 60, 'connector');
+  };
+
+  await store.setSettings(tokenStorageKey(userId, connectorId), encryptJson(normalized));
+  await cache.set(`tokens:${key}`, normalized, 60, 'connector');
 }
 
 /**
@@ -76,23 +163,14 @@ export async function storeTokens(userId, connectorId, tokens) {
  */
 export async function getTokens(userId, connectorId) {
   const key = `${userId}:${connectorId}`;
-  // Check cache first
   const cached = await cache.get(`tokens:${key}`, 'connector');
   if (cached) return cached;
 
-  const stored = tokenStore.get(key);
-  if (!stored) return null;
+  const encrypted = await store.getSetting(tokenStorageKey(userId, connectorId));
+  const tokens = decryptJson(encrypted);
+  if (!tokens?.accessToken) return null;
 
-  const tokens = {
-    accessToken: decrypt(stored.accessToken),
-    refreshToken: stored.refreshToken ? decrypt(stored.refreshToken) : null,
-    expiresAt: stored.expiresAt ? new Date(stored.expiresAt) : null,
-    scopes: stored.scopes,
-  };
-
-  if (tokens.accessToken) {
-    await cache.set(`tokens:${key}`, tokens, 60, 'connector');
-  }
+  await cache.set(`tokens:${key}`, tokens, 60, 'connector');
   return tokens;
 }
 
@@ -410,7 +488,7 @@ export async function revokeTokens(userId, connectorId, definition) {
     }
   }
 
-  tokenStore.delete(`${userId}:${connectorId}`);
+  await store.deleteSetting(tokenStorageKey(userId, connectorId));
   await cache.del(`tokens:${userId}:${connectorId}`, 'connector');
   return true;
 }
@@ -454,6 +532,8 @@ export function initializeHealthChecks(connectorDefinitions) {
 export default {
   storeTokens,
   getTokens,
+  createOAuthSession,
+  consumeOAuthSession,
   ensureValidToken,
   checkRateLimit,
   connectorRequest,
