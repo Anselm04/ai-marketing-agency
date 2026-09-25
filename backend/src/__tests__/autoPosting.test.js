@@ -55,7 +55,7 @@ describe('Automated posting scheduler', () => {
   });
 
   test('can favor a learned best hour while remaining inside the allowed window', () => {
-    const from = Date.parse('2026-09-25T08:00:00.000Z');
+    const from = Date.parse('2026-09-25T06:00:00.000Z');
     const plan = autoPostingService.normalizePlan({
       cadence: 'daily',
       postsPerPeriod: 2,
