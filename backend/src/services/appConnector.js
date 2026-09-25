@@ -206,19 +206,34 @@ export async function ensureValidToken(userId, connectorId, definition) {
  * Refresh an OAuth 2.0 token.
  */
 async function refreshOAuthToken(definition, refreshToken) {
-  const response = await axios.post(
-    definition.auth.tokenUrl,
-    new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: definition.auth.clientId || process.env[`${definition.id.toUpperCase()}_CLIENT_ID`],
-      client_secret: definition.auth.clientSecret || process.env[`${definition.id.toUpperCase()}_CLIENT_SECRET`],
-    }),
-    {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 30000,
+  const clientId = definition.auth.clientId
+    || process.env[`${definition.id.toUpperCase().replace(/-/g, '_')}_CLIENT_ID`];
+  const clientSecret = definition.auth.clientSecret
+    || process.env[`${definition.id.toUpperCase().replace(/-/g, '_')}_CLIENT_SECRET`];
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+  });
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+
+  if (definition.auth.tokenAuth === 'basic') {
+    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+  } else {
+    body.set(definition.auth.tokenClientIdParam || 'client_id', clientId || '');
+    if (clientSecret) {
+      body.set(definition.auth.tokenClientSecretParam || 'client_secret', clientSecret);
     }
-  );
+  }
+
+  if (definition.auth.refreshScope === true && definition.auth.scopes?.length) {
+    body.set('scope', definition.auth.scopes.join(definition.auth.scopeSeparator || ' '));
+  }
+
+  const response = await axios.post(definition.auth.tokenUrl, body, {
+    headers,
+    timeout: 30000,
+  });
   return response.data;
 }
 
