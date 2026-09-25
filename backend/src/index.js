@@ -46,6 +46,7 @@ import socialVideoRoutes from './routes/socialVideo.js';
 import mediaLibraryRoutes from './routes/mediaLibrary.js';
 import autoPostingRoutes from './routes/autoPosting.js';
 import autoPostingService from './services/autoPostingService.js';
+import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
@@ -138,6 +139,31 @@ app.use((req, res, next) => {
   return next();
 });
 app.use('/api', auditLog);
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith('/api')) return next();
+
+  const freeAccountPaths = [
+    '/api/billing',
+    '/api/settings',
+  ];
+  const isPersonalPortfolioRead =
+    req.method === 'GET' && req.path === '/api/products/portfolio';
+
+  if (freeAccountPaths.some((prefix) => req.path.startsWith(prefix)) || isPersonalPortfolioRead) {
+    return next();
+  }
+
+  const entitlement = await getMarketingEntitlement(req.user);
+  if (!entitlement.entitled) {
+    return res.status(402).json({
+      error: 'An active Marketing subscription or valid plan god code is required.',
+      code: 'marketing_entitlement_required',
+      billingPath: '/dashboard/billing',
+    });
+  }
+  req.marketingEntitlement = entitlement;
+  return next();
+});
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/analytics', analyticsRoutes);
