@@ -41,7 +41,7 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, logout, isOwner } = useAuth()
-  const { theme, toggleTheme } = useTheme()
+  const { isDark, toggleTheme } = useTheme()
   const { t } = useLanguage()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -111,10 +111,10 @@ export default function Layout() {
               onClick={toggleTheme}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
               style={{ color: 'var(--text-muted)' }}
-              aria-label={theme === 'dark' ? t('day') : t('night')}
+              aria-label={isDark ? t('day') : t('night')}
             >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-              {theme === 'dark' ? t('day') : t('night')}
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              {isDark ? t('day') : t('night')}
             </button>
             <LanguageSelector />
           </div>
