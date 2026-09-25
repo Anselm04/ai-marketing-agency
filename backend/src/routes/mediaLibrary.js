@@ -1,7 +1,7 @@
 import express from 'express';
 import store from '../utils/store.js';
 import { uploadMemory } from '../middleware/upload.js';
-import { isS3Configured, uploadToS3 } from '../services/uploadService.js';
+import { isS3Configured, uploadPrivateToS3, getSignedDownloadUrl } from '../services/uploadService.js';
 import mediaComposerService from '../services/mediaComposerService.js';
 
 const router = express.Router();
@@ -18,9 +18,20 @@ function mediaType(mimetype = '') {
 
 router.get('/', async (req, res) => {
   const owner = ownerId(req);
-  const assets = (await store.getContentByOwner(owner))
+  const records = (await store.getContentByOwner(owner))
     .filter((item) => ['media_asset', 'generated_video'].includes(item.kind))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const assets = await Promise.all(records.map(async (item) => {
+    if (item.kind === 'media_asset' && item.storageKey) {
+      return {
+        ...item,
+        url: await getSignedDownloadUrl(item.storageKey, 15 * 60),
+        urlExpiresInSeconds: 15 * 60,
+      };
+    }
+    return item;
+  }));
   res.json({ assets });
 });
 
@@ -39,7 +50,7 @@ router.post('/upload', uploadMemory.array('files', 20), async (req, res) => {
       .replace(/[^a-zA-Z0-9._-]+/g, '-')
       .slice(-120);
     const key = `media-library/${owner}/${Date.now()}-${store._id()}-${safeName}`;
-    const url = await uploadToS3(key, file.buffer, file.mimetype);
+    await uploadPrivateToS3(key, file.buffer, file.mimetype);
 
     const item = await store.createContent({
       kind: 'media_asset',
@@ -48,8 +59,9 @@ router.post('/upload', uploadMemory.array('files', 20), async (req, res) => {
       originalName: file.originalname,
       mimetype: file.mimetype,
       size: file.size,
-      url,
+      url: null,
       storageKey: key,
+      storageVisibility: 'private',
       source: 'user_album_picker',
       createdAt: new Date().toISOString(),
     });
