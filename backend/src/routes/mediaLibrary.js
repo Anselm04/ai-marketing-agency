@@ -1,7 +1,7 @@
 import express from 'express';
 import store from '../utils/store.js';
 import { uploadMemory } from '../middleware/upload.js';
-import { isS3Configured, uploadPrivateToS3, getSignedDownloadUrl } from '../services/uploadService.js';
+import { isS3Configured, uploadPrivateToS3, getPrivateSignedDownloadUrl } from '../services/uploadService.js';
 import mediaComposerService from '../services/mediaComposerService.js';
 
 const router = express.Router();
@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
     if (item.kind === 'media_asset' && item.storageKey) {
       return {
         ...item,
-        url: await getSignedDownloadUrl(item.storageKey, 15 * 60),
+        url: await getPrivateSignedDownloadUrl(item.storageKey, 15 * 60),
         urlExpiresInSeconds: 15 * 60,
       };
     }
