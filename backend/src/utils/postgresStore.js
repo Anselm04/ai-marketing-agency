@@ -167,6 +167,14 @@ const store = {
   comparePassword(password, hash) {
     return bcrypt.compare(password, hash);
   },
+  async setUserPassword(userId, password) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await pool.query(
+      'update marketing.users set password_hash = $2, updated_at = now() where id = $1',
+      [userId, passwordHash],
+    );
+    return result.rowCount > 0;
+  },
   generateToken(userId) {
     if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
     return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
