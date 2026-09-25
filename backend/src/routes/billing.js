@@ -2,7 +2,7 @@ import express from 'express';
 import Stripe from 'stripe';
 import store from '../utils/store.js';
 import { CATALOG, findItem, publicCatalog } from '../config/stripeCatalog.js';
-import { redeemGodCodeForUser, REDEEM_FAIL } from '../services/godCodeService.js';
+import { redeemGodCodeForUser, REDEEM_FAIL, normalizeSubscriptionAccess } from '../services/godCodeService.js';
 
 const router = express.Router();
 
@@ -54,7 +54,7 @@ router.get('/subscription', async (req, res) => {
   const sub = (await store.getSubscriptions()).find(
     (s) => s.user === req.user.id || s.userId === req.user.id
   );
-  res.json(sub || { status: 'none' });
+  res.json((await normalizeSubscriptionAccess(sub)) || { status: 'none' });
 });
 
 router.post('/cancel', async (req, res) => {
