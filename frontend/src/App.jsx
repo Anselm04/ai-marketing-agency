@@ -38,6 +38,7 @@ import SocialVideoPublisher from './pages/SocialVideoPublisher'
 import MediaLibrary from './pages/MediaLibrary'
 import AutoPosting from './pages/AutoPosting'
 import ClippingAgency from './pages/ClippingAgency'
+import PaidAdvertising from './pages/PaidAdvertising'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
 
 function ProtectedRoute({ children }) {
@@ -93,6 +94,7 @@ function AppRoutes() {
         <Route path="media-library" element={<MediaLibrary />} />
         <Route path="auto-posting" element={<AutoPosting />} />
         <Route path="clipping" element={<ClippingAgency />} />
+        <Route path="paid-ads" element={<PaidAdvertising />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
