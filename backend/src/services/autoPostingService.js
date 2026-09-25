@@ -5,6 +5,7 @@ import mediaComposerService from './mediaComposerService.js';
 import userVideoPublisherService from './userVideoPublisherService.js';
 import { generateAgentResponse } from './openaiService.js';
 import { logger } from '../utils/logger.js';
+import autoPostingAnalyticsService from './autoPostingAnalyticsService.js';
 
 const CADENCE_LIMITS = { daily: 12, weekly: 50, monthly: 120 };
 const PERIOD_MS = {
@@ -68,16 +69,71 @@ class AutoPostingService {
       maxVideoSeconds: Math.max(2, Math.min(Number(input.maxVideoSeconds) || 12, 60)),
       startImmediately: input.startImmediately !== false,
       publishingSettings: input.publishingSettings || {},
+      timezone: String(input.timezone || 'UTC').slice(0, 100),
+      postingWindowStartHour: Math.max(0, Math.min(Number(input.postingWindowStartHour ?? 8), 23)),
+      postingWindowEndHour: Math.max(0, Math.min(Number(input.postingWindowEndHour ?? 21), 23)),
+      aiOptimizationEnabled: input.aiOptimizationEnabled !== false,
+      explorationRate: Math.max(0.05, Math.min(Number(input.explorationRate) || 0.2, 0.5)),
     };
   }
 
-  nextRunAt(plan, from = Date.now()) {
-    return new Date(from + intervalMs(plan.cadence, plan.postsPerPeriod)).toISOString();
+  localHourAt(timestamp, timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone || 'UTC',
+        hour: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(new Date(timestamp));
+      return Number(parts.find((part) => part.type === 'hour')?.value || 0);
+    } catch {
+      return new Date(timestamp).getUTCHours();
+    }
   }
 
-  pickAssets(plan, assets) {
+  isHourInWindow(hour, startHour, endHour) {
+    if (startHour === endHour) return true;
+    if (startHour < endHour) return hour >= startHour && hour < endHour;
+    return hour >= startHour || hour < endHour;
+  }
+
+  nextEligibleTime(plan, from = Date.now(), preferredHours = []) {
+    const start = from + intervalMs(plan.cadence, plan.postsPerPeriod);
+    const timezone = plan.timezone || 'UTC';
+    const windowStart = Number(plan.postingWindowStartHour ?? 8);
+    const windowEnd = Number(plan.postingWindowEndHour ?? 21);
+    const preferred = new Set((preferredHours || []).map(Number).filter(Number.isInteger));
+
+    let firstAllowed = null;
+    const step = 15 * 60 * 1000;
+    const horizon = start + 8 * 24 * 60 * 60 * 1000;
+
+    for (let candidate = start; candidate <= horizon; candidate += step) {
+      const hour = this.localHourAt(candidate, timezone);
+      if (!this.isHourInWindow(hour, windowStart, windowEnd)) continue;
+      if (!firstAllowed) firstAllowed = candidate;
+      if (!preferred.size || preferred.has(hour)) return new Date(candidate).toISOString();
+    }
+
+    return new Date(firstAllowed || start).toISOString();
+  }
+
+  nextRunAt(plan, from = Date.now(), preferredHours = []) {
+    return this.nextEligibleTime(plan, from, preferredHours);
+  }
+
+  pickAssets(plan, assets, recommendedCombination = null) {
     const source = assets.filter((asset) => plan.sourceAssetIds.includes(String(asset.id)));
     if (!source.length) return [];
+
+    const recommendedIds = recommendedCombination?.sourceAssetIds || [];
+    const recommended = recommendedIds
+      .map((id) => source.find((asset) => String(asset.id) === String(id)))
+      .filter(Boolean);
+
+    if (recommended.length && Math.random() >= (plan.explorationRate ?? 0.2)) {
+      return recommended.slice(0, Math.min(plan.assetsPerPost || 3, recommended.length));
+    }
+
     const start = Number(plan.rotationIndex || 0) % source.length;
     const count = Math.min(plan.assetsPerPost || 3, source.length);
     return Array.from({ length: count }, (_, index) => source[(start + index) % source.length]);
@@ -113,9 +169,19 @@ class AutoPostingService {
     if (!plan.platformIds || !plan.platformIds.length) throw new Error('Auto-posting plan has no selected platforms');
 
     const allContent = await store.getContent();
+    let recommendation = null;
+    if (plan.aiOptimizationEnabled !== false) {
+      try {
+        recommendation = await autoPostingAnalyticsService.recommend(plan.owner, plan.id);
+      } catch {
+        recommendation = null;
+      }
+    }
+
     const selectedAssets = this.pickAssets(
       plan,
       allContent.filter((item) => item.owner === plan.owner && item.kind === 'media_asset'),
+      recommendation?.recommendedContentCombination,
     );
     if (!selectedAssets.length) throw new Error('Selected source media is no longer available');
 
@@ -155,9 +221,11 @@ class AutoPostingService {
     });
 
     const successful = results.filter((result) => result.success).length;
+    const startedAt = new Date().toISOString();
+    const localHour = this.localHourAt(Date.now(), plan.timezone || 'UTC');
     const run = {
       id: store._id(),
-      startedAt: new Date().toISOString(),
+      startedAt,
       generatedVideoId: outputRecord.id,
       mediaUrl: generatedVideo.url,
       sourceAssetIds: generatedVideo.sourceAssetIds,
@@ -165,13 +233,24 @@ class AutoPostingService {
       results,
       successful,
       failed: results.length - successful,
+      timezone: plan.timezone || 'UTC',
+      scheduledLocalHour: this.localHourAt(new Date(plan.nextRunAt || startedAt).getTime(), plan.timezone || 'UTC'),
+      actualLocalHour: localHour,
+      aspectRatio: plan.aspectRatio,
+      assetsPerPost: selectedAssets.length,
+      optimizationApplied: Boolean(recommendation?.hasEnoughData),
+      optimizationRecommendation: recommendation || null,
     };
 
     const updated = await store.updateContent(plan.id, {
       completedPosts: (Number(plan.completedPosts) || 0) + 1,
       rotationIndex: (Number(plan.rotationIndex) || 0) + selectedAssets.length,
       lastRunAt: run.startedAt,
-      nextRunAt: this.nextRunAt(plan),
+      nextRunAt: this.nextRunAt(
+        plan,
+        Date.now(),
+        plan.aiOptimizationEnabled !== false ? recommendation?.recommendedHours || [] : [],
+      ),
       lastRun: run,
       recentRuns: [run, ...(plan.recentRuns || [])].slice(0, 20),
       status: successful > 0 ? 'running' : 'attention_required',
@@ -210,8 +289,16 @@ class AutoPostingService {
       if (this.inFlight.has(plan.id)) continue;
       this.inFlight.add(plan.id);
       try {
+        let recommendation = null;
+        if (plan.aiOptimizationEnabled !== false) {
+          try {
+            recommendation = await autoPostingAnalyticsService.recommend(plan.owner, plan.id);
+          } catch {
+            recommendation = null;
+          }
+        }
         await store.updateContent(plan.id, {
-          nextRunAt: this.nextRunAt(plan, now),
+          nextRunAt: this.nextRunAt(plan, now, recommendation?.recommendedHours || []),
           status: 'running',
           updatedAt: new Date().toISOString(),
         });
