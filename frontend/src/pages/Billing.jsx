@@ -13,6 +13,7 @@ export default function Billing() {
   const [loading, setLoading] = useState(false)
   const [code, setCode] = useState('')
   const [redeemMsg, setRedeemMsg] = useState('')
+  const [checkoutMsg, setCheckoutMsg] = useState('')
   const { t } = useLanguage()
 
   useEffect(() => {
@@ -27,11 +28,30 @@ export default function Billing() {
       .then(res => setCredits(res.data?.credits?.length ? res.data.credits : CATALOG.credits))
       .catch(() => setCredits(CATALOG.credits))
 
-    api.get('/billing/subscription').then(res => setSubscription(res.data)).catch(() => {})
+    const sync = async () => {
+      const params = new URLSearchParams(window.location.search)
+      const sessionId = params.get('session_id')
+      if (params.get('success') === '1' && sessionId) {
+        setCheckoutMsg('Confirming your subscription…')
+        try {
+          const verified = await api.post('/billing/sync-checkout', { sessionId })
+          setSubscription(verified.data?.subscription || null)
+          setCheckoutMsg('Subscription active. Your Marketing access is unlocked.')
+          window.history.replaceState({}, '', '/dashboard/billing')
+          return
+        } catch (err) {
+          setCheckoutMsg(err.response?.data?.error || 'Unable to confirm your subscription yet.')
+        }
+      }
+      api.get('/billing/subscription').then(res => setSubscription(res.data)).catch(() => {})
+    }
+
+    sync()
   }, [])
 
   const handleCheckout = async (plan) => {
     setLoading(true)
+    setCheckoutMsg('')
     try {
       const res = await api.post('/billing/checkout', {
         lookup_key: plan.lookup_key,
@@ -41,11 +61,13 @@ export default function Billing() {
         window.location.href = res.data.url
         return
       }
+      setCheckoutMsg('Unable to start secure checkout.')
     } catch (err) {
       console.error(err)
+      setCheckoutMsg(err.response?.data?.error || 'Unable to start secure checkout.')
+    } finally {
+      setLoading(false)
     }
-    if (plan.paymentLink) window.location.href = plan.paymentLink
-    setLoading(false)
   }
 
   const handleCancel = async () => {
@@ -78,6 +100,12 @@ export default function Billing() {
         <h2 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Billing</h2>
         <p className="mt-1" style={{ color: 'var(--text-muted)' }}>Manage your subscription and billing</p>
       </div>
+
+      {checkoutMsg && (
+        <div className="p-4 text-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', color: 'var(--gold-bright)' }}>
+          {checkoutMsg}
+        </div>
+      )}
 
       <form onSubmit={handleRedeem} className="p-5 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
         <h3 className="font-semibold" style={{ color: 'var(--gold-bright)' }}>{t('redeemTitle')}</h3>
