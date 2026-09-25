@@ -12,7 +12,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -44,8 +44,8 @@ export default function Register() {
           <nav className="studio-nav">
             <LanguageSelector />
             <button type="button" onClick={toggleTheme} className="studio-nav-cta" style={{ background: 'transparent', cursor: 'pointer' }}>
-              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-              {theme === 'dark' ? t('day') : t('night')}
+              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+              {isDark ? t('day') : t('night')}
             </button>
             <Link to="/login">{t('signIn')}</Link>
           </nav>
