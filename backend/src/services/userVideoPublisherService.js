@@ -156,11 +156,17 @@ class UserVideoPublisherService {
     }
   }
 
-  async publishMany({ userId, platformIds = [], ...payload }) {
+  async publishMany({ userId, platformIds = [], settings = {}, ...payload }) {
     const unique = [...new Set(platformIds.map(normalizePlatformId).filter(Boolean))];
     const results = [];
     for (const platformId of unique) {
-      results.push(await this.publish({ userId, platformId, ...payload }));
+      const platformSettings = settings?.[platformId] || settings || {};
+      results.push(await this.publish({
+        userId,
+        platformId,
+        ...payload,
+        settings: platformSettings,
+      }));
     }
     return results;
   }
