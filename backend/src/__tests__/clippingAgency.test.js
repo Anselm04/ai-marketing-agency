@@ -1,5 +1,6 @@
 import request from 'supertest';
 import app from '../index.js';
+import store from '../utils/store.js';
 
 describe('AI Clipping Agency API', () => {
   let token;
@@ -15,6 +16,15 @@ describe('AI Clipping Agency API', () => {
         lastName: 'Tester',
       });
     token = res.body.token;
+    const user = await store.findUserByEmail(email);
+    await store.createSubscription({
+      userId: user.id,
+      user: user.id,
+      plan: 'starter',
+      status: 'active',
+      source: 'test',
+      expiresAt: null,
+    });
   });
 
   test('creates, plans, rights-gates, activates, and optimizes a clipping campaign', async () => {

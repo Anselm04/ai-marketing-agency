@@ -21,7 +21,7 @@ import analyticsRoutes from './routes/analytics.js';
 import contentRoutes from './routes/content.js';
 import crmRoutes from './routes/crm.js';
 import billingPublicRoutes from './routes/billingPublic.js';
-import billingRoutes from './routes/billing.js';
+import billingRoutes, { stripeWebhookHandler } from './routes/billing.js';
 import adminRoutes from './routes/admin.js';
 import teamRoutes from './routes/team.js';
 import settingsRoutes from './routes/settings.js';
@@ -46,6 +46,7 @@ import socialVideoRoutes from './routes/socialVideo.js';
 import mediaLibraryRoutes from './routes/mediaLibrary.js';
 import autoPostingRoutes from './routes/autoPosting.js';
 import autoPostingService from './services/autoPostingService.js';
+import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
@@ -102,6 +103,7 @@ app.use(
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan('combined'));
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeBody);
@@ -137,6 +139,32 @@ app.use((req, res, next) => {
   return next();
 });
 app.use('/api', auditLog);
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith('/api')) return next();
+
+  const freeAccountPaths = [
+    '/api/billing',
+    '/api/settings',
+    '/api/admin',
+  ];
+  const isPersonalPortfolioRead =
+    req.method === 'GET' && req.path === '/api/products/portfolio';
+
+  if (freeAccountPaths.some((prefix) => req.path.startsWith(prefix)) || isPersonalPortfolioRead) {
+    return next();
+  }
+
+  const entitlement = await getMarketingEntitlement(req.user);
+  if (!entitlement.entitled) {
+    return res.status(402).json({
+      error: 'An active Marketing subscription or valid plan god code is required.',
+      code: 'marketing_entitlement_required',
+      billingPath: '/dashboard/billing',
+    });
+  }
+  req.marketingEntitlement = entitlement;
+  return next();
+});
 app.use('/api/agents', agentRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/analytics', analyticsRoutes);

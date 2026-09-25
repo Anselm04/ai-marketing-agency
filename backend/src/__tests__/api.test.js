@@ -29,6 +29,20 @@ beforeAll(async () => {
       .send({ email: testUser.email, password: testUser.password });
     authToken = loginRes.body.token;
   }
+
+  const current = await store.findUserByEmail(testUser.email);
+  const existingSubscriptions = await store.getSubscriptionsByUser(current.id);
+  if (!existingSubscriptions.some((sub) => sub.status === 'active')) {
+    await store.createSubscription({
+      userId: current.id,
+      user: current.id,
+      plan: 'starter',
+      status: 'active',
+      source: 'test',
+      lookup_key: 'marketing_starter_monthly',
+      expiresAt: null,
+    });
+  }
 });
 
 afterAll(() => {

@@ -3,7 +3,7 @@ import productMarketingService from '../services/productMarketingService.js';
 import store from '../utils/store.js';
 import { upload } from '../middleware/upload.js';
 import { authenticate } from '../middleware/auth.js';
-import { requireOwner } from '../utils/owner.js';
+import { requireMarketingEntitlement } from '../services/marketingEntitlementService.js';
 
 const router = express.Router();
 
@@ -12,7 +12,7 @@ router.use(authenticate);
 // POST /api/products/marketing
 // Accepts product photos (multipart) + text fields
 // Runs AI analysis and generates complete marketing campaign
-router.post('/marketing', upload.array('photos', 10), async (req, res) => {
+router.post('/marketing', requireMarketingEntitlement, upload.array('photos', 10), async (req, res) => {
   try {
     const {
       productName,
@@ -64,13 +64,98 @@ router.post('/marketing', upload.array('photos', 10), async (req, res) => {
 });
 
 // GET /api/products/portfolio
-// Owner-only portfolio of AppForge products eligible for automatic Marketing.
-router.get('/portfolio', requireOwner, async (req, res) => {
+// Personal AppForge portfolio. Every authenticated user can see only their own products.
+router.get('/portfolio', async (req, res) => {
   const content = await store.getContentByOwner(req.user.id);
   const products = content
-    .filter((item) => item.kind === 'owner_portfolio_product' && item.ownerOnly === true)
+    .filter((item) => item.kind === 'appforge_portfolio_product')
     .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
   res.json(products);
+});
+
+// POST /api/products/portfolio/:id/activate
+// Starts Marketing for one AppForge product after the user has paid or redeemed a plan god code.
+router.post('/portfolio/:id/activate', requireMarketingEntitlement, async (req, res) => {
+  try {
+    const content = await store.getContentByOwner(req.user.id);
+    const portfolioProduct = content.find(
+      (item) => item.id === req.params.id && item.kind === 'appforge_portfolio_product',
+    );
+    if (!portfolioProduct) {
+      return res.status(404).json({ error: 'Portfolio product not found' });
+    }
+
+    const campaigns = await store.getCampaignsByOwner(req.user.id);
+    const existing = campaigns.find(
+      (campaign) =>
+        campaign.portfolioProductId === portfolioProduct.id
+        || (
+          campaign.source === 'appforge'
+          && campaign.sourceProjectId === portfolioProduct.sourceProjectId
+        ),
+    );
+
+    if (existing) {
+      await store.updateContent(portfolioProduct.id, {
+        autoMarketingEligible: true,
+        entitlementSource: req.marketingEntitlement?.source || null,
+        marketingStatus: existing.status === 'draft' ? 'draft_created' : 'campaign_generated',
+        campaignId: existing.id,
+        updatedAt: new Date().toISOString(),
+      });
+      return res.json({ success: true, replayed: true, portfolioProduct, campaign: existing });
+    }
+
+    const generated = await productMarketingService.runMarketing({
+      productName: portfolioProduct.productName,
+      description: portfolioProduct.description || '',
+      photos: [],
+      platforms: ['TikTok', 'Instagram', 'Google', 'LinkedIn', 'Facebook'],
+      targetAudience: 'general consumers',
+      budget: 1000,
+      category: 'software',
+      tone: 'professional',
+      ownerId: req.user.id,
+    });
+
+    const campaign = await store.updateCampaign(generated.campaign.id, {
+      source: 'appforge',
+      sourceRequestId: `appforge:${req.user.id}:${portfolioProduct.sourceProjectId}:portfolio-activation`,
+      sourceProjectId: portfolioProduct.sourceProjectId,
+      sourceProjectCreatedAt: portfolioProduct.sourceProjectCreatedAt || null,
+      sourceUserEmail: req.user.email,
+      sourceUserName: portfolioProduct.sourceUserName || '',
+      techStack: portfolioProduct.techStack || '',
+      productUrl: portfolioProduct.productUrl || '',
+      portfolioProductId: portfolioProduct.id,
+      appforgePortfolioProduct: true,
+      entitlementSource: req.marketingEntitlement?.source || null,
+    });
+
+    const updatedPortfolio = await store.updateContent(portfolioProduct.id, {
+      autoMarketingEligible: true,
+      entitlementSource: req.marketingEntitlement?.source || null,
+      marketingStatus: 'campaign_generated',
+      campaignId: campaign.id,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return res.status(201).json({
+      success: true,
+      replayed: false,
+      portfolioProduct: updatedPortfolio,
+      campaign,
+      generated: {
+        contentItems: generated.contentItems?.length || 0,
+        hasStrategy: Boolean(generated.strategy),
+        hasSeo: Boolean(generated.seoKeywords),
+        hasSocialPosts: Boolean(generated.socialPosts),
+        hasAdCopy: Boolean(generated.adCopy),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to activate product marketing' });
+  }
 });
 
 // GET /api/products

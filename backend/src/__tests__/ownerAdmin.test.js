@@ -14,7 +14,17 @@ describe('Owner admin and account controls', () => {
         firstName: 'Owner',
         lastName: 'Account',
       });
-    ownerToken = owner.body.token;
+    if (owner.status === 201) {
+      ownerToken = owner.body.token;
+    } else {
+      const login = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'anselm.perkins@gmail.com',
+          password: 'OwnerSecurePass123!',
+        });
+      ownerToken = login.body.token;
+    }
 
     const regular = await request(app)
       .post('/api/auth/register')

@@ -1,5 +1,6 @@
 import request from 'supertest';
 import app from '../index.js';
+import store from '../utils/store.js';
 import userVideoPublisherService from '../services/userVideoPublisherService.js';
 import { videoPlatformCatalog } from '../services/videoPlatformCatalog.js';
 
@@ -17,6 +18,15 @@ describe('Per-user social video distribution', () => {
         lastName: 'Video',
       });
     token = res.body.token;
+    const user = await store.findUserByEmail(email);
+    await store.createSubscription({
+      userId: user.id,
+      user: user.id,
+      plan: 'starter',
+      status: 'active',
+      source: 'test',
+      expiresAt: null,
+    });
   });
 
   test('catalog exposes the requested social-video platforms without pretending unsupported APIs exist', async () => {
