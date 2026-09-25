@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle, Film, Link2, Send, Upload, XCircle } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import api from '../services/api'
 
 const CATEGORY_LABELS = {
@@ -20,10 +20,12 @@ function platformStatus(platform) {
 }
 
 export default function SocialVideoPublisher() {
+  const location = useLocation()
   const [platforms, setPlatforms] = useState([])
   const [selected, setSelected] = useState([])
+  const [manualSelected, setManualSelected] = useState([])
   const [file, setFile] = useState(null)
-  const [mediaUrl, setMediaUrl] = useState('')
+  const [mediaUrl, setMediaUrl] = useState(location.state?.mediaUrl || '')
   const [coverImageUrl, setCoverImageUrl] = useState('')
   const [pinterestBoardId, setPinterestBoardId] = useState('')
   const [title, setTitle] = useState('')
@@ -58,10 +60,38 @@ export default function SocialVideoPublisher() {
   )
 
   const toggle = (platform) => {
-    if (platform.publish !== 'direct_api' || !platform.connected) return
-    setSelected((current) => current.includes(platform.id)
+    if (platform.publish === 'direct_api' && platform.connected) {
+      setSelected((current) => current.includes(platform.id)
+        ? current.filter((id) => id !== platform.id)
+        : [...current, platform.id])
+      return
+    }
+
+    setManualSelected((current) => current.includes(platform.id)
       ? current.filter((id) => id !== platform.id)
       : [...current, platform.id])
+  }
+
+  const shareManually = async () => {
+    setError('')
+    if (!file) {
+      setError('For manual sharing, choose the video file from your device so the browser can hand the actual file to your device share sheet.')
+      return
+    }
+    if (!navigator.share || !navigator.canShare?.({ files: [file] })) {
+      setError('This browser does not support sharing video files to installed apps. Use the generated/downloaded video and upload it directly in the selected platform.')
+      return
+    }
+
+    try {
+      await navigator.share({
+        files: [file],
+        title: title || 'Video',
+        text: caption,
+      })
+    } catch (err) {
+      if (err?.name !== 'AbortError') setError(err.message || 'Unable to open the device share sheet')
+    }
   }
 
   const uploadFile = async () => {
@@ -159,7 +189,7 @@ export default function SocialVideoPublisher() {
         </div>
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
           <div className="text-xs text-gray-500">Selected for this video</div>
-          <div className="text-2xl font-bold mt-1">{selected.length}</div>
+          <div className="text-2xl font-bold mt-1">{selected.length + manualSelected.length}</div>
         </div>
       </div>
 
@@ -173,14 +203,16 @@ export default function SocialVideoPublisher() {
         <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Choose where this video should go</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {platforms.map((platform) => {
-            const selectable = platform.publish === 'direct_api' && platform.connected
-            const isSelected = selected.includes(platform.id)
+            const automatic = platform.publish === 'direct_api' && platform.connected
+            const isSelected = automatic
+              ? selected.includes(platform.id)
+              : manualSelected.includes(platform.id)
             return (
               <button
                 type="button"
                 key={platform.id}
                 onClick={() => toggle(platform)}
-                disabled={!selectable}
+                disabled={false}
                 className={`text-left rounded-lg border p-3 transition-colors ${isSelected
                   ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
                   : 'border-gray-200 dark:border-gray-700'} disabled:opacity-60 disabled:cursor-not-allowed`}
@@ -190,9 +222,9 @@ export default function SocialVideoPublisher() {
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{platform.name}</div>
                     <div className="text-[11px] text-gray-500 mt-0.5">{CATEGORY_LABELS[platform.category] || platform.category}</div>
                   </div>
-                  {selectable
+                  {automatic
                     ? <CheckCircle size={15} className={isSelected ? 'text-blue-600' : 'text-green-500'} />
-                    : <XCircle size={15} className="text-gray-400" />}
+                    : <XCircle size={15} className={isSelected ? 'text-blue-600' : 'text-gray-400'} />}
                 </div>
                 <div className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{platformStatus(platform)}</div>
               </button>
@@ -273,14 +305,33 @@ export default function SocialVideoPublisher() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={publishing || uploading || selected.length === 0}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
-        >
-          <Send size={16} />
-          {uploading ? 'Uploading video…' : publishing ? 'Publishing…' : `Publish to ${selected.length} platform${selected.length === 1 ? '' : 's'}`}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="submit"
+            disabled={publishing || uploading || selected.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
+          >
+            <Send size={16} />
+            {uploading ? 'Uploading video…' : publishing ? 'Publishing…' : `Auto-publish to ${selected.length} platform${selected.length === 1 ? '' : 's'}`}
+          </button>
+
+          {manualSelected.length > 0 && (
+            <button
+              type="button"
+              onClick={shareManually}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-medium"
+            >
+              <Upload size={16} />
+              Share to ${manualSelected.length} other platform${manualSelected.length === 1 ? '' : 's'}
+            </button>
+          )}
+        </div>
+
+        {manualSelected.length > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+            Those selected platforms do not currently expose a production-ready third-party video-upload API to this app. On supported mobile browsers, “Share” opens the device share sheet so the user can choose the installed platform themselves.
+          </div>
+        )}
       </form>
 
       {results.length > 0 && (
