@@ -14,7 +14,7 @@ function hourLabel(hour) {
 
 export default function Settings() {
   const { setTheme } = useTheme();
-  const { setLang } = useLanguage();
+  const { setLang, langs } = useLanguage();
   const [profile, setProfile] = useState(null);
   const [memory, setMemory] = useState(null);
   const [form, setForm] = useState(null);
@@ -141,11 +141,15 @@ export default function Settings() {
               </label>
               <label className="text-sm">
                 <span className="mb-1 block text-gray-600 dark:text-gray-300">Language</span>
-                <input
+                <select
                   value={form.language}
                   onChange={(e) => setForm({ ...form, language: e.target.value })}
                   className="w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 dark:border-gray-700"
-                />
+                >
+                  {langs.map((item) => (
+                    <option key={item.code} value={item.code}>{item.name}</option>
+                  ))}
+                </select>
               </label>
               <label className="text-sm">
                 <span className="mb-1 block text-gray-600 dark:text-gray-300">Time zone</span>
