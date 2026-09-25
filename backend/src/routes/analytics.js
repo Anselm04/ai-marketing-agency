@@ -4,8 +4,8 @@ import store from '../utils/store.js';
 const router = express.Router();
 
 router.get('/', async (req, res) => {
-  const campaigns = (await store.getCampaigns()).filter(c => c.owner === req.user.id);
-  const leads = (await store.getLeads()).filter(l => l.owner === req.user.id);
+  const campaigns = await store.getCampaignsByOwner(req.user.id);
+  const leads = await store.getLeadsByOwner(req.user.id);
   res.json({
     campaigns: campaigns.length,
     leads: leads.length,
@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/dashboard', async (req, res) => {
-  const campaigns = (await store.getCampaigns()).filter(c => c.owner === req.user.id);
+  const campaigns = await store.getCampaignsByOwner(req.user.id);
   const totalRevenue = campaigns.reduce((sum, c) => sum + (c.revenue || 0), 0);
   const totalSpend = campaigns.reduce((sum, c) => sum + (c.spend || 0), 0);
   const overallRoi = totalSpend > 0 ? (totalRevenue - totalSpend) / totalSpend : 0;
@@ -26,7 +26,7 @@ router.get('/dashboard', async (req, res) => {
     totalSpend,
     totalRevenue,
     overallRoi: parseFloat(overallRoi.toFixed(2)),
-    leads: (await store.getLeads()).filter(l => l.owner === req.user.id && new Date(l.createdAt) >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).length,
+    leads: (await store.getLeadsByOwner(req.user.id)).filter(l => new Date(l.createdAt) >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).length,
   });
 });
 
