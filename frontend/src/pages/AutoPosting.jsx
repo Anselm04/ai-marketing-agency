@@ -43,6 +43,7 @@ export default function AutoPosting() {
   const [analyticsByPlan, setAnalyticsByPlan] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [syncingPlanId, setSyncingPlanId] = useState(null)
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     enabled: true,
@@ -163,6 +164,25 @@ export default function AutoPosting() {
       await load()
     } catch (err) {
       setError(err.response?.data?.error || 'Unable to update automation')
+    }
+  }
+
+  const syncAnalytics = async (plan) => {
+    setSyncingPlanId(plan.id)
+    setError('')
+    try {
+      const res = await api.post('/auto-posting/' + plan.id + '/sync-analytics')
+      setAnalyticsByPlan((current) => ({
+        ...current,
+        [plan.id]: {
+          analytics: res.data.analytics,
+          recommendation: res.data.recommendation,
+        },
+      }))
+    } catch (err) {
+      setError(err.response?.data?.error || 'Unable to refresh performance analytics')
+    } finally {
+      setSyncingPlanId(null)
     }
   }
 
@@ -543,6 +563,9 @@ export default function AutoPosting() {
                 <div className="mt-4 text-xs text-gray-500">
                   Next run: {plan.enabled && plan.nextRunAt ? new Date(plan.nextRunAt).toLocaleString() : 'Paused'}
                 </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  Allowed hours: {formatHour(plan.postingWindowStartHour ?? 8)}–{formatHour(plan.postingWindowEndHour ?? 21)} · {plan.timezone || 'UTC'}
+                </div>
 
                 <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50/70 p-4 dark:border-purple-900 dark:bg-purple-950/20">
                   <div className="flex items-center gap-2 text-sm font-semibold text-purple-900 dark:text-purple-200">
@@ -604,6 +627,15 @@ export default function AutoPosting() {
                 )}
 
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => syncAnalytics(plan)}
+                    disabled={syncingPlanId === plan.id}
+                    className="inline-flex items-center gap-1 rounded-lg border border-purple-200 px-3 py-2 text-xs text-purple-700 disabled:opacity-50 dark:border-purple-800 dark:text-purple-300"
+                  >
+                    <BarChart3 size={14} />
+                    {syncingPlanId === plan.id ? 'Refreshing analytics…' : 'Refresh performance'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => runNow(plan)}
