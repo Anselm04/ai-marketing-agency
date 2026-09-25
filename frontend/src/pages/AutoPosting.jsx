@@ -1,8 +1,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  CalendarClock, CheckCircle2, Film, Image as ImageIcon, Pause, Play, RefreshCw,
-  Sparkles, Trash2, Zap
+  BarChart3, Brain, CalendarClock, CheckCircle2, Clock3, Eye, Film,
+  Image as ImageIcon, MousePointer2, Pause, Play, RefreshCw, Sparkles,
+  Trash2, TrendingUp, Zap
 } from 'lucide-react'
 import api from '../services/api'
 
@@ -10,6 +11,14 @@ const CADENCE = {
   daily: { label: 'Daily', max: 12, period: 'day' },
   weekly: { label: 'Weekly', max: 50, period: 'week' },
   monthly: { label: 'Monthly', max: 120, period: 'month' },
+}
+
+function formatHour(hour) {
+  const value = Number(hour)
+  const normalized = ((value % 24) + 24) % 24
+  if (normalized === 0) return '12 AM'
+  if (normalized === 12) return '12 PM'
+  return normalized < 12 ? normalized + ' AM' : (normalized - 12) + ' PM'
 }
 
 function frequencyText(cadence, count) {
@@ -31,6 +40,7 @@ export default function AutoPosting() {
   const [assets, setAssets] = useState([])
   const [platforms, setPlatforms] = useState([])
   const [plans, setPlans] = useState([])
+  const [analyticsByPlan, setAnalyticsByPlan] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -47,6 +57,11 @@ export default function AutoPosting() {
     secondsPerImage: 3,
     maxVideoSeconds: 12,
     startImmediately: true,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    postingWindowStartHour: 8,
+    postingWindowEndHour: 21,
+    aiOptimizationEnabled: true,
+    explorationRate: 0.2,
   })
 
   const load = async () => {
@@ -62,7 +77,19 @@ export default function AutoPosting() {
           (platform) => platform.publish === 'direct_api' && platform.connected,
         ),
       )
-      setPlans(plansRes.data.plans || [])
+      const loadedPlans = plansRes.data.plans || []
+      setPlans(loadedPlans)
+      const analyticsResults = await Promise.all(
+        loadedPlans.map(async (plan) => {
+          try {
+            const res = await api.get('/auto-posting/' + plan.id + '/analytics')
+            return [plan.id, res.data]
+          } catch {
+            return [plan.id, null]
+          }
+        }),
+      )
+      setAnalyticsByPlan(Object.fromEntries(analyticsResults))
       setError('')
     } catch (err) {
       setError(err.response?.data?.error || 'Unable to load automated posting settings')
@@ -261,6 +288,82 @@ export default function AutoPosting() {
           </div>
         </div>
 
+        <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700 space-y-4">
+          <div className="flex items-start gap-3">
+            <Clock3 size={18} className="mt-0.5 text-blue-600" />
+            <div>
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Preferred posting hours</div>
+              <div className="mt-1 text-xs text-gray-500">
+                Automated posts will stay inside this local-time window. The AI optimizer can move posts within the window, but never outside it.
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="text-sm">
+              <div className="mb-1 flex justify-between text-gray-700 dark:text-gray-300">
+                <span>Start time</span>
+                <strong>{formatHour(form.postingWindowStartHour)}</strong>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="23"
+                step="1"
+                value={form.postingWindowStartHour}
+                onChange={(event) => setForm({ ...form, postingWindowStartHour: Number(event.target.value) })}
+                className="w-full"
+              />
+            </label>
+
+            <label className="text-sm">
+              <div className="mb-1 flex justify-between text-gray-700 dark:text-gray-300">
+                <span>End time</span>
+                <strong>{formatHour(form.postingWindowEndHour)}</strong>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="23"
+                step="1"
+                value={form.postingWindowEndHour}
+                onChange={(event) => setForm({ ...form, postingWindowEndHour: Number(event.target.value) })}
+                className="w-full"
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-900/40 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Time zone</div>
+              <div className="mt-1 text-xs text-gray-500">{form.timezone}</div>
+            </div>
+            <div className="text-xs text-gray-500">
+              Allowed window: {formatHour(form.postingWindowStartHour)} to {formatHour(form.postingWindowEndHour)}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-purple-200 bg-purple-50 p-3 dark:border-purple-900 dark:bg-purple-950/20">
+            <div className="flex items-start gap-2">
+              <Brain size={18} className="mt-0.5 text-purple-600" />
+              <div>
+                <div className="text-sm font-medium text-purple-900 dark:text-purple-200">AI timing & content optimization</div>
+                <div className="mt-1 text-xs text-purple-700 dark:text-purple-300">
+                  Learn from views, clicks, engagement and conversions, then favor the strongest posting hours and content combinations while still testing alternatives.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-pressed={form.aiOptimizationEnabled}
+              onClick={() => setForm((current) => ({ ...current, aiOptimizationEnabled: !current.aiOptimizationEnabled }))}
+              className={'relative h-7 w-12 flex-none rounded-full transition-colors ' + (form.aiOptimizationEnabled ? 'bg-purple-600' : 'bg-gray-300 dark:bg-gray-600')}
+            >
+              <span className={'absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ' + (form.aiOptimizationEnabled ? 'translate-x-6' : 'translate-x-1')} />
+            </button>
+          </div>
+        </div>
+
         <div className="grid gap-4 lg:grid-cols-3">
           <label className="text-sm">
             <span className="block mb-1 text-gray-700 dark:text-gray-300">Media items per generated video</span>
@@ -373,7 +476,7 @@ export default function AutoPosting() {
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/20 dark:text-blue-200">
           <div className="font-medium">What happens automatically</div>
           <div className="mt-1 text-xs leading-5">
-            TrillionAI rotates through the selected media, generates a fresh social video, writes a new title/caption/hashtags from the campaign brief, and posts it to the selected connected accounts. The scheduler spaces the posts across the selected day, week, or month instead of dumping them all at once.
+            TrillionAI rotates through the selected media, generates a fresh social video, writes a new title/caption/hashtags from the campaign brief, and posts it to the selected connected accounts. It stays inside the user’s preferred posting hours, then progressively favors the hours and content combinations that perform best as analytics data accumulates.
           </div>
         </div>
 
@@ -439,6 +542,59 @@ export default function AutoPosting() {
 
                 <div className="mt-4 text-xs text-gray-500">
                   Next run: {plan.enabled && plan.nextRunAt ? new Date(plan.nextRunAt).toLocaleString() : 'Paused'}
+                </div>
+
+                <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50/70 p-4 dark:border-purple-900 dark:bg-purple-950/20">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-purple-900 dark:text-purple-200">
+                    <BarChart3 size={16} />
+                    My AI marketing analytics
+                  </div>
+                  {(() => {
+                    const insight = analyticsByPlan[plan.id]
+                    const totals = insight?.analytics?.totals
+                    const bestHours = insight?.analytics?.bestHours || []
+                    const recommendation = insight?.recommendation
+                    return (
+                      <>
+                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div className="rounded-lg bg-white/70 p-3 dark:bg-gray-900/40">
+                            <div className="flex items-center gap-1 text-[11px] text-gray-500"><Eye size={12} /> Views</div>
+                            <div className="mt-1 font-semibold">{totals?.views || 0}</div>
+                          </div>
+                          <div className="rounded-lg bg-white/70 p-3 dark:bg-gray-900/40">
+                            <div className="flex items-center gap-1 text-[11px] text-gray-500"><MousePointer2 size={12} /> Clicks</div>
+                            <div className="mt-1 font-semibold">{totals?.clicks || 0}</div>
+                          </div>
+                          <div className="rounded-lg bg-white/70 p-3 dark:bg-gray-900/40">
+                            <div className="flex items-center gap-1 text-[11px] text-gray-500"><TrendingUp size={12} /> CTR</div>
+                            <div className="mt-1 font-semibold">{totals?.clickThroughRate || 0}%</div>
+                          </div>
+                          <div className="rounded-lg bg-white/70 p-3 dark:bg-gray-900/40">
+                            <div className="text-[11px] text-gray-500">Conversions</div>
+                            <div className="mt-1 font-semibold">{totals?.conversions || 0}</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 text-xs text-purple-800 dark:text-purple-300">
+                          Posting window: {formatHour(plan.postingWindowStartHour ?? 8)}–{formatHour(plan.postingWindowEndHour ?? 21)} · {plan.timezone || 'UTC'}
+                        </div>
+
+                        {bestHours.length > 0 ? (
+                          <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                            Best learned hours: {bestHours.slice(0, 3).map((item) => formatHour(item.hour)).join(', ')}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-xs text-gray-500">
+                            Learning phase: analytics will rank the strongest hours after performance data starts arriving.
+                          </div>
+                        )}
+
+                        <div className="mt-2 text-xs text-gray-500">
+                          {recommendation?.reasoning || 'AI optimization is ready to learn from this plan’s results.'}
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
 
                 {plan.lastError && (
