@@ -130,7 +130,7 @@ router.post('/god-codes', async (req, res) => {
   const hash = hashGodCode(rawCode);
   const encryptedCode = encryptGodCode(rawCode);
   const kind = item.interval ? 'plan' : 'credits';
-  const row = store.createGodCode({
+  const row = await store.createGodCode({
     hash,
     encryptedCode,
     sku: item.id,
