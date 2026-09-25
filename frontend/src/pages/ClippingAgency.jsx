@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bot, CheckCircle2, DollarSign, Pause, Play, RefreshCw, Scissors, ShieldCheck, Sparkles } from 'lucide-react'
+import { Bot, CheckCircle2, DollarSign, FileAudio, Film, Pause, Play, RefreshCw, Scissors, Send, ShieldCheck, Sparkles } from 'lucide-react'
 import api from '../services/api'
 
 const PLATFORM_OPTIONS = ['TikTok', 'Instagram', 'YouTube', 'Facebook']
@@ -99,14 +99,22 @@ export default function ClippingAgency() {
     }
   }
 
-  const runAction = async (campaign, action) => {
+  const runAction = async (campaign, action, clipId = null) => {
     setError('')
-    setWorkingId(campaign.id)
+    setWorkingId(clipId ? `${campaign.id}:${clipId}` : campaign.id)
     try {
-      if (action === 'plan') {
+      if (action === 'transcribe') {
+        await api.post(`/clipping/campaigns/${campaign.id}/transcribe`, {})
+      } else if (action === 'plan') {
         await api.post(`/clipping/campaigns/${campaign.id}/plan`, {})
+      } else if (action === 'render') {
+        await api.post(`/clipping/campaigns/${campaign.id}/render`, {})
+      } else if (action === 'publish' && clipId) {
+        await api.post(`/clipping/campaigns/${campaign.id}/publish/${clipId}`, {})
       } else if (action === 'activate') {
-        await api.post(`/clipping/campaigns/${campaign.id}/activate`, {})
+        await api.post(`/clipping/campaigns/${campaign.id}/activate`, {
+          humanApprovalRequiredBeforeFirstPublish: false,
+        })
       } else if (action === 'pause') {
         await api.post(`/clipping/campaigns/${campaign.id}/pause`, {})
       }
@@ -375,6 +383,16 @@ export default function ClippingAgency() {
                 )}
 
                 <div className="mt-4 flex flex-wrap gap-2">
+                  {campaign.sourceUrl && (
+                    <button
+                      onClick={() => runAction(campaign, 'transcribe')}
+                      disabled={workingId === campaign.id}
+                      className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm"
+                      style={{ background: 'var(--bg-elev)', border: '1px solid var(--line)' }}
+                    >
+                      <FileAudio size={14} /> Transcribe
+                    </button>
+                  )}
                   <button
                     onClick={() => runAction(campaign, 'plan')}
                     disabled={workingId === campaign.id}
@@ -383,6 +401,16 @@ export default function ClippingAgency() {
                   >
                     <RefreshCw size={14} /> Re-plan
                   </button>
+                  {campaign.sourceUrl && campaign.clipPlan?.clips?.length > 0 && (
+                    <button
+                      onClick={() => runAction(campaign, 'render')}
+                      disabled={workingId === campaign.id}
+                      className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm"
+                      style={{ background: 'var(--bg-elev)', border: '1px solid var(--line)' }}
+                    >
+                      <Film size={14} /> Render clips
+                    </button>
+                  )}
                   {campaign.status === 'running' ? (
                     <button
                       onClick={() => runAction(campaign, 'pause')}
@@ -408,9 +436,23 @@ export default function ClippingAgency() {
                   <div className="mt-4 space-y-2">
                     {campaign.clipPlan.clips.slice(0, 3).map((clip) => (
                       <div key={clip.id} className="rounded-lg p-3 text-sm" style={{ background: 'var(--bg-elev)' }}>
-                        <div className="font-medium">{clip.title}</div>
-                        <div className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                          {clip.startSeconds}s–{clip.endSeconds}s · score {clip.qualityScore} · {clip.status}
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium">{clip.title}</div>
+                            <div className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                              {clip.startSeconds}s–{clip.endSeconds}s · score {clip.qualityScore} · {clip.status}
+                            </div>
+                          </div>
+                          {clip.mediaUrl && (
+                            <button
+                              onClick={() => runAction(campaign, 'publish', clip.id)}
+                              disabled={workingId === `${campaign.id}:${clip.id}`}
+                              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs"
+                              style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }}
+                            >
+                              <Send size={12} /> Publish
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
