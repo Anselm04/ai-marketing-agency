@@ -45,6 +45,7 @@ import clippingRoutes from './routes/clipping.js';
 import socialVideoRoutes from './routes/socialVideo.js';
 import mediaLibraryRoutes from './routes/mediaLibrary.js';
 import autoPostingRoutes from './routes/autoPosting.js';
+import paidAdsRoutes from './routes/paidAds.js';
 import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
@@ -193,6 +194,7 @@ app.use('/api/clipping', clippingRoutes);
 app.use('/api/social-video', socialVideoRoutes);
 app.use('/api/media-library', mediaLibraryRoutes);
 app.use('/api/auto-posting', autoPostingRoutes);
+app.use('/api/paid-ads', paidAdsRoutes);
 
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist, { index: false, maxAge: '1h' }));
