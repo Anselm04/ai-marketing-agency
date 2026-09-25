@@ -3,6 +3,7 @@ import productMarketingService from '../services/productMarketingService.js';
 import store from '../utils/store.js';
 import { upload } from '../middleware/upload.js';
 import { authenticate } from '../middleware/auth.js';
+import { requireOwner } from '../utils/owner.js';
 
 const router = express.Router();
 
@@ -62,25 +63,36 @@ router.post('/marketing', upload.array('photos', 10), async (req, res) => {
   }
 });
 
+// GET /api/products/portfolio
+// Owner-only portfolio of AppForge products eligible for automatic Marketing.
+router.get('/portfolio', requireOwner, async (req, res) => {
+  const content = await store.getContentByOwner(req.user.id);
+  const products = content
+    .filter((item) => item.kind === 'owner_portfolio_product' && item.ownerOnly === true)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  res.json(products);
+});
+
 // GET /api/products
 // List all product marketing campaigns for the authenticated user
-router.get('/', (req, res) => {
-  const campaigns = store.getCampaigns().filter(
-    c => c.owner === req.user.id && c.productName
-  ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+router.get('/', async (req, res) => {
+  const campaigns = (await store.getCampaignsByOwner(req.user.id))
+    .filter((campaign) => campaign.productName)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json(campaigns);
 });
 
 // GET /api/products/:id
 // Get full details of a product marketing campaign including generated content
-router.get('/:id', (req, res) => {
-  const campaign = store.getCampaignById(req.params.id);
-  if (!campaign || campaign.owner !== req.user.id) {
+router.get('/:id', async (req, res) => {
+  const campaigns = await store.getCampaignsByOwner(req.user.id);
+  const campaign = campaigns.find((item) => item.id === req.params.id);
+  if (!campaign) {
     return res.status(404).json({ error: 'Campaign not found' });
   }
 
-  const contentItems = store.getContent().filter(
-    c => c.campaignId === campaign.id && c.owner === req.user.id
+  const contentItems = (await store.getContentByOwner(req.user.id)).filter(
+    (item) => item.campaignId === campaign.id,
   );
 
   res.json({ campaign, contentItems });
