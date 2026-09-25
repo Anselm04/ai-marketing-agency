@@ -107,19 +107,45 @@ export async function stripeWebhookHandler(req, res) {
     return res.status(400).json({ error: 'Invalid Stripe webhook signature' });
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const userId = session.metadata?.marketingUserId || session.client_reference_id;
-    const item = findItem({
-      id: session.metadata?.itemId,
-      lookup_key: session.metadata?.lookup_key,
-    });
-    if (userId && item?.interval && session.payment_status !== 'unpaid') {
-      await activateStripePlan({ userId, item, session });
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const userId = session.metadata?.marketingUserId || session.client_reference_id;
+      const item = findItem({
+        id: session.metadata?.itemId,
+        lookup_key: session.metadata?.lookup_key,
+      });
+      if (userId && item?.interval && session.payment_status !== 'unpaid') {
+        await activateStripePlan({ userId, item, session });
+      }
     }
-  }
 
-  res.json({ received: true });
+    if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+      const stripeSubscription = event.data.object;
+      const userId = stripeSubscription.metadata?.marketingUserId;
+      if (userId) {
+        const subscriptions = await store.getSubscriptionsByUser(userId);
+        const current = subscriptions.find(
+          (sub) => sub.stripeSubscriptionId === stripeSubscription.id || sub.source === 'stripe',
+        );
+        if (current) {
+          const active = ['active', 'trialing'].includes(stripeSubscription.status);
+          await store.updateSubscription(current.id, {
+            status: active ? 'active' : stripeSubscription.status,
+            stripeSubscriptionId: stripeSubscription.id,
+            stripeCustomerId:
+              typeof stripeSubscription.customer === 'string'
+                ? stripeSubscription.customer
+                : stripeSubscription.customer?.id || current.stripeCustomerId,
+          });
+        }
+      }
+    }
+
+    return res.json({ received: true });
+  } catch {
+    return res.status(500).json({ error: 'Unable to process Stripe webhook' });
+  }
 }
 
 router.get('/plans', getPlans);
