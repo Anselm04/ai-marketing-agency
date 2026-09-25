@@ -40,7 +40,7 @@ function combinationKey(run) {
 
 class AutoPostingAnalyticsService {
   async recordMetrics({ owner, planId, runId, platformId, metrics = {}, observedAt }) {
-    const records = await store.getContent();
+    const records = await store.getContentByOwner(owner);
     const plan = records.find(
       (item) => item.kind === 'auto_post_plan'
         && String(item.id) === String(planId)
@@ -98,7 +98,7 @@ class AutoPostingAnalyticsService {
   }
 
   async getPlanAnalytics(owner, planId) {
-    const all = await store.getContent();
+    const all = await store.getContentByOwner(owner);
     const plan = all.find(
       (item) => item.kind === 'auto_post_plan'
         && String(item.id) === String(planId)
