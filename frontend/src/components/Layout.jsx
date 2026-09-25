@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
   FileText, Video, Users, TrendingUp, Settings, Scissors,
   Lock, LogOut, ChevronDown, Globe, Sun, Moon, Menu, X, ShoppingCart,
-  Cpu, Plug
+  Cpu, Plug, Images
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
@@ -20,6 +20,7 @@ const navItems = [
   { path: '/dashboard/products', icon: ShoppingCart, label: 'Product Marketing' },
   { path: '/dashboard/social', icon: Share2, label: 'Social' },
   { path: '/dashboard/video-distribution', icon: Video, label: 'Video Distribution' },
+  { path: '/dashboard/media-library', icon: Images, label: 'My Media' },
   { path: '/dashboard/content', icon: FileText, label: 'Content Studio' },
   { path: '/dashboard/video', icon: Video, label: 'Video Studio' },
   { path: '/dashboard/clipping', icon: Scissors, label: 'AI Clipping Agency' },
