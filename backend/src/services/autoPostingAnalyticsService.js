@@ -62,12 +62,20 @@ class AutoPostingAnalyticsService {
     };
     const score = scoreMetrics(normalized);
 
-    const record = await store.createContent({
-      kind: 'auto_post_metric',
+    const platform = String(platformId || 'unknown').toLowerCase();
+    const existing = records.find(
+      (item) => item.kind === 'auto_post_metric'
+        && item.owner === owner
+        && String(item.planId) === String(planId)
+        && String(item.runId) === String(runId)
+        && item.platformId === platform,
+    );
+
+    const payload = {
       owner,
       planId: String(planId),
       runId: String(runId),
-      platformId: String(platformId || 'unknown').toLowerCase(),
+      platformId: platform,
       scheduledLocalHour: Number(run.scheduledLocalHour),
       actualLocalHour: Number(run.actualLocalHour),
       timezone: run.timezone || plan.timezone || 'UTC',
@@ -77,10 +85,16 @@ class AutoPostingAnalyticsService {
       metrics: normalized,
       performanceScore: score,
       observedAt: observedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (existing) return store.updateContent(existing.id, payload);
+
+    return store.createContent({
+      kind: 'auto_post_metric',
+      ...payload,
       createdAt: new Date().toISOString(),
     });
-
-    return record;
   }
 
   async getPlanAnalytics(owner, planId) {
