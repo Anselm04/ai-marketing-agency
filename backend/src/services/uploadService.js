@@ -15,7 +15,7 @@ const s3Client = process.env.S3_ENDPOINT ? new S3Client({
 }) : null;
 
 const BUCKET = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || 'ai-marketing-uploads';
-const PUBLIC_BASE_URL = process.env.S3_PUBLIC_BASE_URL?.replace(/\\/$/, '') || null;
+const PUBLIC_BASE_URL = process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, '') || null;
 
 export function isS3Configured() {
   return !!s3Client && !!process.env.AWS_ACCESS_KEY_ID;
