@@ -1,6 +1,7 @@
 import express from 'express';
 import store from '../utils/store.js';
 import clippingAgencyService from '../services/clippingAgencyService.js';
+import mediaClipperService from '../services/mediaClipperService.js';
 
 const router = express.Router();
 
@@ -19,6 +20,15 @@ async function getOwnedCampaign(req, res) {
     return null;
   }
   return campaign;
+}
+
+function assertRights(campaign, res) {
+  const rights = clippingAgencyService.validateRightsManifest(campaign.rightsManifest);
+  if (!rights.valid) {
+    res.status(409).json({ error: 'Rights verification failed', details: rights.errors });
+    return false;
+  }
+  return true;
 }
 
 router.get('/campaigns', async (req, res) => {
@@ -101,6 +111,31 @@ router.get('/campaigns/:id', async (req, res) => {
   if (campaign) res.json(campaign);
 });
 
+router.post('/campaigns/:id/transcribe', async (req, res) => {
+  const campaign = await getOwnedCampaign(req, res);
+  if (!campaign) return;
+  if (!assertRights(campaign, res)) return;
+  if (!campaign.sourceUrl) {
+    return res.status(400).json({ error: 'A sourceUrl is required for automatic transcription' });
+  }
+
+  try {
+    const transcription = await mediaClipperService.transcribeSource(campaign.sourceUrl);
+    const updated = await store.updateCampaign(campaign.id, {
+      transcript: transcription.transcript,
+      sourceDurationSeconds: transcription.durationSeconds,
+      transcription: {
+        completedAt: new Date().toISOString(),
+        chunks: transcription.chunks,
+        model: transcription.model,
+      },
+    });
+    res.json(updated);
+  } catch (error) {
+    res.status(422).json({ error: error.message });
+  }
+});
+
 router.post('/campaigns/:id/plan', async (req, res) => {
   const campaign = await getOwnedCampaign(req, res);
   if (!campaign) return;
@@ -121,14 +156,100 @@ router.post('/campaigns/:id/plan', async (req, res) => {
   res.json(updated);
 });
 
+router.post('/campaigns/:id/render', async (req, res) => {
+  const campaign = await getOwnedCampaign(req, res);
+  if (!campaign) return;
+  if (!assertRights(campaign, res)) return;
+  if (!campaign.sourceUrl) {
+    return res.status(400).json({ error: 'A sourceUrl is required to render clips' });
+  }
+  if (!campaign.clipPlan?.clips?.length) {
+    return res.status(409).json({ error: 'Generate a clip plan before rendering' });
+  }
+
+  const requestedIds = Array.isArray(req.body?.clipIds) ? new Set(req.body.clipIds.map(String)) : null;
+  const clips = [];
+  const failures = [];
+
+  for (const clip of campaign.clipPlan.clips) {
+    if (requestedIds && !requestedIds.has(String(clip.id))) {
+      clips.push(clip);
+      continue;
+    }
+    try {
+      const rendered = await mediaClipperService.renderClip({
+        sourceUrl: campaign.sourceUrl,
+        startSeconds: clip.startSeconds,
+        endSeconds: clip.endSeconds,
+        ownerId: ownerId(req),
+        campaignId: campaign.id,
+        clipId: clip.id,
+      });
+      clips.push({
+        ...clip,
+        mediaUrl: rendered.mediaUrl,
+        storage: rendered.storage,
+        storageKey: rendered.key || null,
+        localPath: rendered.localPath || null,
+        renderedAt: new Date().toISOString(),
+        status: rendered.mediaUrl ? 'ready' : 'rendered_local',
+      });
+    } catch (error) {
+      failures.push({ clipId: clip.id, error: error.message });
+      clips.push({
+        ...clip,
+        status: 'render_failed',
+        renderError: error.message,
+      });
+    }
+  }
+
+  const updated = await store.updateCampaign(campaign.id, {
+    clipPlan: { ...campaign.clipPlan, clips },
+    renderSummary: {
+      attemptedAt: new Date().toISOString(),
+      requested: requestedIds ? requestedIds.size : campaign.clipPlan.clips.length,
+      failures,
+      durableStorageConfigured: mediaClipperService.isDurableStorageConfigured(),
+    },
+  });
+
+  res.status(failures.length ? 207 : 200).json(updated);
+});
+
+router.post('/campaigns/:id/publish/:clipId', async (req, res) => {
+  const campaign = await getOwnedCampaign(req, res);
+  if (!campaign) return;
+  if (!assertRights(campaign, res)) return;
+
+  const clip = campaign.clipPlan?.clips?.find((item) => String(item.id) === String(req.params.clipId));
+  if (!clip) return res.status(404).json({ error: 'Clip not found' });
+  if (!clip.mediaUrl) {
+    return res.status(409).json({ error: 'Render this clip to durable public storage before publishing' });
+  }
+
+  const results = await clippingAgencyService.publishClip(clip);
+  const published = results.some((result) => result?.success === true);
+  const clips = campaign.clipPlan.clips.map((item) => (
+    String(item.id) === String(clip.id)
+      ? {
+          ...item,
+          publishResults: [...(item.publishResults || []), ...results],
+          lastPublishAttemptAt: new Date().toISOString(),
+          status: published ? 'published' : 'publish_blocked',
+        }
+      : item
+  ));
+  const updated = await store.updateCampaign(campaign.id, {
+    clipPlan: { ...campaign.clipPlan, clips },
+  });
+  res.status(published ? 200 : 409).json({ campaign: updated, results });
+});
+
 router.post('/campaigns/:id/activate', async (req, res) => {
   const campaign = await getOwnedCampaign(req, res);
   if (!campaign) return;
-
-  const rights = clippingAgencyService.validateRightsManifest(campaign.rightsManifest);
-  if (!rights.valid) {
-    return res.status(409).json({ error: 'Rights verification failed', details: rights.errors });
-  }
+  if (!assertRights(campaign, res)) return;
   if (!campaign.clipPlan?.clips?.length) {
     return res.status(409).json({ error: 'Generate a clip plan before activating autonomous mode' });
   }
