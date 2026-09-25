@@ -89,7 +89,7 @@ router.post('/redeem', async (req, res) => {
   } catch {
     return res.status(400).json({ error: REDEEM_FAIL });
   }
-  const found = store.findGodCodeByHash(hash);
+  const found = await store.findGodCodeByHash(hash);
   if (!found || found.redeemedAt || found.isUsed || found.redeemedByUserId || found.usedByUserId) {
     return res.status(400).json({ error: REDEEM_FAIL });
   }
@@ -97,7 +97,7 @@ router.post('/redeem', async (req, res) => {
   if (!item) return res.status(400).json({ error: REDEEM_FAIL });
 
   const now = new Date().toISOString();
-  const updated = store.updateGodCode(found.id, {
+  const updated = await store.updateGodCode(found.id, {
     encryptedCode: null,
     redeemedAt: now,
     redeemedByUserId: req.user.id,
