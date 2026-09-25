@@ -6,6 +6,7 @@ import userVideoPublisherService from './userVideoPublisherService.js';
 import { generateAgentResponse } from './openaiService.js';
 import { logger } from '../utils/logger.js';
 import autoPostingAnalyticsService from './autoPostingAnalyticsService.js';
+import socialPerformanceSyncService from './socialPerformanceSyncService.js';
 
 const CADENCE_LIMITS = { daily: 12, weekly: 50, monthly: 120 };
 const PERIOD_MS = {
@@ -292,6 +293,16 @@ class AutoPostingService {
       if (this.inFlight.has(plan.id)) continue;
       this.inFlight.add(plan.id);
       try {
+        const lastMetricsSync = plan.lastMetricsSyncAt ? new Date(plan.lastMetricsSyncAt).getTime() : 0;
+        if (plan.aiOptimizationEnabled !== false && now - lastMetricsSync >= 6 * 60 * 60 * 1000) {
+          const sync = await socialPerformanceSyncService.syncPlan(plan);
+          await store.updateContent(plan.id, {
+            lastMetricsSyncAt: sync.syncedAt,
+            lastMetricsSyncSummary: sync,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+
         let recommendation = null;
         if (plan.aiOptimizationEnabled !== false) {
           try {
