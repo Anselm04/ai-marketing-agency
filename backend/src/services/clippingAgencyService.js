@@ -8,7 +8,7 @@ function clamp(value, min, max) {
 
 function safeJson(value) {
   if (!value || typeof value !== 'string') return null;
-  const fenced = value.match(/\`\`\`(?:json)?\s*([\s\S]*?)\`\`\`/i);
+  const fenced = value.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
   const candidate = fenced ? fenced[1] : value;
   const start = candidate.indexOf('{');
   const end = candidate.lastIndexOf('}');
