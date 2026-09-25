@@ -25,7 +25,7 @@ export function isS3Configured() {
   return !!s3Client && hasStorageCredentials;
 }
 
-export async function uploadToS3(key, body, contentType) {
+async function putObject(key, body, contentType) {
   if (!isS3Configured()) throw new Error('S3 not configured');
   await s3Client.send(new PutObjectCommand({
     Bucket: BUCKET,
@@ -33,7 +33,16 @@ export async function uploadToS3(key, body, contentType) {
     Body: body,
     ContentType: contentType,
   }));
+}
+
+export async function uploadToS3(key, body, contentType) {
+  await putObject(key, body, contentType);
   return getUploadUrl(key);
+}
+
+export async function uploadPrivateToS3(key, body, contentType) {
+  await putObject(key, body, contentType);
+  return { key };
 }
 
 export async function getSignedDownloadUrl(key, expiresIn = 3600) {
