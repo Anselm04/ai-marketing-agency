@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const assets = await Promise.all(records.map(async (item) => {
-    if (item.kind === 'media_asset' && item.storageKey) {
+    if (item.kind === 'media_asset' && item.storageKey && item.storageVisibility === 'private') {
       return {
         ...item,
         url: await getPrivateSignedDownloadUrl(item.storageKey, 15 * 60),
