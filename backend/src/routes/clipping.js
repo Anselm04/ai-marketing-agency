@@ -229,22 +229,28 @@ router.post('/campaigns/:id/publish/:clipId', async (req, res) => {
     return res.status(409).json({ error: 'Render this clip to durable public storage before publishing' });
   }
 
-  const results = await clippingAgencyService.publishClip(clip);
-  const published = results.some((result) => result?.success === true);
+  const results = await clippingAgencyService.publishClip(
+    clip,
+    campaign.publishingSettings || {},
+  );
+  const accepted = results.some((result) => result?.success === true);
+  const confirmedPublished = results.some(
+    (result) => result?.success === true && result?.published === true,
+  );
   const clips = campaign.clipPlan.clips.map((item) => (
     String(item.id) === String(clip.id)
       ? {
           ...item,
           publishResults: [...(item.publishResults || []), ...results],
           lastPublishAttemptAt: new Date().toISOString(),
-          status: published ? 'published' : 'publish_blocked',
+          status: confirmedPublished ? 'published' : accepted ? 'submitted' : 'publish_blocked',
         }
       : item
   ));
   const updated = await store.updateCampaign(campaign.id, {
     clipPlan: { ...campaign.clipPlan, clips },
   });
-  res.status(published ? 200 : 409).json({ campaign: updated, results });
+  res.status(accepted ? 200 : 409).json({ campaign: updated, results });
 });
 
 router.post('/campaigns/:id/activate', async (req, res) => {
