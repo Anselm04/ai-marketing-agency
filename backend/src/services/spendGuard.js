@@ -1,5 +1,8 @@
 /** Hard spend caps for paid ads. Organic social is uncapped (plan-included). */
 
+import { CONTENT_TYPES } from './contentTypesCatalog.js';
+export { CONTENT_TYPES };
+
 export const DEFAULT_BUDGET = { dailyMax: 10, monthlyMax: 100, currency: 'USD' };
 
 /** 20 organic networks included in every plan. Paid Meta/Google are a separate add-on. */
@@ -116,11 +119,12 @@ export function assertLaunchAllowed(user, entries, amount) {
 }
 
 export function contentTypesOf(platform) {
-  return [{ id: 'native_post', name: 'Native post', hint: 'Platform-specific, not a blast' }];
+  const c = canonicalPlatform(platform);
+  return CONTENT_TYPES[c] || [{ id: 'native_post', name: 'Native post', hint: 'Platform-specific, not a blast' }];
 }
 
 export default {
   DEFAULT_BUDGET, budgetOf, remaining, assertLaunchAllowed,
   ORGANIC_PLATFORMS, ORGANIC_NETWORKS, ORGANIC_NETWORK_LABELS, PAID_NETWORKS,
-  canonicalPlatform, networkOf, contentTypesOf,
+  canonicalPlatform, networkOf, CONTENT_TYPES, contentTypesOf,
 };
