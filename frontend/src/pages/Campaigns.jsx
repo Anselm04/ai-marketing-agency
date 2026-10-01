@@ -41,7 +41,9 @@ export default function Campaigns() {
       {loading ? (
         <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>
       ) : campaigns.length === 0 ? (
-        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Nothing running yet. Hit Start campaign.</div>
+        <div className="text-sm rounded-lg p-4" style={{ color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+          No campaigns yet — open Start campaign on the dashboard to generate your first native posts.
+        </div>
       ) : (
         <div className="grid gap-3">
           {campaigns.map((c) => (
