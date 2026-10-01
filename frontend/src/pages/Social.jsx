@@ -5,35 +5,126 @@ import { ORGANIC_NETWORKS, ORGANIC_LABELS } from '../config/organic'
 
 const inputCls = 'w-full px-3 py-2 rounded-lg text-sm bg-[#0a0c11] border border-[#c4a35a]/40 text-[#efeae0] focus:outline-none focus:ring-1 focus:ring-[#c4a35a]'
 
+const PRIORITY_IDS = ['x', 'tiktok', 'instagram', 'facebook', 'linkedin', 'youtube', 'meta', 'google']
+
+function badgeFor(oauthRow, plat) {
+  if (oauthRow?.connected || plat?.connected) return { text: 'Connected', color: 'var(--cyan)' }
+  if (oauthRow?.oauthConfigured) return { text: 'OAuth ready', color: '#7dcea0' }
+  if (oauthRow) return { text: 'Needs app credentials', color: '#e6b567' }
+  if (plat?.setup) return { text: 'Set up — needs token', color: 'var(--text-dim)' }
+  return { text: 'Set up (included)', color: 'var(--text-dim)' }
+}
+
 export default function Social() {
   const [platforms, setPlatforms] = useState([])
+  const [oauthStatus, setOauthStatus] = useState([])
   const [posts, setPosts] = useState([])
   const [types, setTypes] = useState([])
   const [brief, setBrief] = useState({ product: '', audience: '', description: '', contentType: '' })
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [copied, setCopied] = useState('')
+  const [tokenDraft, setTokenDraft] = useState({})
+  const [busyPlat, setBusyPlat] = useState('')
 
   const refresh = async () => {
-    const [st, po, ty] = await Promise.all([
+    const [st, po, ty, oa] = await Promise.all([
       api.get('/social/status'),
       api.get('/social/posts'),
       api.get('/content/types').catch(() => ({ data: { platforms: [] } })),
+      api.get('/social/oauth/status').catch(() => ({ data: { platforms: [] } })),
     ])
     setPlatforms(st.data || [])
     setPosts(po.data || [])
     setTypes(ty.data?.platforms || [])
+    setOauthStatus(oa.data?.platforms || [])
   }
 
-  useEffect(() => { refresh().catch(() => {}) }, [])
+  useEffect(() => {
+    refresh().catch(() => {})
+    const params = new URLSearchParams(window.location.search)
+    const connected = params.get('connected')
+    const oauthError = params.get('oauth_error')
+    if (connected) {
+      setMsg(`Connected ${connected} via OAuth. Token stored for this account — not shared.`)
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (oauthError) {
+      setMsg(`OAuth failed: ${oauthError}`)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   const organic = platforms.filter((p) => p.organic)
   const shown = organic.length ? organic : ORGANIC_NETWORKS.map((n) => ({ platform: n.id, name: n.name, organic: true, setup: false, connected: false }))
+  const oauthByPlat = Object.fromEntries(oauthStatus.map((o) => [o.platform, o]))
 
-  const connect = async (plat) => {
+  const priorityShown = [
+    ...PRIORITY_IDS.map((id) => {
+      const oa = oauthByPlat[id]
+      const fromStatus = shown.find((p) => p.platform === id)
+      return {
+        platform: id,
+        name: oa?.label || fromStatus?.name || id,
+        organic: oa?.kind !== 'ads',
+        setup: !!(fromStatus?.setup || oa?.setup),
+        connected: !!(oa?.connected || fromStatus?.connected),
+        oauthConfigured: !!oa?.oauthConfigured,
+        connectorId: oa?.connectorId,
+        envKeys: oa?.envKeys,
+        setupHint: oa?.setupHint,
+        priority: true,
+      }
+    }),
+    ...shown.filter((p) => !PRIORITY_IDS.includes(p.platform)),
+  ]
+
+  const startOAuth = async (plat) => {
+    setBusyPlat(plat)
+    setMsg('')
+    try {
+      const res = await api.get(`/social/oauth/${plat}/start`)
+      const url = res.data?.authorizationUrl
+      if (!url) {
+        setMsg(res.data?.error || 'No authorization URL returned')
+        return
+      }
+      window.location.href = url
+    } catch (err) {
+      const data = err.response?.data
+      if (data?.needsConfig) {
+        setMsg(`${plat}: needs app credentials — set ${ (data.envKeys || []).join(', ') || 'client id/secret' } on Fly. Paste a token below if you already have one.`)
+      } else {
+        setMsg(data?.error || err.message || 'Could not start OAuth')
+      }
+    } finally {
+      setBusyPlat('')
+    }
+  }
+
+  const connectSetup = async (plat) => {
     await api.post('/social/connect', { platform: plat })
     await refresh()
-    setMsg(`${plat} set up. Organic is included. Add a token later to publish.`)
+    setMsg(`${plat} marked for setup. Organic is included. Add a token or OAuth credentials to publish.`)
+  }
+
+  const connectWithToken = async (plat) => {
+    const token = (tokenDraft[plat] || '').trim()
+    if (!token) {
+      setMsg('Paste an access token first, or use OAuth when credentials are configured.')
+      return
+    }
+    await api.post('/social/connect', { platform: plat, token })
+    setTokenDraft((d) => ({ ...d, [plat]: '' }))
+    await refresh()
+    setMsg(`${plat} token stored for this account. Value is not returned.`)
+  }
+
+  const onConnectClick = async (p) => {
+    if (p.oauthConfigured) {
+      await startOAuth(p.platform)
+      return
+    }
+    await connectSetup(p.platform)
   }
 
   const generate = async (e) => {
@@ -82,22 +173,48 @@ export default function Social() {
         <h2 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Organic social (included)</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
           20 networks on your plan: {ORGANIC_LABELS}.
-          Connect, pick a pre-made content type, then one-click generate / queue / publish.
-          Platform-specific posts — never an identical blast. Paid Meta/Google ads are an add-on with a spend cap.
+          Priority platforms support real per-user OAuth when app credentials are set on the server.
+          Until then we stay honest: Needs app credentials / optional token paste — never fake Connected.
+          Paid Meta/Google ads are an add-on with a spend cap.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
-        {shown.map((p) => (
-          <button key={p.platform} type="button" onClick={() => connect(p.platform)}
-            className="text-left p-3 rounded-lg text-sm"
-            style={{ background: 'var(--bg-card)', border: `1px solid ${p.setup || p.connected ? '#c4a35a' : 'var(--line)'}`, color: 'var(--text)' }}>
-            <div className="font-medium" style={{ color: 'var(--gold-bright)' }}>{p.name || p.platform}</div>
-            <div className="text-[11px]" style={{ color: p.connected ? 'var(--cyan)' : 'var(--text-dim)' }}>
-              {p.connected ? 'Token on file' : p.setup ? 'Set up — needs token' : 'Set up (included)'}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        {priorityShown.map((p) => {
+          const badge = badgeFor(oauthByPlat[p.platform], p)
+          const showTokenPaste = PRIORITY_IDS.includes(p.platform) && !p.oauthConfigured && !p.connected
+          return (
+            <div key={p.platform} className="rounded-lg p-3 text-sm space-y-2"
+              style={{ background: 'var(--bg-card)', border: `1px solid ${p.connected ? '#c4a35a' : 'var(--line)'}`, color: 'var(--text)' }}>
+              <div className="font-medium" style={{ color: 'var(--gold-bright)' }}>{p.name || p.platform}</div>
+              <div className="text-[11px] uppercase tracking-wide" style={{ color: badge.color }}>{badge.text}</div>
+              {p.setupHint && !p.oauthConfigured && !p.connected && (
+                <p className="text-[10px] leading-snug" style={{ color: 'var(--text-dim)' }}>{p.setupHint}</p>
+              )}
+              <button type="button" disabled={busyPlat === p.platform}
+                onClick={() => onConnectClick(p)}
+                className="w-full px-2 py-1.5 rounded text-xs font-medium disabled:opacity-50"
+                style={{ background: p.oauthConfigured ? '#c4a35a' : 'transparent', color: p.oauthConfigured ? '#07080b' : 'var(--gold)', border: '1px solid #c4a35a' }}>
+                {busyPlat === p.platform ? 'Starting…' : p.connected ? 'Reconnect' : p.oauthConfigured ? 'Connect with OAuth' : 'Mark set up'}
+              </button>
+              {showTokenPaste && (
+                <div className="space-y-1">
+                  <input
+                    className={inputCls}
+                    type="password"
+                    placeholder="Optional: paste access token"
+                    value={tokenDraft[p.platform] || ''}
+                    onChange={(e) => setTokenDraft((d) => ({ ...d, [p.platform]: e.target.value }))}
+                  />
+                  <button type="button" onClick={() => connectWithToken(p.platform)}
+                    className="text-[11px]" style={{ color: 'var(--cyan)' }}>
+                    Save token for this account
+                  </button>
+                </div>
+              )}
             </div>
-          </button>
-        ))}
+          )
+        })}
       </div>
 
       <form onSubmit={generate} className="rounded-lg p-5 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
