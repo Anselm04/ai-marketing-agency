@@ -53,13 +53,20 @@ function ConnectorCard({ connector, onConnect, onDisconnect }) {
           </div>
         </div>
         {connector.connected ? (
-          <CheckCircle size={18} className="text-green-500" />
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
+            <CheckCircle size={16} /> Connected
+          </span>
         ) : (
-          <XCircle size={18} className="text-gray-300 dark:text-gray-600" />
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+            <XCircle size={16} /> Not connected
+          </span>
         )}
       </div>
 
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">{connector.description || 'No description available.'}</p>
+      {connector.connected && (
+        <p className="text-xs text-green-700 dark:text-green-400 mb-3">Status: connected for your account — ready when you publish.</p>
+      )}
 
       <div className="flex items-center gap-2 text-xs mb-4">
         <span className={`flex items-center gap-1 ${healthColor[connector.health?.status] || 'text-gray-400'}`}>
@@ -106,6 +113,7 @@ export default function Connectors() {
   const [error, setError] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [refreshing, setRefreshing] = useState(false)
+  const [banner, setBanner] = useState('')
 
   const fetchConnectors = async () => {
     try {
@@ -127,24 +135,32 @@ export default function Connectors() {
   }, [])
 
   const handleConnect = async (connectorId) => {
+    setBanner('')
     try {
       const res = await api.get(`/connectors/${connectorId}/auth`)
       if (res.data.authorizationUrl) {
         window.location.href = res.data.authorizationUrl
-      } else {
-        alert('OAuth URL not available for this connector')
+        return
       }
+      setBanner('This connector cannot start OAuth yet. Ask your admin to finish platform setup.')
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to initiate connection')
+      const data = err.response?.data
+      if (data?.needsConfig) {
+        setBanner('This platform is not configured by your admin yet. You can browse connectors, but Connect stays unavailable until admin finishes setup — we will not fake a connection.')
+      } else {
+        setBanner(data?.error || 'Could not start the connection. Try again in a moment.')
+      }
     }
   }
 
   const handleDisconnect = async (connectorId) => {
+    setBanner('')
     try {
       await api.post(`/connectors/${connectorId}/revoke`)
+      setBanner('Disconnected. Live publish for that platform is off until you connect again.')
       fetchConnectors()
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to disconnect')
+      setBanner(err.response?.data?.error || 'Could not disconnect right now.')
     }
   }
 
@@ -190,6 +206,12 @@ export default function Connectors() {
         </button>
       </div>
 
+      {banner && (
+        <div className="p-3 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
+          {banner}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => setSelectedCategory('all')}
@@ -221,8 +243,8 @@ export default function Connectors() {
 
       {filtered.length === 0 && (
         <EmptyState
-          title="No connectors found"
-          description="No connectors match the selected category."
+          title="No connectors in this view"
+          description="Pick another category, or open Social to connect priority platforms and generate posts."
           icon={Plug}
         />
       )}
