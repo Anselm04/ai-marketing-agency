@@ -1,8 +1,22 @@
 import express from 'express';
 import crypto from 'crypto';
 import store from '../utils/store.js';
+import { sendTeamInvite, emailTransportConfigured } from '../services/emailService.js';
 
 const router = express.Router();
+
+const isProd = () => process.env.NODE_ENV === 'production';
+
+function appBaseUrl() {
+  return String(process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+}
+
+/** Strip invite token from API responses in production. */
+function publicInvite(invite) {
+  if (!invite) return invite;
+  const { token, ...safe } = invite;
+  return isProd() ? safe : { ...safe, token };
+}
 
 async function getUserOrg(userId) {
   return store.getOrganizationByUserId(userId);
@@ -51,10 +65,17 @@ router.patch('/org', async (req, res) => {
 
 router.post('/invites', async (req, res) => {
   try {
-    const org = await getUserOrg(req.userId);
-    if (!org) return res.status(404).json({ error: 'Organization not found' });
+    const user = await store.findUserById(req.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    let org = await getUserOrg(req.userId);
+    if (!org) {
+      org = await store.createOrganization({ name: `${user.email}'s Team`, ownerId: req.userId });
+    }
     if (!await checkOrgRole(req.userId, org.id, ['owner', 'admin'])) {
       return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    if (!req.body?.email) {
+      return res.status(400).json({ error: 'email required' });
     }
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -65,7 +86,21 @@ router.post('/invites', async (req, res) => {
       token,
       expiresAt,
     });
-    res.json({ invite, devToken: token });
+
+    const inviter = await store.findUserById(req.userId);
+    const invitedBy = inviter?.profile?.firstName || inviter?.email || 'A teammate';
+    const inviteUrl = `${appBaseUrl()}/accept-invite?token=${encodeURIComponent(token)}`;
+    const mail = await sendTeamInvite(invite.email, org.name, inviteUrl, invitedBy);
+
+    const payload = {
+      invite: publicInvite(invite),
+      emailSent: !!(mail?.success),
+      emailTransportConfigured: emailTransportConfigured(),
+    };
+    if (!isProd() && (!mail?.success || mail?.fallback)) {
+      payload.devToken = token;
+    }
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -94,7 +129,9 @@ router.get('/invites', async (req, res) => {
     if (!await checkOrgRole(req.userId, org.id, ['owner', 'admin'])) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
-    const orgInvites = (await store.getInvites()).filter(i => i.orgId === org.id && new Date(i.expiresAt) > new Date());
+    const orgInvites = (await store.getInvites())
+      .filter(i => i.orgId === org.id && new Date(i.expiresAt) > new Date())
+      .map(publicInvite);
     res.json(orgInvites);
   } catch (err) {
     res.status(500).json({ error: err.message });
