@@ -25,6 +25,17 @@ import {
   deleteWebhook,
 } from '../services/appConnector.js';
 import { logger } from '../utils/logger.js';
+import store from '../utils/store.js';
+import { encryptUtf8 } from '../utils/owner.js';
+import {
+  publicFrontendBase,
+  resolvePlatform,
+  connectorOAuthCallbackUrl,
+  createPkcePair,
+  rememberPkce,
+  takePkce,
+  getClientCredentials,
+} from '../services/oauthPlatforms.js';
 
 const router = express.Router();
 
@@ -136,25 +147,51 @@ router.get('/:id/auth', authenticate, (req, res) => {
     return res.status(400).json({ error: 'This connector does not use OAuth2' });
   }
 
-  const state = Buffer.from(JSON.stringify({ userId: req.user?.id, connectorId: connector.id })).toString('base64');
-  const clientId = connector.auth.clientId || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_ID`];
+  const mapping = resolvePlatform(connector.id);
+  const state = Buffer.from(JSON.stringify({
+    userId: req.user?.id,
+    connectorId: connector.id,
+    platform: mapping?.platform || null,
+  })).toString('base64url');
+  let clientId = connector.auth.clientId || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_ID`];
+  if (mapping) {
+    const creds = getClientCredentials(mapping);
+    clientId = creds.clientId || clientId;
+  }
 
   if (!clientId) {
-    return res.status(400).json({ error: 'Connector client ID not configured' });
+    return res.status(400).json({
+      error: 'Connector client ID not configured',
+      needsConfig: true,
+      envKeys: mapping ? getClientCredentials(mapping).envKeys : undefined,
+    });
   }
 
   const url = new URL(connector.auth.authorizationUrl);
   url.searchParams.set('client_id', clientId);
-  url.searchParams.set('redirect_uri', `${process.env.API_URL || 'http://localhost:3001'}/api/connectors/${connector.id}/callback`);
+  url.searchParams.set('redirect_uri', connectorOAuthCallbackUrl(connector.id));
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('scope', connector.auth.scopes?.join(' ') || '');
   url.searchParams.set('state', state);
+
+  if (connector.id === 'twitter_x') {
+    const { verifier, challenge } = createPkcePair();
+    rememberPkce(state, verifier);
+    url.searchParams.set('code_challenge', challenge);
+    url.searchParams.set('code_challenge_method', 'S256');
+  }
+
+  if (connector.id === 'youtube' || connector.id === 'google_ads') {
+    url.searchParams.set('access_type', 'offline');
+    url.searchParams.set('prompt', 'consent');
+  }
 
   res.json({
     success: true,
     authorizationUrl: url.toString(),
     connectorId: connector.id,
     scopes: connector.auth.scopes,
+    redirectUri: connectorOAuthCallbackUrl(connector.id),
   });
 });
 
@@ -163,51 +200,89 @@ router.get('/:id/auth', authenticate, (req, res) => {
  * OAuth callback endpoint for connector authorization.
  */
 router.get('/:id/callback', async (req, res) => {
-  const { code, state } = req.query;
+  const { code, state, error, error_description: errorDescription } = req.query;
   const connector = getConnectorById(req.params.id);
+  const frontendUrl = publicFrontendBase();
 
-  if (!connector || !state) {
+  if (error) {
+    return res.redirect(`${frontendUrl}/social?oauth_error=${encodeURIComponent(String(errorDescription || error))}`);
+  }
+
+  if (!connector || !state || !code) {
     return res.status(400).json({ error: 'Invalid request' });
   }
 
   try {
-    const { userId } = JSON.parse(Buffer.from(state, 'base64').toString());
-    const clientId = connector.auth.clientId || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_ID`];
-    const clientSecret = connector.auth.clientSecret || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_SECRET`];
+    let parsed;
+    try {
+      parsed = JSON.parse(Buffer.from(String(state), 'base64url').toString());
+    } catch {
+      parsed = JSON.parse(Buffer.from(String(state), 'base64').toString());
+    }
+    const userId = parsed.userId;
+    const platformFromState = parsed.platform || null;
 
-    if (!clientId || !clientSecret) {
-      return res.status(400).json({ error: 'Connector credentials not configured' });
+    // Prefer oauthPlatforms mapping credentials (includes TWITTER_CLIENT_ID aliases)
+    const mapping = resolvePlatform(platformFromState || connector.id);
+    let clientId = connector.auth.clientId || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_ID`];
+    let clientSecret = connector.auth.clientSecret || process.env[`${connector.id.toUpperCase().replace(/-/g, '_')}_CLIENT_SECRET`];
+    if (mapping) {
+      const creds = getClientCredentials(mapping);
+      clientId = creds.clientId || clientId;
+      clientSecret = creds.clientSecret || clientSecret;
     }
 
-    // Exchange code for token
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({ error: 'Connector credentials not configured', needsConfig: true });
+    }
+
+    const redirectUri = connectorOAuthCallbackUrl(connector.id);
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: String(code),
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+    });
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    if (connector.id === 'twitter_x') {
+      const verifier = takePkce(String(state));
+      if (verifier) body.set('code_verifier', verifier);
+      headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+    }
+
     const axios = (await import('axios')).default;
-    const tokenResponse = await axios.post(
-      connector.auth.tokenUrl,
-      new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: `${process.env.API_URL || 'http://localhost:3001'}/api/connectors/${connector.id}/callback`,
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
+    const tokenResponse = await axios.post(connector.auth.tokenUrl, body, { headers });
 
     await storeTokens(userId, connector.id, {
       accessToken: tokenResponse.data.access_token,
       refreshToken: tokenResponse.data.refresh_token,
       expiresAt: tokenResponse.data.expires_in ? Date.now() + tokenResponse.data.expires_in * 1000 : null,
-      scopes: tokenResponse.data.scope?.split(' ') || connector.auth.scopes || [],
+      scopes: tokenResponse.data.scope?.split(/[\s,]+/).filter(Boolean) || connector.auth.scopes || [],
     });
+
+    // Also upsert the social connection used by /social/publish
+    const canonical = mapping?.platform || platformFromState || connector.id;
+    let tokenCipher;
+    try { tokenCipher = encryptUtf8(String(tokenResponse.data.access_token), 'social-token'); } catch { /* ignore */ }
+    if (userId && canonical) {
+      store.upsertSocialConnection(userId, canonical, {
+        tokenSet: true,
+        status: 'ready',
+        tokenCipher: tokenCipher || undefined,
+        connectorId: connector.id,
+        label: mapping?.label || connector.name,
+        note: 'Connected via OAuth. Token stored encrypted; value not returned.',
+      });
+    }
 
     logger.info(`Connector ${connector.id} connected for user ${userId}`);
 
-    // Redirect to frontend with success
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.redirect(`${frontendUrl}/dashboard/settings?connector_connected=${connector.id}`);
+    const plat = encodeURIComponent(canonical);
+    res.redirect(`${frontendUrl}/social?connected=${plat}`);
   } catch (err) {
     logger.error('OAuth callback failed', { error: err.message, connectorId: connector.id });
-    res.status(400).json({ error: 'OAuth authorization failed', detail: err.message });
+    res.redirect(`${frontendUrl}/social?oauth_error=${encodeURIComponent(err.message || 'oauth_failed')}`);
   }
 });
 
