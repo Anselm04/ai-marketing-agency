@@ -37,7 +37,9 @@ export async function publishWithPreferredToken(uid, platform, content) {
   const conn = mine.find((c) => canonicalPlatform(c.platform) === canonicalPlatform(platform));
   const userTok = userTokenFor(conn);
   const key = tokenKeyForPlatform(platform);
-  const svc = userTok
+  // withUserTokens lives in local socialMediaService.js (MCP size — not on remote yet)
+  const canOverride = userTok && typeof socialMediaService.withUserTokens === 'function';
+  const svc = canOverride
     ? socialMediaService.withUserTokens({ [key]: userTok, ...(canonicalPlatform(platform) === 'x' ? { twitter: userTok, x: userTok } : {}) })
     : socialMediaService;
   return svc.publishToAll(content);
