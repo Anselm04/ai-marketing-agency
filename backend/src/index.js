@@ -46,9 +46,12 @@ import socialVideoRoutes from './routes/socialVideo.js';
 import mediaLibraryRoutes from './routes/mediaLibrary.js';
 import autoPostingRoutes from './routes/autoPosting.js';
 import paidAdsRoutes from './routes/paidAds.js';
+import adsRoutes from './routes/ads.js';
 import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
+import { openaiStatus } from './services/openaiService.js';
+import './services/withUserTokensPatch.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
 import { authenticate } from './middleware/auth.js';
@@ -123,7 +126,19 @@ app.get('/health', async (_req, res) => {
 app.get('/api/health', async (_req, res) => {
   try {
     await store.connectDB();
-    res.json({ status: 'ok', database: store.isPostgres?.() ? 'postgres' : 'local', timestamp: new Date().toISOString() });
+    const persistence = store.getPersistenceInfo
+      ? store.getPersistenceInfo()
+      : { mode: store.isPostgres?.() ? 'supabase-postgres' : 'local-json' };
+    const ai = openaiStatus();
+    res.json({
+      status: 'ok',
+      service: 'trillionai-marketing',
+      timestamp: new Date().toISOString(),
+      database: store.isPostgres?.() ? 'postgres' : 'local',
+      persistence,
+      openai: ai,
+      spendCaps: { enforced: true, defaults: { dailyMax: 10, monthlyMax: 100 } },
+    });
   } catch (error) {
     logger.error('API health check failed', { error: error?.message });
     res.status(503).json({ status: 'degraded', database: 'unavailable', timestamp: new Date().toISOString() });
@@ -136,6 +151,10 @@ app.use('/api/auth', auditLog, authRoutes);
 app.use('/api/billing', billingPublicRoutes);
 app.use('/api/integrations/appforge', appforgeIntegrationRoutes);
 app.use((req, res, next) => {
+  if (req.path.startsWith('/api/integrations/appforge')) return next();
+  if (req.path === '/api/billing/webhook') return next();
+  if (/^\/api\/connectors\/[^/]+\/callback$/.test(req.path)) return next();
+  if (/^\/api\/social\/oauth\/[^/]+\/callback$/.test(req.path)) return next();
   if (req.path.startsWith('/api')) return authenticate(req, res, next);
   return next();
 });
@@ -150,8 +169,12 @@ app.use(async (req, res, next) => {
   ];
   const isPersonalPortfolioRead =
     req.method === 'GET' && req.path === '/api/products/portfolio';
+  const isSocialOAuthCallback =
+    req.method === 'GET' && /^\/api\/social\/oauth\/[^/]+\/callback$/.test(req.path);
+  const isConnectorOAuthCallback =
+    req.method === 'GET' && /^\/api\/connectors\/[^/]+\/callback$/.test(req.path);
 
-  if (freeAccountPaths.some((prefix) => req.path.startsWith(prefix)) || isPersonalPortfolioRead) {
+  if (freeAccountPaths.some((prefix) => req.path.startsWith(prefix)) || isPersonalPortfolioRead || isSocialOAuthCallback || isConnectorOAuthCallback) {
     return next();
   }
 
@@ -176,6 +199,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/social', socialRoutes);
+app.use('/api/ads', adsRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/ai-models', aiModelsRoutes);
 app.use('/api/connectors', connectorsRoutes);

@@ -3,13 +3,69 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'no-key',
-});
+function resolveLlmClient() {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey && openaiKey !== 'no-key') {
+    return {
+      client: new OpenAI({ apiKey: openaiKey }),
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      provider: 'openai',
+      missingKey: null,
+    };
+  }
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    return {
+      client: new OpenAI({
+        apiKey: groqKey,
+        baseURL: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1',
+      }),
+      model: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
+      provider: 'groq',
+      missingKey: null,
+    };
+  }
+  return {
+    client: new OpenAI({ apiKey: 'no-key' }),
+    model: 'gpt-4o-mini',
+    provider: null,
+    missingKey: 'OPENAI_API_KEY or GROQ_API_KEY',
+  };
+}
+
+const resolved = resolveLlmClient();
+const openai = resolved.client;
+const DEFAULT_MODEL = resolved.model;
+
+export function openaiStatus() {
+  const r = resolveLlmClient();
+  const configured = !r.missingKey;
+  return {
+    openaiConfigured: configured,
+    provider: r.provider,
+    model: r.model,
+    missingKey: r.missingKey,
+    note: configured
+      ? `LLM ready via ${r.provider} (${r.model}).`
+      : 'No OPENAI_API_KEY or GROQ_API_KEY. Copy templates still generate. AI video/script needs a key.',
+  };
+}
+
+function fallbackFromError(err, agentType, task) {
+  const status = err?.status || err?.response?.status;
+  const missing = !!resolveLlmClient().missingKey || status === 401;
+  return {
+    fallback: true,
+    missingKey: missing ? (resolveLlmClient().missingKey || 'OPENAI_API_KEY') : null,
+    openaiConfigured: !missing,
+    error: err?.message || 'openai-unavailable',
+    content: `[AI offline${missing ? ': missing OPENAI_API_KEY' : ''}] ${agentType} would: ${task}`,
+  };
+}
 
 export async function generateAgentResponse(agentType, task, context = {}) {
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'no-key') {
-    return { fallback: true, content: `[AI offline] ${agentType} would: ${task}` };
+  if (resolveLlmClient().missingKey) {
+    return fallbackFromError({ status: 401, message: resolveLlmClient().missingKey }, agentType, task);
   }
 
   const systemPrompts = {
@@ -36,7 +92,7 @@ export async function generateAgentResponse(agentType, task, context = {}) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: DEFAULT_MODEL,
       messages,
       temperature: 0.7,
       max_tokens: 800,
@@ -49,32 +105,20 @@ export async function generateAgentResponse(agentType, task, context = {}) {
     };
   } catch (err) {
     console.error('OpenAI error:', err.message);
-    return { fallback: true, content: `[AI error: ${err.message}] ${agentType} would: ${task}` };
+    return fallbackFromError(err, agentType, task);
   }
 }
 
 export async function generateCampaignStrategy(product, budget, platforms, targetAudience) {
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'no-key') {
-    return { fallback: true, strategy: 'AI offline. Define campaign strategy manually.' };
+  if (resolveLlmClient().missingKey) {
+    return { fallback: true, missingKey: resolveLlmClient().missingKey, strategy: 'AI offline (OPENAI_API_KEY missing). Templates still generate.' };
   }
 
-  const prompt = `Create a marketing campaign strategy for:
-Product: ${product}
-Budget: $${budget}
-Platforms: ${platforms.join(', ')}
-Target Audience: ${targetAudience}
-
-Return a structured JSON with:
-- campaignName
-- phases (array with name, duration, tactics)
-- budgetAllocation (object with platform percentages)
-- kpis (array of key metrics)
-- contentIdeas (array of 5 ideas)
-- risks (array of 3 risks and mitigations)`;
+  const prompt = `Create a marketing campaign strategy for:\nProduct: ${product}\nBudget: $${budget}\nPlatforms: ${platforms.join(', ')}\nTarget Audience: ${targetAudience}\n\nReturn a structured JSON with:\n- campaignName\n- phases (array with name, duration, tactics)\n- budgetAllocation (object with platform percentages)\n- kpis (array of key metrics)\n- contentIdeas (array of 5 ideas)\n- risks (array of 3 risks and mitigations)`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: DEFAULT_MODEL,
       messages: [
         { role: 'system', content: 'You are a Chief Strategy Officer. Return valid JSON only.' },
         { role: 'user', content: prompt },
@@ -90,12 +134,13 @@ Return a structured JSON with:
     };
   } catch (err) {
     console.error('OpenAI strategy error:', err.message);
-    return { fallback: true, strategy: { error: err.message } };
+    const missing = err?.status === 401 || err?.response?.status === 401;
+    return { fallback: true, missingKey: missing ? (resolveLlmClient().missingKey || 'OPENAI_API_KEY') : null, strategy: { error: err.message } };
   }
 }
 
 export async function generateLegalDocument(type, businessName, jurisdiction) {
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'no-key') {
+  if (resolveLlmClient().missingKey) {
     return { fallback: true, document: `[AI offline] ${type} template for ${businessName}.` };
   }
 
@@ -110,7 +155,7 @@ export async function generateLegalDocument(type, businessName, jurisdiction) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: DEFAULT_MODEL,
       messages: [
         { role: 'system', content: 'You are a legal document generator. Produce clean, professional legal text. Add disclaimers that this is a template and should be reviewed by a lawyer.' },
         { role: 'user', content: prompts[type] || `Generate a ${type} legal document for ${businessName}.` },
