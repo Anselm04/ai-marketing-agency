@@ -34,9 +34,18 @@ export async function checkoutHandler(req, res) {
       line_items: [{ price: item.priceId, quantity: 1 }],
       success_url: `${appUrl}/dashboard/billing?success=1`,
       cancel_url: `${appUrl}/dashboard/billing?canceled=1`,
+      metadata: {
+        lookup_key: item.lookup_key || '',
+        plan: item.id,
+        priceId: item.priceId,
+        ...(req.user?.id ? { userId: String(req.user.id) } : {}),
+      },
     };
     if (req.user?.email) {
       sessionParams.customer_email = req.user.email;
+    }
+    if (req.user?.id) {
+      sessionParams.client_reference_id = String(req.user.id);
     }
     const session = await stripe.checkout.sessions.create(sessionParams);
     return res.json({ url: session.url });
