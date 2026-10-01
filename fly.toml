@@ -1,13 +1,6 @@
 # TrillionAI Marketing on Fly.io (Sydney).
 # Secrets stay out of git. JWT_SECRET is required for login/register.
-#
-# Durable persistence: [[mounts]] mkt_data → /data with DATA_DIR=/data.
-# Create once if missing: fly volumes create mkt_data --region syd --size 1 -a trillionai-marketing
-# Or set DATABASE_URL once a Postgres adapter is enabled.
-#
-# Secrets (fly secrets set … -a trillionai-marketing): JWT_SECRET (required),
-# STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, RESEND_API_KEY|SMTP_*, OPENAI_API_KEY|GROQ_API_KEY,
-# OAuth client ids/secrets. See .env.example — never commit real values.
+# Stripe payment links work without STRIPE_SECRET_KEY.
 
 app = "trillionai-marketing"
 primary_region = "syd"
@@ -45,9 +38,11 @@ primary_region = "syd"
   USE_MONGO = "false"
   USE_REDIS_QUEUE = "false"
   FRONTEND_DIST = "/app/frontend/dist"
-  DATA_DIR = "/data"   # requires [[mounts]] volume mkt_data (see header)
+  UPLOAD_DIR = "/data/uploads"
 
-[[mounts]]
+# Preserve the existing Fly volume (mkt_data) attached to the production machine.
+# User uploads stored on local disk live under /data/uploads and survive deploys.
+[mounts]
   source = "mkt_data"
   destination = "/data"
 
