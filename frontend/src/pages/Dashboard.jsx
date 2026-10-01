@@ -55,7 +55,7 @@ export default function Dashboard() {
         <div>
           <p className="text-xs tracking-widest uppercase" style={{ color: 'var(--cyan)' }}>TrillionAI Marketing</p>
           <h1 className="text-3xl font-bold mt-2" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>
-            It&apos;s running
+            It's running
           </h1>
           <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
             Master campaign for {run.campaign?.productName || 'your product'} · {run.audienceLabel || 'Consumers'} · {run.organicNetworks || DEFAULT_ORGANIC_COUNT} organic networks.
@@ -116,6 +116,9 @@ export default function Dashboard() {
         </h1>
         <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
           Four steps. Presets. One click. It runs.
+        </p>
+        <p className="mt-3 text-sm rounded-lg p-3" style={{ color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+          Next step: pick a product (or paste a URL), choose who it is for, then hit Start campaign — nothing goes live until platforms are connected.
         </p>
       </div>
 
