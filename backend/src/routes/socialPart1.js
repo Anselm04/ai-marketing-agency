@@ -1,10 +1,8 @@
-import express from 'express';
 import store from '../utils/store.js';
 import { userIdOf } from '../utils/scope.js';
 import socialMediaService from '../services/socialMediaService.js';
-import { generatePlatformCopy, MAJOR_SOCIALS, buildSchedule } from '../services/marketingEngine.js';
-import { ORGANIC_PLATFORMS, ORGANIC_NETWORKS, ORGANIC_NETWORK_LABELS, canonicalPlatform, networkOf, CONTENT_TYPES, contentTypesOf } from '../services/spendGuard.js';
-import { encryptUtf8, decryptUtf8 } from '../utils/owner.js';
+import { ORGANIC_PLATFORMS, ORGANIC_NETWORKS, ORGANIC_NETWORK_LABELS, canonicalPlatform, networkOf, CONTENT_TYPES } from '../services/spendGuard.js';
+import { encryptUtf8 } from '../utils/owner.js';
 import {
   PRIORITY_OAUTH_PLATFORMS,
   resolvePlatform,
@@ -19,62 +17,6 @@ import { storeTokens } from '../services/appConnector.js';
 import { logger } from '../utils/logger.js';
 
 export function mountSocialPart1(router) {
-function publicConnection(row) {
-  if (!row) return row;
-  const { tokenCipher, token, accessToken, secret, ...safe } = row;
-  return { ...safe, tokenSet: !!row.tokenSet, charge: 'included' };
-}
-
-function connectorConnected(platform) {
-  const c = canonicalPlatform(platform);
-  return !!socialMediaService.isAvailable(c) || !!socialMediaService.isAvailable(platform)
-    || (c === 'x' && socialMediaService.isAvailable('twitter'));
-}
-
-
-function userTokenFor(conn) {
-  if (!conn?.tokenCipher) return null;
-  try { return decryptUtf8(conn.tokenCipher, 'social-token'); }
-  catch { return null; }
-}
-
-function tokenKeyForPlatform(platform) {
-  const m = resolvePlatform(platform);
-  if (m?.tokenKey) return m.tokenKey;
-  const c = canonicalPlatform(platform);
-  if (c === 'x') return 'twitter';
-  if (c === 'meta') return 'metaAds';
-  if (c === 'google') return 'googleAds';
-  return c;
-}
-
-async function publishWithPreferredToken(uid, platform, content) {
-  const mine = await store.getSocialConnectionsByOwner(uid);
-  const conn = mine.find((c) => canonicalPlatform(c.platform) === canonicalPlatform(platform));
-  const userTok = userTokenFor(conn);
-  const key = tokenKeyForPlatform(platform);
-  const svc = userTok
-    ? socialMediaService.withUserTokens({ [key]: userTok, ...(canonicalPlatform(platform) === 'x' ? { twitter: userTok, x: userTok } : {}) })
-    : socialMediaService;
-  return svc.publishToAll(content);
-}
-
-function honestResult(r) {
-  const published = !!(r && r.success && !r.fallback && r.postId && r.postId !== 'placeholder');
-  return {
-    platform: r?.platform,
-    published,
-    queued: !published,
-    success: published,
-    fallback: !published,
-    message: published
-      ? 'Published via connected connector'
-      : (r?.message || 'Not published. No connector token. Copy or queue this post instead.'),
-  };
-}
-
-
-
 router.get('/oauth/status', async (req, res) => {
   const uid = userIdOf(req);
   const mine = await store.getSocialConnectionsByOwner(uid);
