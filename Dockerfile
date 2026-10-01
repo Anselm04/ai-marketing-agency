@@ -4,7 +4,8 @@
 # npm install (not ci) because this repo has no package-lock files.
 
 # --- Backend Stage ---
-FROM node:20-alpine AS backend
+FROM node:22-alpine AS backend
+RUN apk add --no-cache ffmpeg font-dejavu
 WORKDIR /app/backend
 COPY backend/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
@@ -17,7 +18,7 @@ ENV NODE_ENV=production
 CMD ["node", "src/index.js"]
 
 # --- Frontend Build Stage ---
-FROM node:20-alpine AS frontend-build
+FROM node:22-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json ./
 RUN npm install --no-audit --no-fund
@@ -33,7 +34,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
 
 # --- Combined Fly production: API + static frontend ---
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 RUN apk add --no-cache wget ffmpeg font-dejavu
 WORKDIR /app/backend
 COPY backend/package.json ./
