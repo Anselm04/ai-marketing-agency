@@ -3,6 +3,7 @@ import { CreditCard, Check, Zap, Crown, Building2, Star } from 'lucide-react'
 import api from '../services/api'
 import { CATALOG } from '../config/stripeCatalog'
 import { useLanguage } from '../context/LanguageContext'
+import CheckoutReturnBanner from '../components/CheckoutReturnBanner'
 
 const dollars = (item) => item.price ?? (item.amount != null ? item.amount / 100 : 0)
 
@@ -79,6 +80,8 @@ export default function Billing() {
         <p className="mt-1" style={{ color: 'var(--text-muted)' }}>Manage your subscription and billing</p>
       </div>
 
+      <CheckoutReturnBanner />
+
       <form onSubmit={handleRedeem} className="p-5 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
         <h3 className="font-semibold" style={{ color: 'var(--gold-bright)' }}>{t('redeemTitle')}</h3>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('redeemHint')}</p>
@@ -101,7 +104,15 @@ export default function Billing() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-lg font-medium text-gray-900 capitalize">{subscription.plan || 'Free'} Plan</div>
-              <div className="text-sm text-gray-500">Status: <span className={`font-medium ${subscription.status === 'active' ? 'text-green-600' : 'text-yellow-600'}`}>{subscription.status}</span></div>
+              <div className="text-sm text-gray-500">
+                Status:{' '}
+                <span className={`font-medium ${subscription.status === 'active' ? 'text-green-600' : 'text-yellow-600'}`}>
+                  {subscription.status === 'active' ? 'active' : subscription.status === 'pending' ? 'pending confirmation' : subscription.status}
+                </span>
+                {subscription.status !== 'active' && (
+                  <span className="block text-xs mt-1 text-gray-400">Not marked active until Stripe confirms payment.</span>
+                )}
+              </div>
             </div>
             {subscription.status === 'active' && (
               <button onClick={handleCancel} className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50">Cancel Subscription</button>
@@ -113,7 +124,7 @@ export default function Billing() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {plans.map(plan => {
           const Icon = planIcons[plan.id] || Zap
-          const isCurrent = subscription?.plan === plan.id
+          const isCurrent = subscription?.plan === plan.id && subscription?.status === 'active'
           const features = plan.features || {}
           return (
             <div key={plan.id} className={`bg-white rounded-xl border p-5 flex flex-col ${isCurrent ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200'}`}>
