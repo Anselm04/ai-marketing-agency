@@ -3,13 +3,21 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import store from '../utils/store.js';
 import { isOwnerEmail } from '../utils/owner.js';
+import { sendPasswordReset, emailTransportConfigured } from '../services/emailService.js';
 
 const router = express.Router();
 
+const MIN_PASSWORD = 8;
+const isProd = () => process.env.NODE_ENV === 'production';
+
+function appBaseUrl() {
+  return String(process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+}
+
 router.post('/register', async (req, res) => {
   const { email, password, firstName, lastName } = req.body;
-  if (!email || !password || password.length < 6) {
-    return res.status(400).json({ error: 'Email and password (min 6 chars) required' });
+  if (!email || !password || password.length < MIN_PASSWORD) {
+    return res.status(400).json({ error: `Email and password (min ${MIN_PASSWORD} chars) required` });
   }
   try {
     const user = await store.createUser({
@@ -62,14 +70,34 @@ router.get('/me', async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await store.findUserByEmail(email.toLowerCase());
-    if (!user) {
+    if (!email) {
       return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
+    }
+    const user = await store.findUserByEmail(String(email).toLowerCase());
+    const publicMsg = { success: true, message: 'If an account exists, a reset link has been sent.' };
+    if (!user) {
+      return res.json(publicMsg);
     }
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     await store.updateUser(user.id, { resetToken, resetTokenExpires });
-    res.json({ success: true, message: 'If an account exists, a reset link has been sent.', devToken: resetToken });
+
+    const resetUrl = `${appBaseUrl()}/reset-password`;
+    const mail = await sendPasswordReset(user.email, resetToken, resetUrl);
+
+    if (!isProd() && (!mail?.success || mail?.fallback)) {
+      return res.json({
+        ...publicMsg,
+        emailSent: false,
+        emailTransportConfigured: emailTransportConfigured(),
+        devToken: resetToken,
+      });
+    }
+    return res.json({
+      ...publicMsg,
+      emailSent: !!(mail?.success),
+      emailTransportConfigured: emailTransportConfigured(),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -78,8 +106,8 @@ router.post('/forgot-password', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   try {
     const { token, password } = req.body;
-    if (!token || !password || password.length < 6) {
-      return res.status(400).json({ error: 'Token and password (min 6 chars) required' });
+    if (!token || !password || password.length < MIN_PASSWORD) {
+      return res.status(400).json({ error: `Token and password (min ${MIN_PASSWORD} chars) required` });
     }
     const allUsers = await store.getUsers();
     const user = allUsers.find(u => u.resetToken === token);
