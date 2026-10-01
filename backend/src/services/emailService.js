@@ -8,8 +8,27 @@ const FROM_NAME = process.env.FROM_NAME || 'AI Marketing Agency';
 
 let transporter = null;
 
+/**
+ * Fly secrets (pick one transport):
+ *   RESEND_API_KEY (+ FROM_EMAIL verified in Resend)
+ *   SENDGRID_API_KEY
+ *   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_SECURE
+ *   AWS_SES_ACCESS_KEY / AWS_SES_SECRET_KEY (/ AWS_SES_HOST)
+ * JWT_SECRET is required separately for auth tokens (never put secrets in git).
+ */
 function getTransporter() {
   if (transporter) return transporter;
+
+  // Resend via SMTP (https://resend.com/docs/send-with-smtp)
+  if (process.env.RESEND_API_KEY) {
+    transporter = nodemailer.createTransport({
+      host: process.env.RESEND_SMTP_HOST || 'smtp.resend.com',
+      port: Number(process.env.RESEND_SMTP_PORT || 587),
+      secure: false,
+      auth: { user: 'resend', pass: process.env.RESEND_API_KEY },
+    });
+    return transporter;
+  }
 
   // SendGrid via SMTP
   if (process.env.SENDGRID_API_KEY) {
@@ -35,14 +54,16 @@ function getTransporter() {
   if (process.env.SMTP_HOST) {
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT || 587,
+      port: Number(process.env.SMTP_PORT || 587),
       secure: process.env.SMTP_SECURE === 'true',
-      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+      auth: process.env.SMTP_USER
+        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+        : undefined,
     });
     return transporter;
   }
 
-  // Ethereal / test account for development
+  // Ethereal / test account for development only (never in production)
   if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
     transporter = nodemailer.createTransport({
       host: 'smtp.ethereal.email',
@@ -55,11 +76,20 @@ function getTransporter() {
   return null;
 }
 
+export function emailTransportConfigured() {
+  return !!(
+    process.env.RESEND_API_KEY
+    || process.env.SENDGRID_API_KEY
+    || (process.env.AWS_SES_ACCESS_KEY && process.env.AWS_SES_SECRET_KEY)
+    || process.env.SMTP_HOST
+  );
+}
+
 export async function sendEmail({ to, subject, html, text, from = FROM_EMAIL, fromName = FROM_NAME }) {
   const t = getTransporter();
   if (!t) {
-    console.log(`[Email dev mode] To: ${to}, Subject: ${subject}`);
-    return { fallback: true, messageId: 'dev-' + Date.now() };
+    console.log(`[Email no-transport] To: ${to}, Subject: ${subject}`);
+    return { fallback: true, messageId: 'dev-' + Date.now(), reason: 'no_email_transport' };
   }
 
   try {
@@ -78,6 +108,7 @@ export async function sendEmail({ to, subject, html, text, from = FROM_EMAIL, fr
 }
 
 export async function sendPasswordReset(email, resetToken, resetUrl) {
+  const link = `${resetUrl}${resetUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(resetToken)}`;
   return sendEmail({
     to: email,
     subject: 'Reset your password',
@@ -85,12 +116,12 @@ export async function sendPasswordReset(email, resetToken, resetUrl) {
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2>Password Reset Request</h2>
         <p>You requested a password reset for your AI Marketing Agency account.</p>
-        <p><a href="${resetUrl}?token=${resetToken}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Reset Password</a></p>
-        <p>Or copy this link: ${resetUrl}?token=${resetToken}</p>
+        <p><a href="${link}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Reset Password</a></p>
+        <p>Or copy this link: ${link}</p>
         <p>This link expires in 1 hour.</p>
       </div>
     `,
-    text: `Reset your password: ${resetUrl}?token=${resetToken}\nThis link expires in 1 hour.`,
+    text: `Reset your password: ${link}\nThis link expires in 1 hour.`,
   });
 }
 
