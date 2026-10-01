@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import store from '../utils/store.js';
 import { isOwnerEmail } from '../utils/owner.js';
+import { sendPasswordReset, emailTransportConfigured } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -61,9 +62,10 @@ router.get('/me', async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await store.findUserByEmail(email.toLowerCase());
+    const user = await store.findUserByEmail(String(email || '').toLowerCase());
+    const generic = { success: true, message: 'If an account exists, a reset link has been sent.' };
     if (!user) {
-      return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
+      return res.json(generic);
     }
     const resetToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
@@ -73,11 +75,18 @@ router.post('/forgot-password', async (req, res) => {
       expiresAt: resetTokenExpires,
     });
 
-    const response = {
-      success: true,
-      message: 'If an account exists, a reset link has been sent.',
-    };
-    if (process.env.NODE_ENV !== 'production') response.devToken = resetToken;
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetUrl = `${appUrl.replace(/\/$/, '')}/reset-password`;
+    if (emailTransportConfigured()) {
+      await sendPasswordReset(user.email, resetToken, resetUrl);
+    }
+
+    const response = { ...generic };
+    if (process.env.NODE_ENV !== 'production' && !emailTransportConfigured()) {
+      response.devToken = resetToken;
+      response.devResetUrl = `${resetUrl}?token=${encodeURIComponent(resetToken)}`;
+      response.note = 'Email transport not configured; devToken returned for local testing only.';
+    }
     res.json(response);
   } catch (err) {
     res.status(500).json({ error: err.message });
