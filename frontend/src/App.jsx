@@ -32,9 +32,13 @@ import Games from './pages/Games'
 import Software from './pages/Software'
 import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
-import Advanced from './pages/Advanced'
 import AIModels from './pages/AIModels'
 import Connectors from './pages/Connectors'
+import SocialVideoPublisher from './pages/SocialVideoPublisher'
+import MediaLibrary from './pages/MediaLibrary'
+import AutoPosting from './pages/AutoPosting'
+import ClippingAgency from './pages/ClippingAgency'
+import PaidAdvertising from './pages/PaidAdvertising'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
 
 function ProtectedRoute({ children }) {
@@ -69,7 +73,6 @@ function AppRoutes() {
       <Route path="/software" element={<Software />} />
       <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
-        <Route path="advanced" element={<Advanced />} />
         <Route path="agents" element={<Agents />} />
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="products" element={<ProductMarketing />} />
@@ -87,6 +90,11 @@ function AppRoutes() {
         <Route path="admin" element={<Admin />} />
         <Route path="ai-models" element={<AIModels />} />
         <Route path="connectors" element={<Connectors />} />
+        <Route path="video-distribution" element={<SocialVideoPublisher />} />
+        <Route path="media-library" element={<MediaLibrary />} />
+        <Route path="auto-posting" element={<AutoPosting />} />
+        <Route path="clipping" element={<ClippingAgency />} />
+        <Route path="paid-ads" element={<PaidAdvertising />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
