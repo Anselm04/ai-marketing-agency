@@ -1,1 +1,1 @@
-RESTORE_PLACEHOLDER
+export { default } from './socialImpl.js';
