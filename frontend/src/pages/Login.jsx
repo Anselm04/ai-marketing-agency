@@ -7,6 +7,19 @@ import LanguageSelector from '../components/LanguageSelector';
 import { Mail, Lock, ArrowRight, Moon, Sun } from 'lucide-react';
 import './landing.css';
 
+const MIN_PASSWORD = 8;
+
+function friendlyLoginError(err) {
+  const status = err.response?.status;
+  const raw = err.response?.data?.error || '';
+  if (status === 401 || /invalid|incorrect|credentials|unauthorized/i.test(raw)) {
+    return 'Email or password is incorrect. Check both and try again.';
+  }
+  if (status === 429) return 'Too many attempts. Wait a moment and try again.';
+  if (!err.response) return 'Cannot reach the server. Check your connection and try again.';
+  return raw || 'Sign-in failed. Please try again.';
+}
+
 export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -19,12 +32,16 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (form.password.length > 0 && form.password.length < MIN_PASSWORD) {
+      setError(`Password must be at least ${MIN_PASSWORD} characters.`);
+      return;
+    }
     setLoading(true);
     try {
       await login(form);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      setError(friendlyLoginError(err));
     } finally {
       setLoading(false);
     }
@@ -53,7 +70,7 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center px-4 py-16">
         <div className="w-full max-w-md studio-card">
           <h1 style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--gold-bright)', fontSize: '2rem', margin: 0 }}>{t('signIn')}</h1>
-          {error && <div className="mt-4 p-3 text-sm text-red-400">{error}</div>}
+          {error && <div className="mt-4 p-3 text-sm text-red-400" role="alert">{error}</div>}
           <form onSubmit={handleSubmit} className="space-y-4 mt-6">
             <div>
               <label className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Email</label>
@@ -62,6 +79,7 @@ export default function Login() {
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   className="w-full pl-10 pr-3 py-3 text-sm min-h-[52px]"
                   style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }}
                   placeholder="you@company.com"
@@ -77,20 +95,24 @@ export default function Login() {
                 <input
                   type="password"
                   required
+                  autoComplete="current-password"
+                  minLength={MIN_PASSWORD}
                   className="w-full pl-10 pr-3 py-3 text-sm min-h-[52px]"
                   style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }}
-                  placeholder="••••••••"
+                  placeholder="At least 8 characters"
                   value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
                 />
               </div>
+              <p className="mt-1 text-xs" style={{ color: 'var(--text-dim)' }}>Passwords are at least {MIN_PASSWORD} characters.</p>
             </div>
             <button type="submit" disabled={loading} className="studio-btn studio-btn-gold w-full">
-              {loading ? '…' : t('signIn')}
+              {loading ? 'Signing in…' : t('signIn')}
               <ArrowRight size={16} />
             </button>
           </form>
-          <div className="mt-6 text-sm" style={{ color: 'var(--text-muted)' }}>
+          <div className="mt-6 text-sm flex flex-wrap gap-x-4 gap-y-2" style={{ color: 'var(--text-muted)' }}>
+            <Link to="/forgot-password" style={{ color: 'var(--gold)' }}>Forgot password?</Link>
             <Link to="/register" style={{ color: 'var(--gold)' }}>{t('createAccount')}</Link>
           </div>
         </div>
