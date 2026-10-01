@@ -43,6 +43,8 @@ import realtimeRoutes from './routes/realtime.js';
 import affiliateRoutes from './routes/affiliate.js';
 import appforgeIntegrationRoutes from './routes/appforgeIntegration.js';
 import adsRoutes from './routes/ads.js';
+import { stripeWebhookHandler } from './routes/stripeWebhook.js';
+import { validateEnv } from './middleware/envCheck.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
 import { authenticate } from './middleware/auth.js';
@@ -81,6 +83,8 @@ app.use(helmet({
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan('combined'));
+// Stripe webhooks need the raw body for signature verification — mount before JSON parser.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeBody);
@@ -110,10 +114,14 @@ app.use('/api/integrations/appforge', appforgeIntegrationRoutes);
 app.use('/api', (req, res, next) => {
   if (req.path === '/health' || req.path === '/metrics') return next();
   if (req.path.startsWith('/auth')) return next();
+  // Stripe webhook is signature-authenticated; do not rate-limit provider retries.
+  if (req.path === '/billing/webhook') return next();
   return apiRateLimit(req, res, next);
 });
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/integrations/appforge')) return next();
+  // Stripe webhooks use signature verification, not Bearer tokens
+  if (req.path === '/api/billing/webhook') return next();
   // OAuth provider redirects have no Bearer token
   if (/^\/api\/connectors\/[^/]+\/callback$/.test(req.path)) return next();
   if (/^\/api\/social\/oauth\/[^/]+\/callback$/.test(req.path)) return next();
@@ -163,6 +171,17 @@ app.use(errorHandler);
 
 const isTest = process.env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
 if (!isTest) {
+  // JWT_SECRET is required for login/register tokens (and OAuth token encryption).
+  // In production we fail fast; in development validateEnv still warns on recommended keys.
+  try {
+    validateEnv();
+  } catch (err) {
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('Refusing to start without required secrets', { error: err.message });
+      process.exit(1);
+    }
+    logger.warn('Env check failed (non-production): ' + err.message);
+  }
   httpServer.listen(PORT, '0.0.0.0', () => {
     logger.info(`Server running on port ${PORT}`, {
       environment: process.env.NODE_ENV,
