@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Lock, ArrowRight, CheckCircle } from 'lucide-react'
 import api from '../services/api'
 
+const MIN_PASSWORD = 8
+
 export default function ResetPassword() {
   const [searchParams] = useSearchParams()
   const [password, setPassword] = useState('')
@@ -15,15 +17,25 @@ export default function ResetPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    if (password !== confirm) return setError('Passwords do not match')
-    if (password.length < 6) return setError('Password must be at least 6 characters')
+    if (!token) {
+      return setError('This reset link is missing or incomplete. Request a new one from the forgot-password page.')
+    }
+    if (password !== confirm) return setError('Those passwords do not match. Try typing them again.')
+    if (password.length < MIN_PASSWORD) {
+      return setError(`Password must be at least ${MIN_PASSWORD} characters.`)
+    }
 
     setLoading(true)
     try {
       await api.post('/auth/reset-password', { token, password })
       setDone(true)
     } catch (err) {
-      setError(err.response?.data?.error || 'Reset failed')
+      const raw = err.response?.data?.error || ''
+      if (/invalid|expired/i.test(raw)) {
+        setError('This reset link is invalid or has expired. Request a new one — links only work once.')
+      } else {
+        setError(raw || 'We could not update your password. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -33,8 +45,8 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">New Password</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Enter your new password below</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Choose a new password</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Use at least {MIN_PASSWORD} characters</p>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
@@ -42,12 +54,19 @@ export default function ResetPassword() {
             <div className="text-center space-y-4">
               <CheckCircle className="mx-auto text-green-500" size={48} />
               <h3 className="font-semibold text-gray-900 dark:text-white">Password updated</h3>
-              <Link to="/login" className="text-sm text-blue-600 hover:underline">Sign in with your new password</Link>
+              <p className="text-sm text-gray-500 dark:text-gray-400">You can sign in with your new password now.</p>
+              <Link to="/login" className="text-sm text-blue-600 hover:underline">Sign in</Link>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">{error}</div>
+              )}
+              {!token && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm rounded-lg">
+                  This page needs a valid reset link from your email.{' '}
+                  <Link to="/forgot-password" className="underline">Request a new link</Link>
+                </div>
               )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New password</label>
@@ -56,13 +75,15 @@ export default function ResetPassword() {
                   <input
                     type="password"
                     required
-                    minLength={6}
+                    minLength={MIN_PASSWORD}
+                    autoComplete="new-password"
                     className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="••••••••"
+                    placeholder="At least 8 characters"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                   />
                 </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Must be at least {MIN_PASSWORD} characters.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm password</label>
@@ -71,7 +92,8 @@ export default function ResetPassword() {
                   <input
                     type="password"
                     required
-                    minLength={6}
+                    minLength={MIN_PASSWORD}
+                    autoComplete="new-password"
                     className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="••••••••"
                     value={confirm}
@@ -84,12 +106,9 @@ export default function ResetPassword() {
                 disabled={loading || !token}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {loading ? 'Updating...' : 'Update password'}
+                {loading ? 'Updating…' : 'Update password'}
                 <ArrowRight size={16} />
               </button>
-              {!token && (
-                <p className="text-sm text-red-600 text-center">Invalid or missing reset token.</p>
-              )}
             </form>
           )}
         </div>
