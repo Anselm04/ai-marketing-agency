@@ -5,7 +5,7 @@
 
 # --- Backend Stage ---
 FROM node:22-alpine AS backend
-RUN apk add --no-cache ffmpeg font-dejavu
+RUN apk add --no-cache ffmpeg
 WORKDIR /app/backend
 COPY backend/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
@@ -35,7 +35,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # --- Combined Fly production: API + static frontend ---
 FROM node:22-alpine AS production
-RUN apk add --no-cache wget ffmpeg font-dejavu
+RUN apk add --no-cache wget ffmpeg
 WORKDIR /app/backend
 COPY backend/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
