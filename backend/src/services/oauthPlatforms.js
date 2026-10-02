@@ -5,24 +5,27 @@
 
 import { createHash, randomBytes } from 'crypto';
 import { getConnectorById } from './connectors/index.js';
+import { createOAuthSession } from './appConnector.js';
 
-export const PUBLIC_API_BASE =
-  process.env.API_URL || process.env.PUBLIC_URL || 'https://trillionai-marketing.fly.dev';
+export function publicApiBase() {
+  return String(process.env.API_URL || process.env.PUBLIC_URL || 'https://trillionai-marketing.fly.dev').replace(/\/$/, '');
+}
 
-export const PUBLIC_FRONTEND_BASE =
-  process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://trillionai-marketing.fly.dev';
+export function publicFrontendBase() {
+  return String(process.env.FRONTEND_URL || process.env.PUBLIC_URL || publicApiBase()).replace(/\/$/, '');
+}
 
-/** Short-lived PKCE verifiers keyed by OAuth state (in-memory; fine for single instance). */
+/** Snapshot for callers that imported the constant. Prefer the functions. */
+export const PUBLIC_API_BASE = publicApiBase();
+export const PUBLIC_FRONTEND_BASE = publicFrontendBase();
+
+/** Short-lived PKCE verifiers keyed by OAuth state (fallback if the signed session has none). */
 export const pkceStore = new Map();
 
 const PKCE_TTL_MS = 10 * 60 * 1000;
 
-export function publicApiBase() {
-  return String(PUBLIC_API_BASE).replace(/\/$/, '');
-}
-
-export function publicFrontendBase() {
-  return String(PUBLIC_FRONTEND_BASE).replace(/\/$/, '');
+export function metaGraphVersion() {
+  return process.env.META_GRAPH_VERSION || 'v21.0';
 }
 
 /**
@@ -49,7 +52,7 @@ export const PRIORITY_OAUTH_PLATFORMS = [
     kind: 'organic',
     clientIdEnv: ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_ID'],
     clientSecretEnv: ['TIKTOK_CLIENT_SECRET'],
-    pkce: false,
+    pkce: true,
     tokenKey: 'tiktok',
   },
   {
@@ -167,6 +170,26 @@ export function connectorOAuthCallbackUrl(connectorId) {
   return `${publicApiBase()}/api/connectors/${encodeURIComponent(connectorId)}/callback`;
 }
 
+export function scopeSeparator(mapping) {
+  if (['tiktok', 'facebook', 'instagram', 'meta'].includes(mapping.platform)) return ',';
+  return ' ';
+}
+
+export function authorizationScopes(mapping, connector) {
+  const scopes = [...(connector?.auth?.scopes || [])];
+  if (mapping.platform === 'instagram' && !scopes.includes('business_management')) {
+    scopes.push('business_management');
+  }
+  if (mapping.platform === 'facebook' && !scopes.includes('pages_read_engagement')) {
+    scopes.push('pages_read_engagement');
+  }
+  return scopes;
+}
+
+function applyMetaGraphVersion(rawUrl) {
+  return String(rawUrl).replace(/\/v\d+\.\d+\//g, `/${metaGraphVersion()}/`);
+}
+
 export function createPkcePair() {
   const verifier = randomBytes(32).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -175,7 +198,6 @@ export function createPkcePair() {
 
 export function rememberPkce(state, verifier) {
   pkceStore.set(state, { verifier, expiresAt: Date.now() + PKCE_TTL_MS });
-  // opportunistic cleanup
   if (pkceStore.size > 200) {
     const now = Date.now();
     for (const [k, v] of pkceStore) {
@@ -192,7 +214,7 @@ export function takePkce(state) {
   return row.verifier;
 }
 
-export function buildAuthorizationUrl(mapping, { userId, redirectUri } = {}) {
+export async function buildAuthorizationUrl(mapping, { userId, redirectUri } = {}) {
   const connector = getConnectorForPlatform(mapping);
   if (!connector?.auth?.authorizationUrl) {
     const err = new Error('Connector OAuth authorization URL missing');
@@ -208,34 +230,36 @@ export function buildAuthorizationUrl(mapping, { userId, redirectUri } = {}) {
     throw err;
   }
 
-  const statePayload = {
-    userId,
-    platform: mapping.platform,
-    connectorId: mapping.connectorId,
-    nonce: randomBytes(8).toString('hex'),
-  };
-  const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
   const cb = redirectUri || socialOAuthCallbackUrl(mapping.platform);
+  const wantsPkce = mapping.pkce || mapping.connectorId === 'twitter_x' || mapping.connectorId === 'tiktok';
+  const pkce = wantsPkce ? createPkcePair() : null;
+  const state = await createOAuthSession(userId, mapping.connectorId, {
+    platform: mapping.platform,
+    codeVerifier: pkce?.verifier || null,
+    redirectUri: cb,
+  });
+  if (pkce) rememberPkce(state, pkce.verifier);
 
-  const url = new URL(connector.auth.authorizationUrl);
-  url.searchParams.set('client_id', creds.clientId);
+  let authorizationUrl = connector.auth.authorizationUrl;
+  if (['facebook', 'instagram', 'meta'].includes(mapping.platform)) {
+    authorizationUrl = applyMetaGraphVersion(authorizationUrl);
+  }
+  const url = new URL(authorizationUrl);
+  const clientParam = connector.auth.clientIdParam || 'client_id';
+  url.searchParams.set(clientParam, creds.clientId);
   url.searchParams.set('redirect_uri', cb);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', (connector.auth.scopes || []).join(' '));
+  url.searchParams.set('scope', authorizationScopes(mapping, connector).join(scopeSeparator(mapping)));
   url.searchParams.set('state', state);
 
-  // Google / YouTube expect these
   if (mapping.connectorId === 'youtube' || mapping.connectorId === 'google_ads') {
     url.searchParams.set('access_type', 'offline');
     url.searchParams.set('prompt', 'consent');
+    url.searchParams.set('include_granted_scopes', 'true');
   }
 
-  let codeVerifier = null;
-  if (mapping.pkce || mapping.connectorId === 'twitter_x') {
-    const { verifier, challenge } = createPkcePair();
-    codeVerifier = verifier;
-    rememberPkce(state, verifier);
-    url.searchParams.set('code_challenge', challenge);
+  if (pkce) {
+    url.searchParams.set('code_challenge', pkce.challenge);
     url.searchParams.set('code_challenge_method', 'S256');
   }
 
@@ -243,13 +267,19 @@ export function buildAuthorizationUrl(mapping, { userId, redirectUri } = {}) {
     authorizationUrl: url.toString(),
     state,
     redirectUri: cb,
-    scopes: connector.auth.scopes || [],
+    scopes: authorizationScopes(mapping, connector),
     connectorId: mapping.connectorId,
-    codeVerifier,
+    codeVerifier: pkce?.verifier || null,
   };
 }
 
-export async function exchangeAuthorizationCode(mapping, { code, redirectUri, state }) {
+function tokenPayload(data) {
+  if (data && data.access_token) return data;
+  if (data?.data?.access_token) return data.data;
+  return data || {};
+}
+
+export async function exchangeAuthorizationCode(mapping, { code, redirectUri, state, codeVerifier }) {
   const connector = getConnectorForPlatform(mapping);
   if (!connector?.auth?.tokenUrl) {
     throw new Error('Connector token URL missing');
@@ -263,16 +293,19 @@ export async function exchangeAuthorizationCode(mapping, { code, redirectUri, st
   }
 
   const cb = redirectUri || socialOAuthCallbackUrl(mapping.platform);
+  const idParam = connector.auth.tokenClientIdParam || connector.auth.clientIdParam || 'client_id';
+  const secretParam = connector.auth.tokenClientSecretParam || 'client_secret';
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code: String(code),
-    client_id: creds.clientId,
-    client_secret: creds.clientSecret,
     redirect_uri: cb,
   });
+  body.set(idParam, creds.clientId);
+  body.set(secretParam, creds.clientSecret);
 
-  if (mapping.pkce || mapping.connectorId === 'twitter_x') {
-    const verifier = takePkce(state);
+  const wantsPkce = mapping.pkce || mapping.connectorId === 'twitter_x' || mapping.connectorId === 'tiktok';
+  if (wantsPkce) {
+    const verifier = codeVerifier || takePkce(state);
     if (!verifier) {
       throw new Error('PKCE code_verifier missing or expired — restart OAuth connect');
     }
@@ -281,23 +314,28 @@ export async function exchangeAuthorizationCode(mapping, { code, redirectUri, st
 
   const axios = (await import('axios')).default;
   const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-
-  // Twitter confidential clients often use Basic auth; include both for compatibility
   if (mapping.connectorId === 'twitter_x') {
     headers.Authorization = `Basic ${Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64')}`;
   }
 
-  const tokenResponse = await axios.post(connector.auth.tokenUrl, body, { headers });
+  let tokenUrl = connector.auth.tokenUrl;
+  if (['facebook', 'instagram', 'meta'].includes(mapping.platform)) {
+    tokenUrl = applyMetaGraphVersion(tokenUrl);
+  }
+  const tokenResponse = await axios.post(tokenUrl, body, { headers, timeout: 20000 });
+  const data = tokenPayload(tokenResponse.data);
+  if (!data.access_token) {
+    const detail = data.error_description || data.error?.message || data.error || 'token response missing access_token';
+    throw new Error(typeof detail === 'string' ? detail : 'token response missing access_token');
+  }
   return {
-    accessToken: tokenResponse.data.access_token,
-    refreshToken: tokenResponse.data.refresh_token || null,
-    expiresAt: tokenResponse.data.expires_in
-      ? Date.now() + Number(tokenResponse.data.expires_in) * 1000
-      : null,
-    scopes: tokenResponse.data.scope
-      ? String(tokenResponse.data.scope).split(/[\s,]+/).filter(Boolean)
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token || null,
+    expiresAt: data.expires_in ? Date.now() + Number(data.expires_in) * 1000 : null,
+    scopes: data.scope
+      ? String(data.scope).split(/[\s,]+/).filter(Boolean)
       : connector.auth.scopes || [],
-    raw: tokenResponse.data,
+    raw: data,
   };
 }
 
@@ -305,6 +343,7 @@ export default {
   PRIORITY_OAUTH_PLATFORMS,
   publicApiBase,
   publicFrontendBase,
+  metaGraphVersion,
   resolvePlatform,
   getClientCredentials,
   isOAuthConfigured,
