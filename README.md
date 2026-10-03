@@ -1,200 +1,93 @@
 # TrillionAI Marketing
 
-Autonomous marketing across social, ads, and SEO. A product of **TrillionAI Tech** (not Ltd), alongside **AppForge** (generate real live apps, games, agents, tools, software, and websites at https://appforge-unfurling-moon-9058.fly.dev). Brand site: https://trillionaitech.com.
+**TrillionAI Marketing** is a private marketing software project developed by **TrillionAI Tech**.
 
-This app does not advertise a six-product catalog until AppForge has generated products that actually work. Campaigns are not claimed as already running until they are launched from this app.
+This repository contains the application source code, supporting services, configuration, tests, and deployment assets required to develop and operate the product.
 
-## What This App Does
+> **Status:** Active development.
 
-- Autonomously markets apps, products, and services on social, ads, and SEO channels
-- Runs full-stack advertising, social media, SEO, legal compliance, and revenue optimization
-- Generates and optimizes campaigns across TikTok, Instagram, Facebook, YouTube, LinkedIn, Twitter/X, Reddit, and Google Ads
-- Provides real-time analytics, AI content generation, and automated customer engagement
+## Repository Scope
 
-## Architecture
+This repository is dedicated to the TrillionAI Marketing product.
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18 + Vite + Tailwind CSS + Socket.IO Client |
-| Backend | Node.js + Express + ESM |
-| AI Engine | Multi-Provider Registry (OpenAI, Anthropic, Google, Cohere, Mistral, Groq, Azure, AWS Bedrock, Ollama) + LangChain |
-| Queue | BullMQ + Redis |
-| Cache | Redis with in-memory fallback |
-| Database | MongoDB + File-based store (development) |
-| Real-time | Socket.IO |
-| Monitoring | Prometheus metrics + health checks |
-| DevOps | Docker + Docker Compose + Fly.io (Sydney) |
+Public-facing documentation should describe only current, necessary operational information. Product strategy, future capabilities, commercial plans, internal automation design, security-sensitive architecture, provider strategy, roadmap information, and other proprietary details should not be documented here.
 
-## Production Features
+## Development
 
-### AI Model Registry
-- **9 providers**, **40+ models** with auto-discovery
-- Cost estimation, quality scoring, and fallback chains
-- Streaming support and vision model support
-- Configurable via environment variables
+### Requirements
 
-### App Connector Framework
-- **100+ connectors** across social, e-commerce, ads, CRM, and messaging platforms
-- OAuth2 + API key authentication patterns
-- Built-in health checks and retry logic
-- Extensible architecture for new platforms
+- Node.js 20 or later
+- npm
 
-### Intelligent Orchestrator
-- Contextual task routing to optimal AI models
-- Smart suggestions based on user behavior and campaign data
-- Performance tracking with auto-scoring
+Additional services may be required depending on the environment.
 
-### Production Utilities
-- **Queue System**: BullMQ with Redis for background jobs
-- **Caching**: Redis with graceful in-memory fallback
-- **Validation**: Zod schemas for type-safe request validation
-- **WebSockets**: Real-time notifications and agent status updates
-- **Health Checks**: `/live`, `/ready`, `/health` endpoints
-- **Metrics**: Prometheus-compatible metrics at `/metrics`
-- **Logging**: Structured JSON logging with Winston
-- **Security**: Helmet headers, CORS, rate limiting, input sanitization, audit logging
-- **Pagination**: Cursor-based pagination helper
-
-### Real-Time Frontend
-- Live dashboard with Socket.IO integration
-- Real-time notifications and task progress
-- Campaign activity feed
-- Connection status monitoring with auto-reconnect
-
-## Quick Start
-
-### Prerequisites
-- Node.js >= 20
-- Redis (optional, in-memory fallback available)
-- MongoDB (optional, file-based store available for development)
-
-### Installation
+### Install
 
 ```bash
-# Clone repository
-git clone https://github.com/Anselm04/ai-marketing-agency.git
-cd ai-marketing-agency
-
-# Install dependencies (workspaces)
 npm install
+```
 
-# Environment variables
-cp backend/.env.example backend/.env
-# Edit backend/.env with your API keys
+### Development
 
-# Development (both frontend and backend)
+```bash
 npm run dev
-
-# Or separately
-cd backend && npm run dev
-cd frontend && npm run dev
 ```
 
-### Docker
+### Testing
+
+Run the repository test commands before merging or releasing changes.
 
 ```bash
-docker-compose up --build
+npm test
 ```
 
-Services:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:3001
-- Health: http://localhost:3001/health
-- Metrics: http://localhost:3001/metrics
+Where individual workspaces provide their own test commands, run those as well.
 
-## API Endpoints
+## Configuration
 
-See `backend/API.md` for full endpoint documentation.
+Runtime configuration is provided through environment variables and deployment configuration.
 
-Key endpoints:
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - Authentication
-- `GET /api/agents` - List AI agents
-- `POST /api/campaigns` - Create campaign
-- `POST /api/content` - Generate content
-- `GET /api/ai-models` - AI model registry
-- `GET /api/connectors` - App connectors
-- `GET /health` - Health checks
-- `GET /metrics` - Prometheus metrics
+Do not commit:
 
-## Environment Variables
+- API keys
+- access tokens
+- passwords
+- private keys
+- production credentials
+- customer data
+- private deployment information
+- internal security configuration
 
-See `backend/ENV.md` for full environment documentation.
-
-Required:
-- `JWT_SECRET` - Authentication secret
-- `PORT` - Backend port (default: 3001; Fly production uses 8080)
-- `APP_URL` - Public URL (set on Fly to https://trillionai-marketing.fly.dev)
-
-Optional (for AI providers):
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GOOGLE_AI_API_KEY`
-- `COHERE_API_KEY`
-- `MISTRAL_API_KEY`
-- `GROQ_API_KEY`
-- `AZURE_OPENAI_API_KEY`
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
-- `OLLAMA_BASE_URL`
-
-Optional billing:
-- `STRIPE_SECRET_KEY` - live Checkout Sessions. Payment-link fallback works without it.
-
-## Testing
-
-```bash
-# Backend tests
-cd backend && npm test
-
-# Frontend tests
-cd frontend && npm test
-```
-
-## Deployment
-
-### Fly.io (production)
-
-Hosted in Sydney (`syd`) as a single Fly app named `trillionai-marketing`. The Docker `production` target builds the React SPA and the Node API serves `/api` plus the static frontend. Not deployed to Vercel.
-
-`APP_URL` is set in `fly.toml`. Auth requires `JWT_SECRET` as a Fly secret (do not commit it). Stripe Checkout payment links work without `STRIPE_SECRET_KEY`.
-
-### Docker Compose (Production)
-```bash
-docker-compose -f docker-compose.yml up -d
-```
-
-### Manual
-1. Build frontend: `cd frontend && npm run build`
-2. Serve static files via nginx or `npm run preview`
-3. Start backend: `cd backend && npm start`
-4. Configure reverse proxy (see `nginx.conf`)
+Use the repository's example environment files and deployment tooling where available.
 
 ## Security
 
-- Helmet security headers
-- CORS whitelist configuration
-- Rate limiting per endpoint
-- Input sanitization (XSS prevention)
-- JWT authentication with bcrypt
-- Audit logging for sensitive operations
-- File upload validation and size limits
+Security-sensitive implementation details are intentionally excluded from this README.
+
+Do not document proprietary security controls, internal service topology, defensive logic, privileged interfaces, authentication internals, operational secrets, or other information that could unnecessarily expose the system.
+
+Security-related changes should be reviewed and tested before release.
+
+## Deployment
+
+Deployment configuration is maintained in the repository for authorized environments.
+
+Environment-specific infrastructure details, private endpoints, secrets, production topology, and internal operational procedures should remain outside public documentation unless disclosure is explicitly required.
 
 ## Documentation
 
-- `ARCHITECTURE.md` - System architecture and design decisions
-- `API.md` - Full API endpoint documentation
-- `ENV.md` - Environment variable reference
-- `PLAN.md` - Development roadmap and feature plan
+Technical documentation may exist elsewhere in the repository for authorized development use.
 
-## License
+Documentation should remain limited to information necessary to build, test, maintain, and operate the current software. Future plans and proprietary product strategy should not be added to public-facing files.
 
-MIT License
+## Licensing
 
-## Founder
+Trillion-owned source code remains subject to the licensing terms defined for this repository.
 
-Anselm Perkins, Founder & CEO, TrillionAI Tech.
-hello@trillionaitech.com · support@trillionaitech.com · anselm@trillionaitech.com
+Third-party software remains governed by its respective licences.
 
-## Vision
+## Ownership
 
-> "This app markets itself into the world — and in doing so, proves it can market anything else just as effectively."
+TrillionAI Marketing is developed by **TrillionAI Tech**.
+
+All proprietary product strategy, internal architecture, future plans, commercial direction, and non-public implementation details are confidential unless explicitly approved for disclosure.
