@@ -4,8 +4,29 @@ import store from '../utils/store.js';
 import { CATALOG, findItem, publicCatalog } from '../config/stripeCatalog.js';
 import { redeemGodCodeForUser, REDEEM_FAIL, normalizeSubscriptionAccess } from '../services/godCodeService.js';
 import { markServiceFeePaid } from '../services/paidAdvertisingService.js';
+import { cancelSubscription, resumeSubscription } from '../services/stripeService.js';
 
 const router = express.Router();
+
+function stripeTimestamp(value) {
+  return value ? new Date(value * 1000).toISOString() : null;
+}
+
+function stripeSubscriptionPatch(stripeSubscription, current = {}) {
+  const active = ['active', 'trialing'].includes(stripeSubscription.status);
+  return {
+    status: active ? 'active' : stripeSubscription.status,
+    stripeSubscriptionId: stripeSubscription.id,
+    stripeCustomerId:
+      typeof stripeSubscription.customer === 'string'
+        ? stripeSubscription.customer
+        : stripeSubscription.customer?.id || current.stripeCustomerId || null,
+    cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
+    currentPeriodEnd: stripeTimestamp(stripeSubscription.current_period_end),
+    canceledAt: stripeTimestamp(stripeSubscription.canceled_at),
+    endedAt: stripeTimestamp(stripeSubscription.ended_at),
+  };
+}
 
 export function getPlans(req, res) {
   res.json(CATALOG.plans);
@@ -19,9 +40,7 @@ export async function checkoutHandler(req, res) {
   if (!req.user) return res.status(401).json({ error: 'Authentication required' });
   const { lookup_key, priceId, id } = req.body || {};
   const item = findItem({ lookup_key, priceId, id });
-  if (!item) {
-    return res.status(400).json({ error: 'Unknown plan' });
-  }
+  if (!item) return res.status(400).json({ error: 'Unknown plan' });
 
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) {
@@ -40,13 +59,13 @@ export async function checkoutHandler(req, res) {
       success_url: `${appUrl}/dashboard/billing?success=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/dashboard/billing?canceled=1`,
       client_reference_id: req.user.id,
+      customer_email: req.user.email,
       metadata: {
         marketingUserId: req.user.id,
         itemId: item.id,
         lookup_key: item.lookup_key,
       },
     };
-    sessionParams.customer_email = req.user.email;
     if (item.interval) {
       sessionParams.subscription_data = {
         metadata: {
@@ -80,6 +99,7 @@ async function activateStripePlan({ userId, item, session }) {
     lifetimeAccess: false,
     accessMode: 'subscription',
     expiresAt: null,
+    cancelAtPeriodEnd: false,
     stripeCustomerId: typeof session?.customer === 'string' ? session.customer : session?.customer?.id || null,
     stripeSubscriptionId: typeof session?.subscription === 'string' ? session.subscription : session?.subscription?.id || null,
     stripeCheckoutSessionId: session?.id || null,
@@ -99,11 +119,7 @@ export async function stripeWebhookHandler(req, res) {
   let event;
   try {
     const stripe = new Stripe(secret);
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      req.get('stripe-signature'),
-      webhookSecret,
-    );
+    event = stripe.webhooks.constructEvent(req.body, req.get('stripe-signature'), webhookSecret);
   } catch {
     return res.status(400).json({ error: 'Invalid Stripe webhook signature' });
   }
@@ -143,15 +159,7 @@ export async function stripeWebhookHandler(req, res) {
           (sub) => sub.stripeSubscriptionId === stripeSubscription.id || sub.source === 'stripe',
         );
         if (current) {
-          const active = ['active', 'trialing'].includes(stripeSubscription.status);
-          await store.updateSubscription(current.id, {
-            status: active ? 'active' : stripeSubscription.status,
-            stripeSubscriptionId: stripeSubscription.id,
-            stripeCustomerId:
-              typeof stripeSubscription.customer === 'string'
-                ? stripeSubscription.customer
-                : stripeSubscription.customer?.id || current.stripeCustomerId,
-          });
+          await store.updateSubscription(current.id, stripeSubscriptionPatch(stripeSubscription, current));
         }
       }
     }
@@ -169,23 +177,74 @@ router.post('/checkout', checkoutHandler);
 router.get('/subscription', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
   const sub = (await store.getSubscriptions()).find(
-    (s) => s.user === req.user.id || s.userId === req.user.id
+    (s) => s.user === req.user.id || s.userId === req.user.id,
   );
   res.json((await normalizeSubscriptionAccess(sub)) || { status: 'none' });
 });
 
 router.post('/cancel', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-  const subs = await store.getSubscriptions();
-  const sub = subs.find((s) => s.user === req.user.id || s.userId === req.user.id);
-  if (sub && typeof store.updateSubscription === 'function') {
-    const updated = await store.updateSubscription(sub.id, { status: 'canceled' });
-    return res.json(updated || { status: 'canceled' });
+  const sub = (await store.getSubscriptionsByUser(req.user.id))[0] || null;
+  if (!sub) return res.status(404).json({ error: 'No subscription found.' });
+  if (sub.source !== 'stripe') {
+    return res.status(409).json({
+      error: 'This access grant is not a Stripe subscription and cannot be canceled through Stripe.',
+      code: 'not_stripe_subscription',
+    });
   }
-  res.json({ status: 'canceled' });
+  if (!sub.stripeSubscriptionId) {
+    return res.status(409).json({
+      error: 'Stripe subscription identifier is missing; cancellation was not attempted.',
+      code: 'stripe_subscription_id_missing',
+    });
+  }
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(503).json({
+      error: 'Stripe is not configured; cancellation was not attempted.',
+      code: 'stripe_not_configured',
+    });
+  }
+
+  try {
+    const stripeSubscription = await cancelSubscription(sub.stripeSubscriptionId);
+    const updated = await store.updateSubscription(
+      sub.id,
+      stripeSubscriptionPatch(stripeSubscription, sub),
+    );
+    return res.json(updated);
+  } catch {
+    return res.status(502).json({
+      error: 'Stripe did not confirm the cancellation request. Your local subscription was not changed.',
+      code: 'stripe_cancel_failed',
+    });
+  }
 });
 
+router.post('/resume', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  const sub = (await store.getSubscriptionsByUser(req.user.id))[0] || null;
+  if (!sub || sub.source !== 'stripe' || !sub.stripeSubscriptionId) {
+    return res.status(409).json({ error: 'No resumable Stripe subscription found.' });
+  }
+  if (!sub.cancelAtPeriodEnd) return res.json(sub);
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(503).json({ error: 'Stripe is not configured.', code: 'stripe_not_configured' });
+  }
 
+  try {
+    const stripeSubscription = await resumeSubscription(sub.stripeSubscriptionId);
+    const updated = await store.updateSubscription(
+      sub.id,
+      stripeSubscriptionPatch(stripeSubscription, sub),
+    );
+    return res.json(updated);
+  } catch {
+    return res.status(502).json({
+      error: 'Stripe did not confirm the resume request. Your local subscription was not changed.',
+      code: 'stripe_resume_failed',
+    });
+  }
+});
 
 router.post('/redeem', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
