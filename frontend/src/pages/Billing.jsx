@@ -16,6 +16,11 @@ export default function Billing() {
   const [checkoutMsg, setCheckoutMsg] = useState('')
   const { t } = useLanguage()
 
+  const refreshSubscription = async () => {
+    const res = await api.get('/billing/subscription')
+    setSubscription(res.data)
+  }
+
   useEffect(() => {
     api.get('/billing/plans')
       .then(res => {
@@ -28,7 +33,7 @@ export default function Billing() {
       .then(res => setCredits(res.data?.credits?.length ? res.data.credits : CATALOG.credits))
       .catch(() => setCredits(CATALOG.credits))
 
-    api.get('/billing/subscription').then(res => setSubscription(res.data)).catch(() => {})
+    refreshSubscription().catch(() => {})
   }, [])
 
   const handleCheckout = async (plan) => {
@@ -52,10 +57,30 @@ export default function Billing() {
   }
 
   const handleCancel = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription?')) return
-    await api.post('/billing/cancel')
-    const res = await api.get('/billing/subscription')
-    setSubscription(res.data)
+    if (!confirm('Cancel at the end of the current billing period?')) return
+    setLoading(true)
+    setCheckoutMsg('')
+    try {
+      await api.post('/billing/cancel')
+      await refreshSubscription()
+    } catch (err) {
+      setCheckoutMsg(err.response?.data?.error || 'Stripe did not confirm the cancellation request.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResume = async () => {
+    setLoading(true)
+    setCheckoutMsg('')
+    try {
+      await api.post('/billing/resume')
+      await refreshSubscription()
+    } catch (err) {
+      setCheckoutMsg(err.response?.data?.error || 'Stripe did not confirm the resume request.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const planIcons = { starter: Zap, growth: Star, agency: Crown, enterprise: Building2 }
@@ -67,13 +92,11 @@ export default function Billing() {
       const res = await api.post('/billing/redeem', { code })
       setRedeemMsg(res.data?.name ? `Granted ${res.data.name}` : 'Redeemed')
       setCode('')
-      const sub = await api.get('/billing/subscription')
-      setSubscription(sub.data)
+      await refreshSubscription()
     } catch (err) {
       setRedeemMsg(err.response?.data?.error || 'Unable to redeem that code.')
     }
   }
-
 
   return (
     <div className="space-y-6">
@@ -107,13 +130,21 @@ export default function Billing() {
       {subscription && subscription.status !== 'none' && (
         <div className="bg-white rounded-lg border border-gray-200 p-5">
           <h3 className="font-semibold text-gray-900 mb-2">Current Subscription</h3>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <div className="text-lg font-medium text-gray-900 capitalize">{subscription.plan || 'Free'} Plan</div>
               <div className="text-sm text-gray-500">Status: <span className={`font-medium ${subscription.status === 'active' ? 'text-green-600' : 'text-yellow-600'}`}>{subscription.status}</span></div>
+              {subscription.cancelAtPeriodEnd && (
+                <div className="text-sm text-amber-700 mt-1">
+                  Cancellation confirmed by Stripe{subscription.currentPeriodEnd ? ` · access continues until ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}` : ''}.
+                </div>
+              )}
             </div>
-            {subscription.status === 'active' && (
-              <button onClick={handleCancel} className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50">Cancel Subscription</button>
+            {subscription.source === 'stripe' && subscription.status === 'active' && !subscription.cancelAtPeriodEnd && (
+              <button disabled={loading} onClick={handleCancel} className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50">Cancel Subscription</button>
+            )}
+            {subscription.source === 'stripe' && subscription.status === 'active' && subscription.cancelAtPeriodEnd && (
+              <button disabled={loading} onClick={handleResume} className="px-4 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50">Resume Subscription</button>
             )}
           </div>
         </div>

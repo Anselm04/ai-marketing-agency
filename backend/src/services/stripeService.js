@@ -3,77 +3,76 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
-  apiVersion: '2024-06-20',
-});
+function requireStripeSecret() {
+  const secret = process.env.STRIPE_SECRET_KEY;
+  if (!secret) {
+    const error = new Error('Stripe is not configured. STRIPE_SECRET_KEY is required.');
+    error.code = 'stripe_not_configured';
+    throw error;
+  }
+  return secret;
+}
+
+function stripeClient() {
+  return new Stripe(requireStripeSecret(), { apiVersion: '2024-06-20' });
+}
 
 export async function createCustomer(email, name) {
-  if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
-    return { fallback: true, id: `cus_fallback_${Date.now()}` };
-  }
-  const customer = await stripe.customers.create({ email, name });
-  return customer;
+  return stripeClient().customers.create({ email, name });
 }
 
 export async function createSubscription(customerId, priceId, metadata = {}) {
-  if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
-    return { fallback: true, id: `sub_fallback_${Date.now()}`, status: 'trialing' };
-  }
-  const subscription = await stripe.subscriptions.create({
+  return stripeClient().subscriptions.create({
     customer: customerId,
     items: [{ price: priceId }],
     metadata,
     trial_period_days: 14,
   });
-  return subscription;
 }
 
-export async function cancelSubscription(subscriptionId) {
-  if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
-    return { fallback: true, status: 'cancelled' };
-  }
-  const subscription = await stripe.subscriptions.cancel(subscriptionId);
-  return subscription;
+export async function cancelSubscription(subscriptionId, { immediate = false } = {}) {
+  const stripe = stripeClient();
+  if (immediate) return stripe.subscriptions.cancel(subscriptionId);
+  return stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+}
+
+export async function resumeSubscription(subscriptionId) {
+  return stripeClient().subscriptions.update(subscriptionId, { cancel_at_period_end: false });
 }
 
 export async function createCheckoutSession(customerId, priceId, successUrl, cancelUrl) {
-  if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
-    return { fallback: true, url: successUrl };
-  }
-  const session = await stripe.checkout.sessions.create({
+  return stripeClient().checkout.sessions.create({
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
     mode: 'subscription',
     success_url: successUrl,
     cancel_url: cancelUrl,
   });
-  return session;
 }
 
 export async function handleWebhookEvent(payload, signature) {
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    return { fallback: true, received: true };
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    const error = new Error('Stripe webhook is not configured. STRIPE_WEBHOOK_SECRET is required.');
+    error.code = 'stripe_webhook_not_configured';
+    throw error;
   }
-  const event = stripe.webhooks.constructEvent(payload, signature, process.env.STRIPE_WEBHOOK_SECRET);
-  return event;
+  return stripeClient().webhooks.constructEvent(payload, signature, webhookSecret);
 }
 
 export async function getInvoices(customerId) {
-  if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
-    return { fallback: true, data: [] };
-  }
-  const invoices = await stripe.invoices.list({ customer: customerId, limit: 50 });
-  return invoices;
+  return stripeClient().invoices.list({ customer: customerId, limit: 50 });
 }
 
 export async function createUsageRecord(subscriptionItemId, quantity) {
-  if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
-    return { fallback: true };
-  }
-  await stripe.subscriptionItems.createUsageRecord(subscriptionItemId, {
+  return stripeClient().subscriptionItems.createUsageRecord(subscriptionItemId, {
     quantity,
     timestamp: Math.floor(Date.now() / 1000),
   });
 }
 
-export { stripe };
+export function stripeConfigured() {
+  return Boolean(process.env.STRIPE_SECRET_KEY);
+}
+
+export { stripeClient };
