@@ -5,9 +5,6 @@ import { ORGANIC_PLATFORMS, ORGANIC_NETWORKS, canonicalPlatform, networkOf } fro
 import { encryptUtf8 } from '../utils/owner.js';
 import {
   publicConnection,
-  connectorConnected,
-  publishWithPreferredToken,
-  honestResult,
 } from './socialHelpers.js';
 
 export function mountSocialPart2a(router) {
@@ -39,7 +36,7 @@ router.post('/connect', async (req, res) => {
     try { extra.tokenCipher = encryptUtf8(String(rawToken), 'social-token'); }
     catch { extra.tokenSet = true; extra.note = 'Token marked present. Value not returned.'; }
   }
-  const row = store.upsertSocialConnection(uid, platform, extra);
+  const row = await store.upsertSocialConnection(uid, platform, extra);
   res.status(201).json({ ...publicConnection(row), charge: 'included', published: false });
 });
 

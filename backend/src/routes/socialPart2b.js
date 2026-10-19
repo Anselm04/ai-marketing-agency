@@ -3,11 +3,25 @@ import { userIdOf } from '../utils/scope.js';
 import socialMediaService from '../services/socialMediaService.js';
 import { canonicalPlatform } from '../services/spendGuard.js';
 import {
-  publicConnection,
-  connectorConnected,
   publishWithPreferredToken,
   honestResult,
 } from './socialHelpers.js';
+
+function publishContent(platform, source, extra = {}) {
+  const caption = source?.caption || source?.text || source?.message || source?.body || '';
+  return {
+    [platform]: true,
+    twitter: platform === 'x',
+    caption,
+    text: caption,
+    message: caption,
+    hashtags: source?.hashtags || extra.hashtags || [],
+    imageUrl: extra.imageUrl || source?.imageUrl,
+    videoUrl: extra.videoUrl || source?.videoUrl,
+    link: extra.link || source?.link,
+    title: extra.title || source?.title,
+  };
+}
 
 export function mountSocialPart2b(router) {
 router.post('/queue', async (req, res) => {
@@ -27,28 +41,12 @@ router.post('/posts/:id/publish', async (req, res) => {
   const post = await store.getSocialPostById(req.params.id, uid);
   if (!post) return res.status(404).json({ error: 'Post not found' });
   const platform = canonicalPlatform(post.platform);
-  const mine = await store.getSocialConnectionsByOwner(uid);
-  const conn = mine.find((c) => canonicalPlatform(c.platform) === platform);
-  const connected = connectorConnected(platform) || !!conn?.tokenSet;
-  if (!connected) {
-    const queued = await store.updateSocialPost(post.id, { status: 'queued', published: false }, uid);
-    return res.json({
-      ...honestResult({ platform, fallback: true, message: `Queued. ${post.platformName || platform} has no token yet. Copy the native post or connect later.` }),
-      post: queued,
-    });
-  }
-  const raw = await publishWithPreferredToken(uid, platform, {
-    [platform]: true,
-    twitter: platform === 'x',
-    caption: post.body,
-    text: post.body,
-    message: post.body,
-    hashtags: post.hashtags || [],
-  });
+  const raw = await publishWithPreferredToken(uid, platform, publishContent(platform, post, req.body || {}));
   const honest = honestResult(raw[0] || { platform, fallback: true });
   const updated = await store.updateSocialPost(post.id, {
     status: honest.published ? 'published' : 'queued',
     published: honest.published,
+    externalPostId: honest.postId || null,
   }, uid);
   res.json({ ...honest, post: updated });
 });
@@ -68,32 +66,21 @@ router.post('/publish', async (req, res) => {
     return res.json({ success: true, published: false, results: (raw || []).map(honestResult) });
   }
   const platform = platforms[0];
-  const mine = await store.getSocialConnectionsByOwner(uid);
-  const conn = mine.find((c) => canonicalPlatform(c.platform) === platform);
-  const connected = connectorConnected(platform) || !!conn?.tokenSet;
   const post = await store.createSocialPost({
     owner: uid,
     platform,
     body: caption,
     hashtags: req.body.hashtags || [],
-    status: connected ? 'publishing' : 'queued',
+    imageUrl: req.body.imageUrl || null,
+    videoUrl: req.body.videoUrl || null,
+    status: 'publishing',
     published: false,
   });
-  if (!connected) {
-    results.push({
-      platform,
-      postId: post.id,
-      published: false,
-      queued: true,
-      message: `Queued. ${platform} is not connected. Copy the text into the app or connect a token later.`,
-    });
-    return res.json({ success: true, published: false, results });
-  }
-  const raw = await publishWithPreferredToken(uid, platform, { [platform]: true, twitter: platform === 'x', caption, text: caption, message: caption, ...req.body });
+  const raw = await publishWithPreferredToken(uid, platform, publishContent(platform, { ...req.body, body: caption }));
   const honest = honestResult(raw[0] || { platform, fallback: true });
-  await store.updateSocialPost(post.id, { status: honest.published ? 'published' : 'queued', published: honest.published }, uid);
-  results.push({ ...honest, postId: post.id });
-  res.json({ success: true, published: results.some((r) => r.published), results });
+  await store.updateSocialPost(post.id, { status: honest.published ? 'published' : 'queued', published: honest.published, externalPostId: honest.postId || null }, uid);
+  results.push({ ...honest, postId: honest.postId, localPostId: post.id });
+  res.json({ success: honest.published, published: honest.published, results });
 });
 
 router.post('/:platform', async (req, res) => {
@@ -101,18 +88,18 @@ router.post('/:platform', async (req, res) => {
   if (['generate', 'queue', 'posts', 'status', 'publish', 'connect', 'connections', 'oauth', 'networks'].includes(platform)) {
     return res.status(404).json({ error: 'Not found' });
   }
-  if (!connectorConnected(platform)) {
-    const post = await store.createSocialPost({
-      owner: userIdOf(req),
-      platform,
-      body: req.body?.caption || req.body?.text || '',
-      status: 'queued',
-      published: false,
-    });
-    return res.json({ platform, published: false, queued: true, postId: post.id, message: 'Not published — connector not connected.' });
-  }
-  const raw = await socialMediaService.publishToAll({ [platform]: true, twitter: platform === 'x', ...req.body });
-  res.json(honestResult(raw[0] || { platform, fallback: true }));
+  const uid = userIdOf(req);
+  const raw = await publishWithPreferredToken(uid, platform, publishContent(platform, req.body || {}));
+  const honest = honestResult(raw[0] || { platform, fallback: true });
+  const post = await store.createSocialPost({
+    owner: uid,
+    platform,
+    body: req.body?.caption || req.body?.text || '',
+    status: honest.published ? 'published' : 'queued',
+    published: honest.published,
+    externalPostId: honest.postId || null,
+  });
+  res.json({ ...honest, localPostId: post.id });
 });
 
 }

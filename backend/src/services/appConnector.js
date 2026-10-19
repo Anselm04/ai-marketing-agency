@@ -175,13 +175,29 @@ export async function getTokens(userId, connectorId) {
 }
 
 /**
+ * expiresAt is stored as a millisecond number, but older callers may pass a Date or ISO string.
+ * Returns null when the value is missing or not a real time.
+ */
+export function tokenExpiryMs(value) {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Date.parse(String(value));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
  * Check if a token is expired and refresh if possible.
  */
 export async function ensureValidToken(userId, connectorId, definition) {
   const tokens = await getTokens(userId, connectorId);
   if (!tokens) return null;
 
-  if (tokens.expiresAt && Date.now() > tokens.expiresAt.getTime() - 60000) {
+  const expiresAtMs = tokenExpiryMs(tokens.expiresAt);
+  if (expiresAtMs && Date.now() > expiresAtMs - 60000) {
     // Token expires within 60 seconds, try to refresh
     if (tokens.refreshToken && definition.auth?.tokenUrl) {
       try {
@@ -189,8 +205,10 @@ export async function ensureValidToken(userId, connectorId, definition) {
         await storeTokens(userId, connectorId, {
           accessToken: refreshed.access_token,
           refreshToken: refreshed.refresh_token || tokens.refreshToken,
-          expiresAt: refreshed.expires_in ? Date.now() + refreshed.expires_in * 1000 : null,
+          expiresAt: refreshed.expires_in ? Date.now() + refreshed.expires_in * 1000 : tokens.expiresAt,
           scopes: refreshed.scope?.split(' ') || tokens.scopes,
+          account: tokens.account || null,
+          metadata: tokens.metadata || {},
         });
         return refreshed.access_token;
       } catch (err) {

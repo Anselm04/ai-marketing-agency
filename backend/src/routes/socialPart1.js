@@ -13,7 +13,8 @@ import {
   publicFrontendBase,
   socialOAuthCallbackUrl,
 } from '../services/oauthPlatforms.js';
-import { storeTokens } from '../services/appConnector.js';
+import { storeTokens, consumeOAuthSession } from '../services/appConnector.js';
+import { finalizeOAuthAccount } from '../services/organicPublisher.js';
 import { logger } from '../utils/logger.js';
 
 export function mountSocialPart1(router) {
@@ -35,6 +36,9 @@ router.get('/oauth/status', async (req, res) => {
       connected,
       setup: !!conn,
       tokenSet: !!conn?.tokenSet,
+      pageId: conn?.pageId || undefined,
+      igUserId: conn?.igUserId || undefined,
+      callbackUrl: socialOAuthCallbackUrl(m.platform),
       envKeys: configured ? undefined : creds.envKeys,
       setupHint: configured
         ? null
@@ -64,10 +68,11 @@ router.get('/oauth/:platform/start', async (req, res) => {
       oauthConfigured: false,
       platform: mapping.platform,
       connectorId: mapping.connectorId,
+      callbackUrl: socialOAuthCallbackUrl(mapping.platform),
     });
   }
   try {
-    const built = buildAuthorizationUrl(mapping, { userId: uid });
+    const built = await buildAuthorizationUrl(mapping, { userId: uid });
     res.json({
       success: true,
       authorizationUrl: built.authorizationUrl,
@@ -102,31 +107,58 @@ router.get('/oauth/:platform/callback', async (req, res) => {
     return res.redirect(`${frontend}/social?oauth_error=${encodeURIComponent('invalid_callback')}`);
   }
   try {
-    const parsed = JSON.parse(Buffer.from(String(state), 'base64url').toString());
-    const userId = parsed.userId;
-    if (!userId) throw new Error('Missing userId in state');
-    if (parsed.platform && parsed.platform !== mapping.platform) {
+    const session = await consumeOAuthSession(String(state), mapping.connectorId);
+    const userId = session.userId;
+    if (!userId) throw new Error('Missing userId in OAuth session');
+    if (session.platform && session.platform !== mapping.platform) {
       throw new Error('Platform mismatch in OAuth state');
     }
     const tokens = await exchangeAuthorizationCode(mapping, {
       code: String(code),
       state: String(state),
-      redirectUri: socialOAuthCallbackUrl(mapping.platform),
+      codeVerifier: session.codeVerifier,
+      redirectUri: session.redirectUri || socialOAuthCallbackUrl(mapping.platform),
     });
+    const creds = getClientCredentials(mapping);
+    let finalized;
+    try {
+      finalized = await finalizeOAuthAccount(mapping, tokens, creds);
+    } catch (err) {
+      if (err.partialTokens?.accessToken) {
+        await storeTokens(userId, mapping.connectorId, {
+          accessToken: err.partialTokens.accessToken,
+          refreshToken: err.partialTokens.refreshToken,
+          expiresAt: err.partialTokens.expiresAt,
+          scopes: tokens.scopes,
+          metadata: err.partialTokens.metadata || {},
+        });
+      }
+      throw err;
+    }
     await storeTokens(userId, mapping.connectorId, {
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresAt: tokens.expiresAt,
-      scopes: tokens.scopes,
+      accessToken: finalized.accessToken,
+      refreshToken: finalized.refreshToken,
+      expiresAt: finalized.expiresAt,
+      scopes: finalized.scopes,
+      metadata: finalized.metadata,
     });
     let tokenCipher = null;
-    try { tokenCipher = encryptUtf8(String(tokens.accessToken), 'social-token'); } catch { /* JWT_SECRET required */ }
-    store.upsertSocialConnection(userId, mapping.platform, {
+    try { tokenCipher = encryptUtf8(String(finalized.accessToken), 'social-token'); } catch { /* JWT_SECRET required */ }
+    const publicMeta = {
+      pageId: finalized.metadata.pageId,
+      pageName: finalized.metadata.pageName,
+      igUserId: finalized.metadata.igUserId,
+      igUsername: finalized.metadata.igUsername,
+      personUrn: finalized.metadata.personUrn,
+      openId: finalized.metadata.openId,
+    };
+    await store.upsertSocialConnection(userId, mapping.platform, {
       tokenSet: true,
       status: 'ready',
       tokenCipher: tokenCipher || undefined,
       connectorId: mapping.connectorId,
       label: mapping.label,
+      ...Object.fromEntries(Object.entries(publicMeta).filter(([, value]) => value)),
       note: 'Connected via OAuth. Token stored encrypted; value not returned.',
     });
     logger.info('Social OAuth connected', { userId, platform: mapping.platform, connectorId: mapping.connectorId });
