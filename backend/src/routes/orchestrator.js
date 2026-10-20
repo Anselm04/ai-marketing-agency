@@ -5,11 +5,18 @@
  */
 
 import express from 'express';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { intelligentOrchestrator } from '../services/intelligentOrchestrator.js';
+import { assertAiRequestAllowed, accountAiResult } from '../services/aiUsagePolicy.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
+
+function normalizeMessages(content) {
+  if (Array.isArray(content)) return content;
+  if (content == null) return [];
+  return [{ role: 'user', content: String(content) }];
+}
 
 /**
  * POST /api/orchestrator/profile
@@ -153,7 +160,7 @@ router.post('/select-connectors', authenticate, async (req, res) => {
  * POST /api/orchestrator/execute-ai
  * Execute an AI task with automatic model selection and fallback.
  */
-router.post('/execute-ai', authenticate, async (req, res) => {
+router.post('/execute-ai', authenticate, async (req, res, next) => {
   const { taskType, messages, options = {} } = req.body;
 
   if (!taskType || !messages || !Array.isArray(messages)) {
@@ -161,7 +168,15 @@ router.post('/execute-ai', authenticate, async (req, res) => {
   }
 
   try {
+    await assertAiRequestAllowed(req.user?.id, messages, options.maxTokens || 4096);
     const result = await intelligentOrchestrator.executeAITask(req.user?.id, taskType, messages, options);
+    await accountAiResult({
+      userId: req.user?.id,
+      operation: `orchestrator:${taskType}`,
+      result,
+      provider: result.provider,
+      model: result.model,
+    });
 
     res.json({
       success: true,
@@ -173,6 +188,7 @@ router.post('/execute-ai', authenticate, async (req, res) => {
       orchestration: result.orchestration,
     });
   } catch (err) {
+    if (err?.code === 'plan_quota_exceeded' || err?.status === 402) return next(err);
     logger.error('AI task execution failed', { error: err.message, userId: req.user?.id, taskType });
     res.status(500).json({ error: 'AI task execution failed', detail: err.message });
   }
@@ -182,7 +198,7 @@ router.post('/execute-ai', authenticate, async (req, res) => {
  * POST /api/orchestrator/execute-campaign
  * Execute a full campaign orchestration (AI + connectors).
  */
-router.post('/execute-campaign', authenticate, async (req, res) => {
+router.post('/execute-campaign', authenticate, async (req, res, next) => {
   const { taskType, content, connectorOperations } = req.body;
 
   if (!taskType) {
@@ -190,11 +206,24 @@ router.post('/execute-campaign', authenticate, async (req, res) => {
   }
 
   try {
+    const messages = normalizeMessages(content);
+    if (messages.length) {
+      await assertAiRequestAllowed(req.user?.id, messages, 4096);
+    }
     const result = await intelligentOrchestrator.executeCampaignOrchestration(req.user?.id, {
       taskType,
       content,
       connectorOperations: connectorOperations || [],
     });
+    if (result.ai?.usage) {
+      await accountAiResult({
+        userId: req.user?.id,
+        operation: `campaign-orchestrator:${taskType}`,
+        result: result.ai,
+        provider: result.ai.provider,
+        model: result.ai.model,
+      });
+    }
 
     res.json({
       success: result.errors.length === 0,
@@ -204,6 +233,7 @@ router.post('/execute-campaign', authenticate, async (req, res) => {
       notifications: result.notifications,
     });
   } catch (err) {
+    if (err?.code === 'plan_quota_exceeded' || err?.status === 402) return next(err);
     logger.error('Campaign orchestration failed', { error: err.message, userId: req.user?.id, taskType });
     res.status(500).json({ error: 'Campaign orchestration failed', detail: err.message });
   }
