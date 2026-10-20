@@ -128,6 +128,42 @@ export function estimateConfiguredAiCost(provider, usage = {}) {
   return ((promptTokens / 1_000_000) * inputPerMillion) + ((completionTokens / 1_000_000) * outputPerMillion);
 }
 
+function totalAiTokens(usage = {}) {
+  const explicit = Number(usage.total_tokens ?? usage.totalTokens);
+  if (Number.isFinite(explicit) && explicit >= 0) return explicit;
+  const input = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0);
+  const output = Number(usage.completion_tokens ?? usage.output_tokens ?? 0);
+  return Math.max(0, input) + Math.max(0, output);
+}
+
+export async function recordAiUsage({
+  userId,
+  provider,
+  model,
+  operation,
+  usage = {},
+  createdAt = new Date().toISOString(),
+  metadata = {},
+}) {
+  const quantity = totalAiTokens(usage);
+  if (!userId || quantity <= 0) return null;
+  return recordUsage({
+    userId,
+    metric: 'ai_tokens',
+    quantity,
+    provider,
+    model,
+    costUsd: estimateConfiguredAiCost(provider, usage),
+    metadata: {
+      operation,
+      promptTokens: Number(usage.prompt_tokens ?? usage.input_tokens ?? 0),
+      completionTokens: Number(usage.completion_tokens ?? usage.output_tokens ?? 0),
+      ...metadata,
+    },
+    createdAt,
+  });
+}
+
 export async function closeUsageMetering() {
   if (!pool) return;
   try {
