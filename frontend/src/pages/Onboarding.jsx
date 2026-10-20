@@ -66,21 +66,41 @@ export default function Onboarding() {
         onboardingCompleted: subscription?.status === 'active',
       });
 
-      if (subscription?.status === 'active') {
-        await api.post('/orchestrator/profile', {
-          industry: form.industry,
-          companySize: form.companySize,
-          goals: form.primaryGoal ? [form.primaryGoal] : [],
-          preferredTone: form.preferredTone,
-          language: form.language,
-          timezone: form.timezone,
-        });
-        navigate('/dashboard/products');
-      } else {
+      if (subscription?.status !== 'active') {
         navigate('/dashboard/billing');
+        return;
       }
+
+      await api.post('/orchestrator/profile', {
+        industry: form.industry,
+        companySize: form.companySize,
+        goals: form.primaryGoal ? [form.primaryGoal] : [],
+        preferredTone: form.preferredTone,
+        language: form.language,
+        timezone: form.timezone,
+      });
+
+      const marketing = new FormData();
+      marketing.append('productName', form.primaryOffer || form.company);
+      marketing.append('description', [
+        `Business: ${form.company}`,
+        form.website ? `Website: ${form.website}` : '',
+        `What the business does: ${form.businessDescription}`,
+        `Main offer: ${form.primaryOffer}`,
+        `Primary marketing goal: ${form.primaryGoal}`,
+      ].filter(Boolean).join('\n'));
+      marketing.append('targetAudience', form.targetAudience);
+      marketing.append('budget', '0');
+      marketing.append('tone', form.preferredTone);
+      marketing.append('category', 'other');
+
+      const generated = await api.post('/products/marketing', marketing, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const campaignId = generated.data?.campaign?.id;
+      navigate(campaignId ? `/dashboard/campaigns?created=${encodeURIComponent(campaignId)}` : '/dashboard/campaigns');
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to save business setup.');
+      setError(err.response?.data?.error || 'Business setup was saved, but the first marketing package could not be created. You can retry safely.');
     } finally {
       setSaving(false);
     }
@@ -93,13 +113,13 @@ export default function Onboarding() {
       <div>
         <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-sm font-medium"><Building2 size={16} /> Business setup</div>
         <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Tell the agency what you sell and who you want to reach</h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-300">This context is saved to your account and used to pre-fill marketing work. You can change it later.</p>
+        <p className="mt-2 text-gray-600 dark:text-gray-300">This context is saved to your account. With an active plan, the final button creates your first real marketing package and saves the campaign.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><CheckCircle2 size={16} className="text-green-600 mb-1" /><div className="font-medium dark:text-white">1. Business context</div><div className="text-xs text-gray-500">Saved below</div></div>
+        <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><CheckCircle2 size={16} className="text-green-600 mb-1" /><div className="font-medium dark:text-white">1. Business context</div><div className="text-xs text-gray-500">Saved to your account</div></div>
         <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><CheckCircle2 size={16} className={subscription?.status === 'active' ? 'text-green-600 mb-1' : 'text-gray-400 mb-1'} /><div className="font-medium dark:text-white">2. Active plan</div><div className="text-xs text-gray-500">{subscription?.status === 'active' ? `${subscription.plan || 'Marketing'} active` : 'Required before AI work'}</div></div>
-        <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><ArrowRight size={16} className="text-gray-400 mb-1" /><div className="font-medium dark:text-white">3. Create marketing</div><div className="text-xs text-gray-500">Campaign, content and channel assets</div></div>
+        <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><ArrowRight size={16} className="text-gray-400 mb-1" /><div className="font-medium dark:text-white">3. Create marketing</div><div className="text-xs text-gray-500">Saved campaign + generated assets</div></div>
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
@@ -125,10 +145,11 @@ export default function Onboarding() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           {subscription?.status !== 'active' && <p className="text-sm text-amber-700 dark:text-amber-300">Your business context will be saved first. Then choose a plan before AI generation.</p>}
+          {subscription?.status === 'active' && <p className="text-sm text-gray-500 dark:text-gray-400">No ad spend is triggered. The $0 planning budget keeps this first package organic until you explicitly configure paid advertising.</p>}
           <div className="ml-auto flex gap-2">
             {subscription?.status === 'active' && <Link to="/dashboard" className="px-4 py-2 rounded-lg border text-sm">Skip for now</Link>}
             <button disabled={saving} className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">
-              {saving ? 'Saving…' : subscription?.status === 'active' ? 'Save & create marketing' : 'Save & choose plan'} <ArrowRight size={16} />
+              {saving ? 'Working…' : subscription?.status === 'active' ? 'Save & create first campaign' : 'Save & choose plan'} <ArrowRight size={16} />
             </button>
           </div>
         </div>
