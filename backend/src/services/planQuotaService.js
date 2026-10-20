@@ -1,19 +1,44 @@
 import store from '../utils/store.js';
+import { CATALOG } from '../config/stripeCatalog.js';
 import { getMarketingEntitlement } from './marketingEntitlementService.js';
 import { sumUsage } from './usageMeteringService.js';
 
-export const PLAN_LIMITS = Object.freeze({
-  starter: Object.freeze({ campaigns: 2, postsPerDay: 10, teamSeats: 1, monthlyAiTokens: 1_000_000 }),
-  growth: Object.freeze({ campaigns: 10, postsPerDay: 50, teamSeats: 3, monthlyAiTokens: 5_000_000 }),
-  agency: Object.freeze({ campaigns: 25, postsPerDay: 100, teamSeats: 10, monthlyAiTokens: 15_000_000 }),
-  enterprise: Object.freeze({ campaigns: 100, postsPerDay: 500, teamSeats: 25, monthlyAiTokens: 50_000_000 }),
+const AI_TOKEN_LIMITS = Object.freeze({
+  starter: 1_000_000,
+  growth: 5_000_000,
+  agency: 15_000_000,
+  enterprise: 50_000_000,
 });
+
+export const PLAN_LIMITS = Object.freeze(Object.fromEntries(
+  CATALOG.plans.map((plan) => [
+    plan.id,
+    Object.freeze({
+      agents: plan.features.agents,
+      campaigns: plan.features.campaigns,
+      postsPerDay: plan.features.postsPerDay,
+      teamSeats: plan.features.teamSeats,
+      monthlyAiTokens: AI_TOKEN_LIMITS[plan.id],
+    }),
+  ]),
+));
 
 export function getPlanLimits(plan, unlimited = false) {
   if (unlimited) {
-    return { campaigns: Infinity, postsPerDay: Infinity, teamSeats: Infinity, monthlyAiTokens: Infinity };
+    return {
+      agents: Infinity,
+      campaigns: Infinity,
+      postsPerDay: Infinity,
+      teamSeats: Infinity,
+      monthlyAiTokens: Infinity,
+    };
   }
   return PLAN_LIMITS[plan] || PLAN_LIMITS.starter;
+}
+
+export function getAccessibleAgents(agents = [], limits = PLAN_LIMITS.starter) {
+  if (limits?.agents === Infinity) return agents;
+  return agents.slice(0, Math.max(0, Number(limits?.agents) || 0));
 }
 
 export function checkQuota({ used = 0, requested = 1, limit }) {
