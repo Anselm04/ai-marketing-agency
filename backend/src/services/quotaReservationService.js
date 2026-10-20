@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import pg from 'pg';
+import { recordUsage, sumUsage } from './usageMeteringService.js';
 
 const { Pool } = pg;
 let pool = null;
@@ -29,30 +30,14 @@ function quotaError(resource, used, requested, limit) {
     status: 402,
     code: 'plan_quota_exceeded',
     resource,
-    quota: {
-      used,
-      requested,
-      limit,
-      remaining: Math.max(0, Number(limit) - Number(used)),
-    },
+    quota: { used, requested, limit, remaining: Math.max(0, Number(limit) - Number(used)) },
   });
 }
 
-export async function reserveUsageQuota({
-  userId,
-  metric,
-  requested,
-  limit,
-  windowStart,
-  windowEnd,
-  resource,
-  ttlSeconds = 120,
-}) {
+export async function reserveUsageQuota({ userId, metric, requested, limit, windowStart, windowEnd, resource, ttlSeconds = 120 }) {
   if (limit === Infinity) return { id: null, unlimited: true };
   const quantity = Number(requested);
-  if (!userId || !metric || !Number.isFinite(quantity) || quantity <= 0) {
-    throw new Error('Invalid quota reservation request');
-  }
+  if (!userId || !metric || !Number.isFinite(quantity) || quantity <= 0) throw new Error('Invalid quota reservation request');
 
   const id = crypto.randomUUID();
   const db = getPool();
@@ -66,10 +51,10 @@ export async function reserveUsageQuota({
     const reserved = [...memoryReservations.values()]
       .filter((r) => r.userId === userId && r.metric === metric && r.windowStart === windowStart && r.windowEnd === windowEnd)
       .reduce((sum, r) => sum + r.quantity, 0);
-    const used = 0;
+    const used = await sumUsage({ userId, metric, since: windowStart, until: windowEnd });
     if (used + reserved + quantity > limit) throw quotaError(resource, used + reserved, quantity, limit);
     memoryReservations.set(id, { id, userId, metric, quantity, windowStart, windowEnd, expiresAt });
-    return { id, quantity, reserved, expiresAt };
+    return { id, quantity, used, reserved, expiresAt };
   }
 
   const client = await db.connect();
@@ -77,31 +62,12 @@ export async function reserveUsageQuota({
     await client.query('begin');
     await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [`${userId}:${metric}:${windowStart}:${windowEnd}`]);
     await client.query('delete from marketing.quota_reservations where expires_at <= now()');
-
-    const usage = await client.query(
-      `select coalesce(sum(quantity), 0)::double precision as total
-         from marketing.usage_events
-        where user_id = $1 and metric = $2 and created_at >= $3 and created_at < $4`,
-      [userId, metric, windowStart, windowEnd],
-    );
-    const reservations = await client.query(
-      `select coalesce(sum(quantity), 0)::double precision as total
-         from marketing.quota_reservations
-        where user_id = $1 and metric = $2 and window_start = $3 and window_end = $4 and expires_at > now()`,
-      [userId, metric, windowStart, windowEnd],
-    );
+    const usage = await client.query(`select coalesce(sum(quantity), 0)::double precision as total from marketing.usage_events where user_id = $1 and metric = $2 and created_at >= $3 and created_at < $4`, [userId, metric, windowStart, windowEnd]);
+    const reservations = await client.query(`select coalesce(sum(quantity), 0)::double precision as total from marketing.quota_reservations where user_id = $1 and metric = $2 and window_start = $3 and window_end = $4 and expires_at > now()`, [userId, metric, windowStart, windowEnd]);
     const used = Number(usage.rows[0]?.total || 0);
     const reserved = Number(reservations.rows[0]?.total || 0);
-    if (used + reserved + quantity > limit) {
-      throw quotaError(resource, used + reserved, quantity, limit);
-    }
-
-    await client.query(
-      `insert into marketing.quota_reservations
-        (id, user_id, metric, quantity, window_start, window_end, expires_at)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, userId, metric, quantity, windowStart, windowEnd, expiresAt],
-    );
+    if (used + reserved + quantity > limit) throw quotaError(resource, used + reserved, quantity, limit);
+    await client.query(`insert into marketing.quota_reservations (id, user_id, metric, quantity, window_start, window_end, expires_at) values ($1, $2, $3, $4, $5, $6, $7)`, [id, userId, metric, quantity, windowStart, windowEnd, expiresAt]);
     await client.query('commit');
     return { id, quantity, used, reserved, expiresAt };
   } catch (error) {
@@ -112,22 +78,13 @@ export async function reserveUsageQuota({
   }
 }
 
-export async function settleUsageReservation({
-  id,
-  userId,
-  metric,
-  quantity,
-  provider = null,
-  model = null,
-  costUsd = null,
-  metadata = {},
-  createdAt = new Date().toISOString(),
-}) {
+export async function settleUsageReservation({ id, userId, metric, quantity, provider = null, model = null, costUsd = null, metadata = {}, createdAt = new Date().toISOString() }) {
   if (!id) return null;
   const actualQuantity = Number(quantity);
   if (!Number.isFinite(actualQuantity) || actualQuantity < 0) throw new Error('Invalid settled usage quantity');
   const db = getPool();
   if (!db) {
+    if (actualQuantity > 0) await recordUsage({ userId, metric, quantity: actualQuantity, provider, model, costUsd, metadata, createdAt });
     memoryReservations.delete(id);
     return { id, userId, metric, quantity: actualQuantity };
   }
@@ -135,24 +92,11 @@ export async function settleUsageReservation({
   const client = await db.connect();
   try {
     await client.query('begin');
-    const reservation = await client.query(
-      `select id, user_id, metric from marketing.quota_reservations where id = $1 for update`,
-      [id],
-    );
-    if (!reservation.rows[0]) {
-      await client.query('rollback');
-      return null;
-    }
-    if (reservation.rows[0].user_id !== userId || reservation.rows[0].metric !== metric) {
-      throw new Error('Quota reservation does not match usage settlement');
-    }
+    const reservation = await client.query(`select id, user_id, metric from marketing.quota_reservations where id = $1 for update`, [id]);
+    if (!reservation.rows[0]) { await client.query('rollback'); return null; }
+    if (reservation.rows[0].user_id !== userId || reservation.rows[0].metric !== metric) throw new Error('Quota reservation does not match usage settlement');
     if (actualQuantity > 0) {
-      await client.query(
-        `insert into marketing.usage_events
-          (user_id, metric, quantity, provider, model, cost_usd, metadata, created_at)
-         values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
-        [userId, metric, actualQuantity, provider, model, costUsd, JSON.stringify(metadata || {}), createdAt],
-      );
+      await client.query(`insert into marketing.usage_events (user_id, metric, quantity, provider, model, cost_usd, metadata, created_at) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`, [userId, metric, actualQuantity, provider, model, costUsd, JSON.stringify(metadata || {}), createdAt]);
     }
     await client.query('delete from marketing.quota_reservations where id = $1', [id]);
     await client.query('commit');
@@ -168,13 +112,8 @@ export async function settleUsageReservation({
 export async function releaseQuotaReservation(id) {
   if (!id) return;
   const db = getPool();
-  if (!db) {
-    memoryReservations.delete(id);
-    return;
-  }
+  if (!db) { memoryReservations.delete(id); return; }
   await db.query('delete from marketing.quota_reservations where id = $1', [id]);
 }
 
-export function resetQuotaReservationsForTests() {
-  memoryReservations.clear();
-}
+export function resetQuotaReservationsForTests() { memoryReservations.clear(); }
