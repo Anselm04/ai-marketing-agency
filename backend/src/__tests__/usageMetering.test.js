@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from '@jest/globals';
 import {
   estimateConfiguredAiCost,
+  recordAiUsage,
   recordUsage,
   resetMemoryUsageForTests,
   sumUsage,
@@ -25,6 +26,25 @@ describe('usage metering', () => {
       until: '2026-11-01T00:00:00.000Z',
     });
     expect(total).toBe(300);
+  });
+
+  test('records actual customer AI tokens from provider usage', async () => {
+    await recordAiUsage({
+      userId: 'user-a',
+      provider: 'openai',
+      model: 'gpt-test',
+      operation: 'agent-response',
+      usage: { prompt_tokens: 120, completion_tokens: 80, total_tokens: 200 },
+      createdAt: '2026-10-02T00:00:00.000Z',
+    });
+
+    const total = await sumUsage({
+      userId: 'user-a',
+      metric: 'ai_tokens',
+      since: '2026-10-01T00:00:00.000Z',
+      until: '2026-11-01T00:00:00.000Z',
+    });
+    expect(total).toBe(200);
   });
 
   test('does not invent provider cost when pricing is not configured', () => {
