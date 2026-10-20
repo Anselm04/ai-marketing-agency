@@ -1,5 +1,15 @@
-import axios from 'axios';
 import { generateAgentResponse } from './openaiService.js';
+
+function unavailableSource(source, reason) {
+  return {
+    source,
+    verified: false,
+    available: false,
+    trends: [],
+    reason,
+    checkedAt: new Date().toISOString(),
+  };
+}
 
 class TrendScanner {
   constructor() {
@@ -8,40 +18,24 @@ class TrendScanner {
   }
 
   async scanTikTokTrends() {
-    try {
-      const res = await axios.get('https://www.tiktok.com/api/trending');
-      return res.data;
-    } catch {
-      return {
-        fallback: true,
-        trends: [
-          { hashtag: '#AITools', volume: '2.4M', category: 'tech' },
-          { hashtag: '#MarketingTips', volume: '1.8M', category: 'business' },
-          { hashtag: '#AppLaunch', volume: '890K', category: 'apps' },
-        ],
-      };
-    }
+    return unavailableSource(
+      'tiktok',
+      'No verified TikTok trend-data provider is configured. Live TikTok trend metrics are not being claimed.',
+    );
   }
 
   async scanTwitterTrends() {
-    return {
-      fallback: true,
-      trends: [
-        { topic: 'AI Marketing', volume: '45K', sentiment: 'positive' },
-        { topic: 'SaaS Growth', volume: '32K', sentiment: 'positive' },
-      ],
-    };
+    return unavailableSource(
+      'x',
+      'No verified X trend-data provider is configured. Live X trend metrics are not being claimed.',
+    );
   }
 
-  async scanGoogleTrends(keywords = ['AI marketing', 'app growth', 'SaaS tools']) {
-    return {
-      fallback: true,
-      trends: keywords.map(k => ({
-        keyword: k,
-        interest: Math.floor(Math.random() * 100),
-        change: `${Math.floor(Math.random() * 40 - 10)}%`,
-      })),
-    };
+  async scanGoogleTrends() {
+    return unavailableSource(
+      'google-trends',
+      'No verified Google Trends data provider is configured. Interest scores and percentage changes are not estimated or fabricated.',
+    );
   }
 
   async getAllTrends() {
@@ -59,9 +53,10 @@ class TrendScanner {
 
     const result = {
       timestamp: new Date().toISOString(),
-      tiktok: tiktok.fallback ? tiktok.trends : tiktok,
-      twitter: twitter.fallback ? twitter.trends : twitter,
-      google: google.fallback ? google.trends : google,
+      dataPolicy: 'Only verified external measurements may be presented as current trend data.',
+      tiktok,
+      twitter,
+      google,
     };
 
     this.cache.set(cacheKey, { data: result, timestamp: Date.now() });
@@ -69,13 +64,31 @@ class TrendScanner {
   }
 
   async predictTrends(niche) {
-    const result = await generateAgentResponse('market-research', `Predict upcoming trends and viral opportunities in the ${niche} niche for the next 30 days.`, {});
-    return result;
+    const result = await generateAgentResponse(
+      'market-research',
+      `Generate clearly labelled hypotheses about possible upcoming themes in the ${niche} niche for the next 30 days. Do not claim these are current measured trends and do not invent traffic, volume, growth, ranking, pricing, or market-share statistics.`,
+      {},
+    );
+    return {
+      evidenceType: 'model-hypothesis',
+      verifiedExternalResearch: false,
+      warning: 'This is an AI hypothesis, not measured current market research.',
+      result,
+    };
   }
 
   async suggestViralContent(brand, niche) {
-    const result = await generateAgentResponse('content', `Suggest 5 viral content ideas for ${brand} in the ${niche} niche based on current trends.`, {});
-    return result;
+    const result = await generateAgentResponse(
+      'content',
+      `Suggest 5 content-test ideas for ${brand} in the ${niche} niche. Do not claim the ideas are based on current trends unless verified research evidence is supplied in context.`,
+      {},
+    );
+    return {
+      evidenceType: 'creative-hypothesis',
+      verifiedExternalResearch: false,
+      warning: 'These are ideas to test, not evidence that content will go viral.',
+      result,
+    };
   }
 }
 
