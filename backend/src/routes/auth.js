@@ -5,17 +5,34 @@ import { isOwnerEmail } from '../utils/owner.js';
 import { sendPasswordReset, emailTransportConfigured } from '../services/emailService.js';
 
 const router = express.Router();
+const LEGAL_VERSION = '2026-10-21';
 
 router.post('/register', async (req, res) => {
-  const { email, password, firstName, lastName } = req.body;
+  const { email, password, firstName, lastName, acceptedTerms } = req.body;
   if (!email || !password || password.length < 8) {
     return res.status(400).json({ error: 'Email and password (min 8 chars) required' });
   }
+  if (acceptedTerms !== true) {
+    return res.status(400).json({
+      error: 'You must agree to the Terms of Service and Privacy Policy to create an account.',
+      code: 'legal_acceptance_required',
+    });
+  }
   try {
+    const acceptedAt = new Date().toISOString();
     const user = await store.createUser({
       email: email.toLowerCase(),
       password,
-      profile: { firstName, lastName },
+      profile: {
+        firstName,
+        lastName,
+        legalAcceptance: {
+          version: LEGAL_VERSION,
+          terms: true,
+          privacy: true,
+          acceptedAt,
+        },
+      },
     });
     const token = store.generateToken(user.id);
     res.status(201).json({ token, user: { ...user, isOwner: isOwnerEmail(user.email) } });
