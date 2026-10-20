@@ -203,6 +203,8 @@ export default function LandingPage() {
             <div className="studio-mails">
               <a href="mailto:hello@trillionaitech.com">hello@trillionaitech.com</a>
               <a href="mailto:support@trillionaitech.com">support@trillionaitech.com</a>
+              <Link to="/privacy">Privacy Policy</Link>
+              <Link to="/terms">Terms of Service</Link>
               <Link to="/login">Customer sign in</Link>
               <Link to="/register">Create account</Link>
             </div>
