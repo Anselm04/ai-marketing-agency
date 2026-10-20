@@ -1,6 +1,7 @@
 import express from 'express';
 import store from '../utils/store.js';
 import { getUserPreferences, saveUserPreferences } from '../services/accountMemoryService.js';
+import { deleteCustomerAccount } from '../services/accountLifecycleService.js';
 
 const router = express.Router();
 
@@ -100,6 +101,28 @@ router.get('/account-memory', async (req, res) => {
       subscriptions: subscriptions.length,
     },
   });
+});
+
+router.delete('/account', async (req, res, next) => {
+  try {
+    if (req.body?.confirmation !== 'DELETE') {
+      return res.status(400).json({
+        error: 'Type DELETE exactly to confirm permanent account deletion.',
+        code: 'account_deletion_confirmation_required',
+      });
+    }
+    const result = await deleteCustomerAccount({
+      userId: req.user.id,
+      password: req.body?.password,
+    });
+    return res.json({
+      success: true,
+      deleted: result.deleted,
+      cancelledStripeSubscriptions: result.cancelledStripeSubscriptions,
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.get('/integrations', (req, res) => {
