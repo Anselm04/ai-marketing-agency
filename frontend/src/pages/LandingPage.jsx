@@ -177,10 +177,7 @@ export default function LandingPage() {
                       <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.agents} AI agents</li>
                       <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.campaigns} campaigns</li>
                       <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.postsPerDay} posts/day</li>
-                      <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.languages} languages</li>
                       <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />{f.teamSeats} team seats</li>
-                      {f.apiAccess && <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />API access</li>}
-                      {f.whiteLabel && <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />White label</li>}
                     </ul>
                     <Link className="studio-btn studio-btn-gold" to="/register">Create account to subscribe</Link>
                   </article>
