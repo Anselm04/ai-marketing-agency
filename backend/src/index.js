@@ -47,6 +47,7 @@ import mediaLibraryRoutes from './routes/mediaLibrary.js';
 import autoPostingRoutes from './routes/autoPosting.js';
 import paidAdsRoutes from './routes/paidAds.js';
 import adsRoutes from './routes/ads.js';
+import usageRoutes from './routes/usage.js';
 import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
@@ -220,6 +221,7 @@ app.use('/api/social-video', socialVideoRoutes);
 app.use('/api/media-library', mediaLibraryRoutes);
 app.use('/api/auto-posting', autoPostingRoutes);
 app.use('/api/paid-ads', paidAdsRoutes);
+app.use('/api/usage', usageRoutes);
 
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist, { index: false, maxAge: '1h' }));
