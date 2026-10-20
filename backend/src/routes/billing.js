@@ -1,7 +1,7 @@
 import express from 'express';
 import Stripe from 'stripe';
 import store from '../utils/store.js';
-import { CATALOG, findItem, publicCatalog } from '../config/stripeCatalog.js';
+import { CATALOG, findItem, isCatalogItemPurchasable, publicCatalog } from '../config/stripeCatalog.js';
 import { redeemGodCodeForUser, REDEEM_FAIL, normalizeSubscriptionAccess } from '../services/godCodeService.js';
 import { markServiceFeePaid } from '../services/paidAdvertisingService.js';
 import { cancelSubscription, resumeSubscription } from '../services/stripeService.js';
@@ -46,6 +46,12 @@ export async function checkoutHandler(req, res) {
   const { lookup_key, priceId, id } = req.body || {};
   const item = findItem({ lookup_key, priceId, id });
   if (!item) return res.status(400).json({ error: 'Unknown plan' });
+  if (!isCatalogItemPurchasable(item)) {
+    return res.status(409).json({
+      error: item.unavailableReason || 'This item is not currently available for purchase.',
+      code: 'catalog_item_unavailable',
+    });
+  }
 
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) {
