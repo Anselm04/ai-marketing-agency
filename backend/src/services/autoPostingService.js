@@ -4,6 +4,8 @@ import store from '../utils/store.js';
 import mediaComposerService from './mediaComposerService.js';
 import userVideoPublisherService from './userVideoPublisherService.js';
 import { generateAgentResponse } from './openaiService.js';
+import { assertDailyPostQuota } from './planQuotaService.js';
+import { recordUsage } from './usageMeteringService.js';
 import { logger } from '../utils/logger.js';
 import autoPostingAnalyticsService from './autoPostingAnalyticsService.js';
 import socialPerformanceSyncService from './socialPerformanceSyncService.js';
@@ -161,7 +163,7 @@ class AutoPostingService {
         'Source media names: ' + selectedAssets.map((asset) => asset.originalName).join(', '),
         'Previous post count: ' + (Number(plan.completedPosts) || 0),
       ].join('\n'),
-      {},
+      { userId: plan.owner },
     );
 
     return parseMetadata(result && result.content, fallback);
@@ -171,6 +173,8 @@ class AutoPostingService {
     if (!plan || !plan.enabled) throw new Error('Auto-posting plan is disabled');
     if (!plan.sourceAssetIds || !plan.sourceAssetIds.length) throw new Error('Auto-posting plan has no selected source media');
     if (!plan.platformIds || !plan.platformIds.length) throw new Error('Auto-posting plan has no selected platforms');
+
+    await assertDailyPostQuota(plan.owner, plan.platformIds.length);
 
     const allContent = await store.getContentByOwner(plan.owner);
     let recommendation = null;
@@ -225,6 +229,15 @@ class AutoPostingService {
     });
 
     const successful = results.filter((result) => result.success).length;
+    if (successful > 0) {
+      await recordUsage({
+        userId: plan.owner,
+        metric: 'social_posts',
+        quantity: successful,
+        metadata: { autoPostingPlanId: plan.id },
+      });
+    }
+
     const startedAt = new Date().toISOString();
     const localHour = this.localHourAt(Date.now(), plan.timezone || 'UTC');
     const run = {
