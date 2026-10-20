@@ -22,12 +22,12 @@ export default function Dashboard() {
   }, []);
 
   const navItems = [
-    { to: '/campaigns', label: 'Campaigns', icon: Zap },
-    { to: '/agents', label: 'Agents', icon: Layout },
-    { to: '/analytics', label: 'Analytics', icon: BarChart3 },
-    { to: '/content', label: 'Content', icon: FileText },
-    { to: '/crm', label: 'CRM', icon: Users },
-    { to: '/settings', label: 'Settings', icon: Settings },
+    { to: '/dashboard/campaigns', label: 'Campaigns', icon: Zap },
+    { to: '/dashboard/agents', label: 'Agents', icon: Layout },
+    { to: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
+    { to: '/dashboard/content', label: 'Content', icon: FileText },
+    { to: '/dashboard/crm', label: 'CRM', icon: Users },
+    { to: '/dashboard/settings', label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -62,7 +62,7 @@ export default function Dashboard() {
                 <h2 id="plan-usage-heading" className="text-lg font-semibold text-gray-900 dark:text-white">Plan usage</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{usage.plan} plan · measured usage</p>
               </div>
-              <Link to="/billing" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Manage plan</Link>
+              <Link to="/dashboard/billing" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Manage plan</Link>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
