@@ -30,8 +30,8 @@ export default function Billing() {
       .catch(() => setPlans(CATALOG.plans))
 
     api.get('/billing/catalog')
-      .then(res => setCredits(res.data?.credits?.length ? res.data.credits : CATALOG.credits))
-      .catch(() => setCredits(CATALOG.credits))
+      .then(res => setCredits(Array.isArray(res.data?.credits) ? res.data.credits : []))
+      .catch(() => setCredits([]))
 
     refreshSubscription().catch(() => {})
   }, [])
@@ -191,32 +191,34 @@ export default function Billing() {
         })}
       </div>
 
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Credit packs</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {credits.map(pack => (
-            <div key={pack.id} className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <CreditCard size={20} className="text-blue-600" />
+      {credits.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">Credit packs</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {credits.map(pack => (
+              <div key={pack.id} className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-2 bg-blue-50 rounded-lg">
+                    <CreditCard size={20} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{pack.name}</h3>
+                    <div className="text-sm text-gray-500">${dollars(pack)} one-time</div>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">{pack.name}</h3>
-                  <div className="text-sm text-gray-500">${dollars(pack)} one-time</div>
-                </div>
+                <p className="text-sm text-gray-600 mb-4 flex-1">{pack.credits} credits for extra usage.</p>
+                <button
+                  onClick={() => handleCheckout(pack)}
+                  disabled={loading}
+                  className="w-full py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  Buy credits
+                </button>
               </div>
-              <p className="text-sm text-gray-600 mb-4 flex-1">{pack.credits} credits for extra agents, campaigns, and posts.</p>
-              <button
-                onClick={() => handleCheckout(pack)}
-                disabled={loading}
-                className="w-full py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                Buy credits
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
