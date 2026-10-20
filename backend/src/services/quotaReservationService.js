@@ -112,6 +112,59 @@ export async function reserveUsageQuota({
   }
 }
 
+export async function settleUsageReservation({
+  id,
+  userId,
+  metric,
+  quantity,
+  provider = null,
+  model = null,
+  costUsd = null,
+  metadata = {},
+  createdAt = new Date().toISOString(),
+}) {
+  if (!id) return null;
+  const actualQuantity = Number(quantity);
+  if (!Number.isFinite(actualQuantity) || actualQuantity < 0) throw new Error('Invalid settled usage quantity');
+  const db = getPool();
+  if (!db) {
+    memoryReservations.delete(id);
+    return { id, userId, metric, quantity: actualQuantity };
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const reservation = await client.query(
+      `select id, user_id, metric from marketing.quota_reservations where id = $1 for update`,
+      [id],
+    );
+    if (!reservation.rows[0]) {
+      await client.query('rollback');
+      return null;
+    }
+    if (reservation.rows[0].user_id !== userId || reservation.rows[0].metric !== metric) {
+      throw new Error('Quota reservation does not match usage settlement');
+    }
+    if (actualQuantity > 0) {
+      await client.query(
+        `insert into marketing.usage_events
+          (user_id, metric, quantity, provider, model, cost_usd, metadata, created_at)
+         values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+        [userId, metric, actualQuantity, provider, model, costUsd, JSON.stringify(metadata || {}), createdAt],
+      );
+    }
+    await client.query('delete from marketing.quota_reservations where id = $1', [id]);
+    await client.query('commit');
+    return { id, userId, metric, quantity: actualQuantity };
+  } catch (error) {
+    try { await client.query('rollback'); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function releaseQuotaReservation(id) {
   if (!id) return;
   const db = getPool();
