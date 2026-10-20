@@ -6,6 +6,7 @@
 import express from 'express';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { aiModelRegistry } from '../services/aiModelRegistry.js';
+import { assertAiRequestAllowed, accountAiResult } from '../services/aiUsagePolicy.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
@@ -156,7 +157,7 @@ router.post('/best', authenticate, async (req, res) => {
  * POST /api/ai-models/chat
  * Generate a chat completion with the specified model.
  */
-router.post('/chat', authenticate, async (req, res) => {
+router.post('/chat', authenticate, async (req, res, next) => {
   const { messages, providerId, modelId, options = {} } = req.body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -164,10 +165,18 @@ router.post('/chat', authenticate, async (req, res) => {
   }
 
   try {
+    await assertAiRequestAllowed(req.user?.id, messages, options.maxTokens || 4096);
     const result = await aiModelRegistry.generateChatCompletion(messages, {
       provider: providerId,
       model: modelId,
       ...options,
+    });
+    await accountAiResult({
+      userId: req.user?.id,
+      operation: 'ai-model-chat',
+      result,
+      provider: providerId,
+      model: modelId,
     });
 
     res.json({
@@ -175,10 +184,11 @@ router.post('/chat', authenticate, async (req, res) => {
       content: result.content,
       usage: result.usage,
       model: result.model,
-      provider: providerId || 'default',
+      provider: result.provider || providerId || 'default',
       finishReason: result.finishReason,
     });
   } catch (err) {
+    if (err?.code === 'plan_quota_exceeded' || err?.status === 402) return next(err);
     logger.error('Chat completion failed', { error: err.message, providerId, modelId });
     res.status(500).json({ error: 'Chat completion failed', detail: err.message });
   }
