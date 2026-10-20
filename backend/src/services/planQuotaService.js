@@ -2,6 +2,7 @@ import store from '../utils/store.js';
 import { CATALOG } from '../config/stripeCatalog.js';
 import { getMarketingEntitlement } from './marketingEntitlementService.js';
 import { sumUsage } from './usageMeteringService.js';
+import { reserveUsageQuota } from './quotaReservationService.js';
 
 const AI_TOKEN_LIMITS = Object.freeze({
   starter: 1_000_000,
@@ -114,6 +115,29 @@ export async function assertDailyPostQuota(userId, requested = 1, now = new Date
   return { ...context, quota: result };
 }
 
+export async function reserveDailyPostQuota(userId, requested = 1, now = new Date()) {
+  const context = await getUserPlanContext(userId);
+  if (context.unlimited) return { ...context, reservation: { id: null, unlimited: true } };
+  const dayStart = new Date(now);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  try {
+    const reservation = await reserveUsageQuota({
+      userId,
+      metric: 'social_posts',
+      requested,
+      limit: context.limits.postsPerDay,
+      windowStart: dayStart.toISOString(),
+      windowEnd: dayEnd.toISOString(),
+      resource: 'daily social posts',
+    });
+    return { ...context, reservation };
+  } catch (error) {
+    if (error?.code === 'plan_quota_exceeded') error.plan = context.plan;
+    throw error;
+  }
+}
+
 export async function assertMonthlyAiTokenQuota(userId, requested = 1, now = new Date()) {
   const context = await getUserPlanContext(userId);
   if (context.unlimited) return { ...context, quota: checkQuota({ used: 0, requested, limit: Infinity }) };
@@ -122,4 +146,26 @@ export async function assertMonthlyAiTokenQuota(userId, requested = 1, now = new
   const result = checkQuota({ used, requested, limit: context.limits.monthlyAiTokens });
   if (!result.allowed) throw quotaError('monthly AI usage', result, context.plan);
   return { ...context, quota: result };
+}
+
+export async function reserveMonthlyAiTokenQuota(userId, requested = 1, now = new Date()) {
+  const context = await getUserPlanContext(userId);
+  if (context.unlimited) return { ...context, reservation: { id: null, unlimited: true } };
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  try {
+    const reservation = await reserveUsageQuota({
+      userId,
+      metric: 'ai_tokens',
+      requested,
+      limit: context.limits.monthlyAiTokens,
+      windowStart: monthStart.toISOString(),
+      windowEnd: monthEnd.toISOString(),
+      resource: 'monthly AI usage',
+    });
+    return { ...context, reservation };
+  } catch (error) {
+    if (error?.code === 'plan_quota_exceeded') error.plan = context.plan;
+    throw error;
+  }
 }
