@@ -7,7 +7,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { intelligentOrchestrator } from '../services/intelligentOrchestrator.js';
-import { assertAiRequestAllowed, accountAiResult } from '../services/aiUsagePolicy.js';
+import { reserveAiRequest, settleAiRequest, cancelAiRequest } from '../services/aiUsagePolicy.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
@@ -18,24 +18,12 @@ function normalizeMessages(content) {
   return [{ role: 'user', content: String(content) }];
 }
 
-/**
- * POST /api/orchestrator/profile
- * Build or update the user's orchestrator profile.
- */
 router.post('/profile', authenticate, async (req, res) => {
   const { industry, companySize, budget, goals, preferredTone, language, timezone } = req.body;
-
   try {
     const profile = await intelligentOrchestrator.buildUserProfile(req.user?.id, {
-      industry,
-      companySize,
-      budget,
-      goals,
-      preferredTone,
-      language,
-      timezone,
+      industry, companySize, budget, goals, preferredTone, language, timezone,
     });
-
     res.json({
       success: true,
       profile: {
@@ -47,11 +35,7 @@ router.post('/profile', authenticate, async (req, res) => {
         preferredTone: profile.preferredTone,
         language: profile.language,
         timezone: profile.timezone,
-        connectedConnectors: profile.connectedConnectors.map((c) => ({
-          id: c.id,
-          name: c.name,
-          category: c.category,
-        })),
+        connectedConnectors: profile.connectedConnectors.map((c) => ({ id: c.id, name: c.name, category: c.category })),
       },
     });
   } catch (err) {
@@ -60,17 +44,10 @@ router.post('/profile', authenticate, async (req, res) => {
   }
 });
 
-/**
- * GET /api/orchestrator/profile
- * Get the user's current orchestrator profile.
- */
 router.get('/profile', authenticate, async (req, res) => {
   try {
     const profile = await intelligentOrchestrator.getUserProfile(req.user?.id);
-    if (!profile) {
-      return res.json({ success: true, profile: null, message: 'No profile found. Create one via POST /api/orchestrator/profile' });
-    }
-
+    if (!profile) return res.json({ success: true, profile: null, message: 'No profile found. Create one via POST /api/orchestrator/profile' });
     res.json({
       success: true,
       profile: {
@@ -82,11 +59,7 @@ router.get('/profile', authenticate, async (req, res) => {
         preferredTone: profile.preferredTone,
         language: profile.language,
         timezone: profile.timezone,
-        connectedConnectors: profile.connectedConnectors.map((c) => ({
-          id: c.id,
-          name: c.name,
-          category: c.category,
-        })),
+        connectedConnectors: profile.connectedConnectors.map((c) => ({ id: c.id, name: c.name, category: c.category })),
         lastUpdated: profile.lastUpdated,
       },
     });
@@ -96,20 +69,11 @@ router.get('/profile', authenticate, async (req, res) => {
   }
 });
 
-/**
- * POST /api/orchestrator/select-model
- * Select the optimal AI model for a task.
- */
 router.post('/select-model', authenticate, async (req, res) => {
   const { taskType, content, options = {} } = req.body;
-
-  if (!taskType) {
-    return res.status(400).json({ error: 'taskType is required' });
-  }
-
+  if (!taskType) return res.status(400).json({ error: 'taskType is required' });
   try {
     const selection = await intelligentOrchestrator.selectModel(req.user?.id, taskType, content, options);
-
     res.json({
       success: true,
       selection: {
@@ -128,20 +92,11 @@ router.post('/select-model', authenticate, async (req, res) => {
   }
 });
 
-/**
- * POST /api/orchestrator/select-connectors
- * Select optimal connectors for a task.
- */
 router.post('/select-connectors', authenticate, async (req, res) => {
   const { taskType, requiredOperations } = req.body;
-
-  if (!taskType) {
-    return res.status(400).json({ error: 'taskType is required' });
-  }
-
+  if (!taskType) return res.status(400).json({ error: 'taskType is required' });
   try {
     const result = await intelligentOrchestrator.selectConnectors(req.user?.id, taskType, requiredOperations || []);
-
     res.json({
       success: true,
       taskType,
@@ -156,28 +111,23 @@ router.post('/select-connectors', authenticate, async (req, res) => {
   }
 });
 
-/**
- * POST /api/orchestrator/execute-ai
- * Execute an AI task with automatic model selection and fallback.
- */
 router.post('/execute-ai', authenticate, async (req, res, next) => {
   const { taskType, messages, options = {} } = req.body;
+  if (!taskType || !messages || !Array.isArray(messages)) return res.status(400).json({ error: 'taskType and messages array are required' });
 
-  if (!taskType || !messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'taskType and messages array are required' });
-  }
-
+  let reservation = null;
   try {
-    await assertAiRequestAllowed(req.user?.id, messages, options.maxTokens || 4096);
+    reservation = await reserveAiRequest(req.user?.id, messages, options.maxTokens || 4096);
     const result = await intelligentOrchestrator.executeAITask(req.user?.id, taskType, messages, options);
-    await accountAiResult({
+    await settleAiRequest({
+      reservation,
       userId: req.user?.id,
       operation: `orchestrator:${taskType}`,
       result,
       provider: result.provider,
       model: result.model,
     });
-
+    reservation = null;
     res.json({
       success: true,
       content: result.content,
@@ -188,41 +138,39 @@ router.post('/execute-ai', authenticate, async (req, res, next) => {
       orchestration: result.orchestration,
     });
   } catch (err) {
+    if (reservation) await cancelAiRequest(reservation).catch(() => {});
     if (err?.code === 'plan_quota_exceeded' || err?.status === 402) return next(err);
     logger.error('AI task execution failed', { error: err.message, userId: req.user?.id, taskType });
     res.status(500).json({ error: 'AI task execution failed', detail: err.message });
   }
 });
 
-/**
- * POST /api/orchestrator/execute-campaign
- * Execute a full campaign orchestration (AI + connectors).
- */
 router.post('/execute-campaign', authenticate, async (req, res, next) => {
   const { taskType, content, connectorOperations } = req.body;
+  if (!taskType) return res.status(400).json({ error: 'taskType is required' });
 
-  if (!taskType) {
-    return res.status(400).json({ error: 'taskType is required' });
-  }
-
+  const messages = normalizeMessages(content);
+  let reservation = null;
   try {
-    const messages = normalizeMessages(content);
-    if (messages.length) {
-      await assertAiRequestAllowed(req.user?.id, messages, 4096);
-    }
+    if (messages.length) reservation = await reserveAiRequest(req.user?.id, messages, 4096);
     const result = await intelligentOrchestrator.executeCampaignOrchestration(req.user?.id, {
       taskType,
-      content,
+      content: messages,
       connectorOperations: connectorOperations || [],
     });
-    if (result.ai?.usage) {
-      await accountAiResult({
+    if (reservation && result.ai?.usage) {
+      await settleAiRequest({
+        reservation,
         userId: req.user?.id,
         operation: `campaign-orchestrator:${taskType}`,
         result: result.ai,
         provider: result.ai.provider,
         model: result.ai.model,
       });
+      reservation = null;
+    } else if (reservation) {
+      await cancelAiRequest(reservation);
+      reservation = null;
     }
 
     res.json({
@@ -233,20 +181,16 @@ router.post('/execute-campaign', authenticate, async (req, res, next) => {
       notifications: result.notifications,
     });
   } catch (err) {
+    if (reservation) await cancelAiRequest(reservation).catch(() => {});
     if (err?.code === 'plan_quota_exceeded' || err?.status === 402) return next(err);
     logger.error('Campaign orchestration failed', { error: err.message, userId: req.user?.id, taskType });
     res.status(500).json({ error: 'Campaign orchestration failed', detail: err.message });
   }
 });
 
-/**
- * GET /api/orchestrator/suggestions
- * Get connector suggestions for the current user.
- */
 router.get('/suggestions', authenticate, async (req, res) => {
   try {
     const suggestions = await intelligentOrchestrator.getConnectorSuggestions(req.user?.id);
-
     res.json({
       success: true,
       suggestions: suggestions.map((s) => ({
@@ -264,14 +208,9 @@ router.get('/suggestions', authenticate, async (req, res) => {
   }
 });
 
-/**
- * GET /api/orchestrator/performance
- * Get performance metrics for the user's AI usage.
- */
 router.get('/performance', authenticate, async (req, res) => {
   try {
     const metrics = await intelligentOrchestrator.getPerformanceMetrics(req.user?.id);
-
     res.json({
       success: true,
       metrics: {
@@ -291,14 +230,9 @@ router.get('/performance', authenticate, async (req, res) => {
   }
 });
 
-/**
- * POST /api/orchestrator/optimize
- * Optimize AI model selection based on historical performance.
- */
 router.post('/optimize', authenticate, async (req, res) => {
   try {
     const optimization = await intelligentOrchestrator.optimizeModelSelection(req.user?.id);
-
     res.json({
       success: true,
       optimization: {
@@ -314,15 +248,10 @@ router.post('/optimize', authenticate, async (req, res) => {
   }
 });
 
-/**
- * GET /api/orchestrator/history
- * Get task execution history for the user.
- */
 router.get('/history', authenticate, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 50;
     const history = await intelligentOrchestrator.getTaskHistory(req.user?.id, limit);
-
     res.json({
       success: true,
       history: history.map((h) => ({
