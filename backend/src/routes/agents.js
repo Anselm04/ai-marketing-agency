@@ -7,7 +7,7 @@ const router = express.Router();
 async function planAgents(req) {
   const allAgents = await store.getAgents();
   const context = await getUserPlanContext(req.user?.id || req.userId);
-  return { allAgents, context, accessible: getAccessibleAgents(allAgents, context.limits) };
+  return { context, accessible: getAccessibleAgents(allAgents, context.limits) };
 }
 
 function publicAgent(agent) {
@@ -24,13 +24,8 @@ function publicAgent(agent) {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { accessible, context } = await planAgents(req);
-    res.json({
-      agents: accessible.map(publicAgent),
-      plan: context.plan,
-      limit: context.limits.agents,
-      unlimited: context.unlimited,
-    });
+    const { accessible } = await planAgents(req);
+    res.json(accessible.map(publicAgent));
   } catch (error) {
     next(error);
   }
