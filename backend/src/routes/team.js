@@ -77,19 +77,22 @@ router.post('/invites', async (req, res, next) => {
   }
 });
 
-router.post('/invites/accept', async (req, res) => {
+router.post('/invites/accept', async (req, res, next) => {
   try {
     const invite = await store.findInviteByToken(req.body.token);
     if (!invite) return res.status(400).json({ error: 'Invalid or expired invite token' });
     const user = await store.findUserById(req.userId);
-    if (user.email.toLowerCase() !== invite.email) {
+    if (!user || user.email.toLowerCase() !== invite.email.toLowerCase()) {
       return res.status(403).json({ error: 'Invite email does not match' });
     }
+    const org = await store.getOrganizationById(invite.orgId);
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
+    await assertTeamSeatQuota(org.ownerId, org.members.length, 0, 1);
     await store.addMember(invite.orgId, req.userId, invite.role);
     await store.deleteInvite(invite.id);
     res.json({ success: true, message: 'You have joined the organization.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
