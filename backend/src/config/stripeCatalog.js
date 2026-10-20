@@ -62,6 +62,8 @@ export const CATALOG = {
       currency: 'usd',
       interval: null,
       credits: 100,
+      purchasable: false,
+      unavailableReason: 'Credit consumption is not production-ready yet.',
       paymentLink: 'https://buy.stripe.com/28E4gA7TPeb0bKPh0Jao80b',
     },
     {
@@ -73,6 +75,8 @@ export const CATALOG = {
       currency: 'usd',
       interval: null,
       credits: 300,
+      purchasable: false,
+      unavailableReason: 'Credit consumption is not production-ready yet.',
       paymentLink: 'https://buy.stripe.com/14AdRa7TPgj83ej9yhao80c',
     },
     {
@@ -84,6 +88,8 @@ export const CATALOG = {
       currency: 'usd',
       interval: null,
       credits: 750,
+      purchasable: false,
+      unavailableReason: 'Credit consumption is not production-ready yet.',
       paymentLink: 'https://buy.stripe.com/00wdRaeid1oebKP8udao80d',
     },
   ],
@@ -98,6 +104,13 @@ export function findItem({ lookup_key, id, priceId } = {}) {
   ) || null;
 }
 
+export function isCatalogItemPurchasable(item) {
+  return Boolean(item && item.purchasable !== false && (item.interval || !item.credits));
+}
+
 export function publicCatalog() {
-  return { plans: CATALOG.plans, credits: CATALOG.credits };
+  return {
+    plans: CATALOG.plans.filter(isCatalogItemPurchasable),
+    credits: CATALOG.credits.filter(isCatalogItemPurchasable),
+  };
 }
