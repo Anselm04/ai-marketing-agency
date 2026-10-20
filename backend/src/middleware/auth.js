@@ -1,5 +1,6 @@
 import store from '../utils/store.js';
 import { isOwnerEmail } from '../utils/owner.js';
+import { runWithRequestContext } from '../utils/requestContext.js';
 
 export async function authenticate(req, res, next) {
   try {
@@ -16,7 +17,7 @@ export async function authenticate(req, res, next) {
     const { password, resetToken, resetTokenExpires, ...safe } = user;
     req.user = { ...safe, isOwner: isOwnerEmail(user.email) };
     req.userId = user.id;
-    next();
+    return runWithRequestContext({ userId: user.id }, next);
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
