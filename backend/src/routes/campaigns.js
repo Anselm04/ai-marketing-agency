@@ -1,5 +1,6 @@
 import express from 'express';
 import store from '../utils/store.js';
+import { assertCampaignQuota } from '../services/planQuotaService.js';
 
 const router = express.Router();
 
@@ -8,9 +9,14 @@ router.get('/', async (req, res) => {
   res.json(campaigns);
 });
 
-router.post('/', async (req, res) => {
-  const campaign = await store.createCampaign({ ...req.body, status: 'draft', owner: req.user.id });
-  res.status(201).json(campaign);
+router.post('/', async (req, res, next) => {
+  try {
+    await assertCampaignQuota(req.user.id, 1);
+    const campaign = await store.createCampaign({ ...req.body, status: 'draft', owner: req.user.id });
+    res.status(201).json(campaign);
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.get('/:id', async (req, res) => {
