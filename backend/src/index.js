@@ -51,6 +51,7 @@ import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
 import { openaiStatus } from './services/openaiService.js';
+import { costControlStatus } from './services/costControlStatus.js';
 import './services/withUserTokensPatch.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
@@ -137,7 +138,7 @@ app.get('/api/health', async (_req, res) => {
       database: store.isPostgres?.() ? 'postgres' : 'local',
       persistence,
       openai: ai,
-      spendCaps: { enforced: true, defaults: { dailyMax: 10, monthlyMax: 100 } },
+      costControls: costControlStatus(),
     });
   } catch (error) {
     logger.error('API health check failed', { error: error?.message });
