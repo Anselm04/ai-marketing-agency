@@ -1,6 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import store from '../utils/store.js';
+import { assertTeamSeatQuota } from '../services/planQuotaService.js';
 
 const router = express.Router();
 
@@ -49,13 +50,18 @@ router.patch('/org', async (req, res) => {
   }
 });
 
-router.post('/invites', async (req, res) => {
+router.post('/invites', async (req, res, next) => {
   try {
     const org = await getUserOrg(req.userId);
     if (!org) return res.status(404).json({ error: 'Organization not found' });
     if (!await checkOrgRole(req.userId, org.id, ['owner', 'admin'])) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
+    const orgInvites = (await store.getInvites()).filter(
+      (invite) => invite.orgId === org.id && new Date(invite.expiresAt) > new Date(),
+    );
+    await assertTeamSeatQuota(org.ownerId, org.members.length, orgInvites.length, 1);
+
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const invite = await store.createInvite({
@@ -67,7 +73,7 @@ router.post('/invites', async (req, res) => {
     });
     res.json({ invite, devToken: token });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
