@@ -8,7 +8,7 @@ import { Mail, Lock, User, ArrowRight, Moon, Sun } from 'lucide-react';
 import './landing.css';
 
 export default function Register() {
-  const [form, setForm] = useState({ email: '', password: '', confirmPassword: '', firstName: '', lastName: '' });
+  const [form, setForm] = useState({ email: '', password: '', confirmPassword: '', firstName: '', lastName: '', acceptedTerms: false });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -21,6 +21,10 @@ export default function Register() {
     setError('');
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+    if (!form.acceptedTerms) {
+      setError('Please agree to the Terms of Service and Privacy Policy.');
       return;
     }
     setLoading(true);
@@ -41,10 +45,7 @@ export default function Register() {
         <div className="wrap">
           <Link className="studio-brand" to="/">
             <img src="/appforge-logo.png" width="36" height="36" alt="" />
-            <span className="studio-brand-name">
-              <strong>TrillionAI</strong>
-              <span>Marketing</span>
-            </span>
+            <span className="studio-brand-name"><strong>TrillionAI</strong><span>AI Marketing Agency</span></span>
           </Link>
           <nav className="studio-nav">
             <LanguageSelector />
@@ -96,9 +97,12 @@ export default function Register() {
                 <input type="password" required minLength={8} className="w-full pl-10 pr-3 py-2 text-sm" style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line)' }} placeholder="••••••••" value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} />
               </div>
             </div>
+            <label className="flex items-start gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+              <input type="checkbox" required checked={form.acceptedTerms} onChange={e => setForm({ ...form, acceptedTerms: e.target.checked })} className="mt-1" />
+              <span>I agree to the <Link className="underline" to="/terms" target="_blank">Terms of Service</Link> and <Link className="underline" to="/privacy" target="_blank">Privacy Policy</Link>.</span>
+            </label>
             <button type="submit" disabled={loading} className="studio-btn studio-btn-gold w-full">
-              {loading ? '…' : t('createAccount')}
-              <ArrowRight size={16} />
+              {loading ? '…' : t('createAccount')} <ArrowRight size={16} />
             </button>
           </form>
         </div>
