@@ -5,9 +5,13 @@ import {
   resetQuotaReservationsForTests,
   settleUsageReservation,
 } from '../services/quotaReservationService.js';
+import { resetMemoryUsageForTests } from '../services/usageMeteringService.js';
 
 describe('quota reservations', () => {
-  beforeEach(() => resetQuotaReservationsForTests());
+  beforeEach(() => {
+    resetQuotaReservationsForTests();
+    resetMemoryUsageForTests();
+  });
 
   test('rejects a second concurrent reservation beyond the remaining limit', async () => {
     const base = {
@@ -25,7 +29,7 @@ describe('quota reservations', () => {
     await releaseQuotaReservation(first.id);
   });
 
-  test('settlement releases the reservation for later requests', async () => {
+  test('settled usage remains counted after the reservation is released', async () => {
     const base = {
       userId: 'user-a',
       metric: 'social_posts',
@@ -38,7 +42,6 @@ describe('quota reservations', () => {
 
     const first = await reserveUsageQuota(base);
     await settleUsageReservation({ id: first.id, userId: 'user-a', metric: 'social_posts', quantity: 1 });
-    const second = await reserveUsageQuota(base);
-    expect(second.id).toBeTruthy();
+    await expect(reserveUsageQuota(base)).rejects.toMatchObject({ code: 'plan_quota_exceeded' });
   });
 });
