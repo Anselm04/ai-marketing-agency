@@ -161,10 +161,10 @@ export default function LandingPage() {
                 <p className="studio-kicker">{t('heroKicker')}</p>
                 <h2>{t('pricing')}</h2>
               </div>
-              <p>{t('pricingLede')}</p>
+              <p>Monthly Marketing Agency plans. Create an account to start secure subscription checkout.</p>
             </header>
             <p className="note" style={{ marginBottom: '1.25rem' }}>
-              Create an account before checkout so your plan or credits can be securely attached to your Marketing workspace. Advertising spend is separate from these software plans.
+              Create an account before checkout so your subscription is securely attached to your Marketing workspace. Advertising spend is separate from these software plans. Credit packs are not currently sold because credit consumption is not yet production-ready.
             </p>
             <div className="studio-plans">
               {CATALOG.plans.map((plan) => {
@@ -186,19 +186,6 @@ export default function LandingPage() {
                   </article>
                 )
               })}
-            </div>
-            <header className="studio-head" style={{ marginTop: '3rem', marginBottom: '1.4rem' }}>
-              <h2 style={{ fontSize: '2rem' }}>{t('creditPacks')}</h2>
-            </header>
-            <div className="studio-credits">
-              {CATALOG.credits.map((pack) => (
-                <article className="studio-plan" key={pack.id}>
-                  <h3>{pack.name}</h3>
-                  <p className="studio-price">${dollars(pack)} <span>{t('oneTime')}</span></p>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', flex: 1 }}>{pack.credits} {t('creditsFor')}</p>
-                  <Link className="studio-btn studio-btn-gold" to="/register" style={{ marginTop: '1rem' }}>Create account to buy credits</Link>
-                </article>
-              ))}
             </div>
           </div>
         </section>
