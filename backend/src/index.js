@@ -48,6 +48,7 @@ import autoPostingRoutes from './routes/autoPosting.js';
 import paidAdsRoutes from './routes/paidAds.js';
 import adsRoutes from './routes/ads.js';
 import usageRoutes from './routes/usage.js';
+import unsubscribeRoutes from './routes/unsubscribe.js';
 import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
@@ -110,6 +111,7 @@ app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan('combined'));
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+app.use('/api/unsubscribe', unsubscribeRoutes);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeBody);
@@ -155,6 +157,7 @@ app.use('/api/integrations/appforge', appforgeIntegrationRoutes);
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/integrations/appforge')) return next();
   if (req.path === '/api/billing/webhook') return next();
+  if (req.path.startsWith('/api/unsubscribe')) return next();
   if (/^\/api\/connectors\/[^/]+\/callback$/.test(req.path)) return next();
   if (/^\/api\/social\/oauth\/[^/]+\/callback$/.test(req.path)) return next();
   if (req.path.startsWith('/api')) return authenticate(req, res, next);
@@ -168,6 +171,7 @@ app.use(async (req, res, next) => {
     '/api/billing',
     '/api/settings',
     '/api/admin',
+    '/api/unsubscribe',
   ];
   const isPersonalPortfolioRead =
     req.method === 'GET' && req.path === '/api/products/portfolio';
