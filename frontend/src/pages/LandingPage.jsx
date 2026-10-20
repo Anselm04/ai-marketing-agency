@@ -163,6 +163,9 @@ export default function LandingPage() {
               </div>
               <p>{t('pricingLede')}</p>
             </header>
+            <p className="note" style={{ marginBottom: '1.25rem' }}>
+              Create an account before checkout so your plan or credits can be securely attached to your Marketing workspace. Advertising spend is separate from these software plans.
+            </p>
             <div className="studio-plans">
               {CATALOG.plans.map((plan) => {
                 const f = plan.features || {}
@@ -179,7 +182,7 @@ export default function LandingPage() {
                       {f.apiAccess && <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />API access</li>}
                       {f.whiteLabel && <li><Check size={14} color="#c4a35a" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />White label</li>}
                     </ul>
-                    <a className="studio-btn studio-btn-gold" href={plan.paymentLink} target="_blank" rel="noreferrer">{t('subscribe')}</a>
+                    <Link className="studio-btn studio-btn-gold" to="/register">Create account to subscribe</Link>
                   </article>
                 )
               })}
@@ -193,7 +196,7 @@ export default function LandingPage() {
                   <h3>{pack.name}</h3>
                   <p className="studio-price">${dollars(pack)} <span>{t('oneTime')}</span></p>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', flex: 1 }}>{pack.credits} {t('creditsFor')}</p>
-                  <a className="studio-btn studio-btn-gold" href={pack.paymentLink} target="_blank" rel="noreferrer" style={{ marginTop: '1rem' }}>{t('buyCredits')}</a>
+                  <Link className="studio-btn studio-btn-gold" to="/register" style={{ marginTop: '1rem' }}>Create account to buy credits</Link>
                 </article>
               ))}
             </div>
