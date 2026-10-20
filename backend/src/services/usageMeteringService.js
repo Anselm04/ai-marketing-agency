@@ -6,6 +6,7 @@ const memoryEvents = [];
 let pool = null;
 
 function databaseUrl() {
+  if (process.env.NODE_ENV === 'test' && process.env.USAGE_METERING_TEST_DATABASE !== 'true') return null;
   return process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || null;
 }
 
