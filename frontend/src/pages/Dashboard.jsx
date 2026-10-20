@@ -12,6 +12,10 @@ function usageLabel(used, limit, unlimited) {
   return `${Number(used || 0).toLocaleString()} / ${limitLabel(limit, unlimited)}`;
 }
 
+function verifiedMoney(value) {
+  return value == null ? 'Not verified' : `$${Number(value).toLocaleString()}`;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [usage, setUsage] = useState(null);
@@ -45,12 +49,18 @@ export default function Dashboard() {
               <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.leads}</div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-              <div className="text-sm text-gray-500 dark:text-gray-400">Revenue</div>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">${stats.revenue?.toLocaleString() || 0}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Verified revenue</div>
+              <div className="text-xl font-bold text-green-600 dark:text-green-400">{verifiedMoney(stats.revenue)}</div>
+              {stats.revenue == null && Number(stats.reportedRevenue || 0) > 0 && (
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">${Number(stats.reportedRevenue).toLocaleString()} reported manually/unverified</div>
+              )}
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-              <div className="text-sm text-gray-500 dark:text-gray-400">Spend</div>
-              <div className="text-2xl font-bold text-red-600 dark:text-red-400">${stats.spend?.toLocaleString() || 0}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Verified spend</div>
+              <div className="text-xl font-bold text-red-600 dark:text-red-400">{verifiedMoney(stats.spend)}</div>
+              {stats.spend == null && Number(stats.reportedSpend || 0) > 0 && (
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">${Number(stats.reportedSpend).toLocaleString()} reported manually/unverified</div>
+              )}
             </div>
           </div>
         )}
