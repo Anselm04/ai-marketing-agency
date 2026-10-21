@@ -14,21 +14,21 @@ router.get('/', async (req, res) => {
   const results = [];
 
   if (!type || type === 'campaigns') {
-    const campaigns = store.getCampaigns().filter(c => c.owner === ownerId);
+    const campaigns = await store.getCampaignsByOwner(ownerId);
     results.push(...campaigns
       .filter(c => (c.name || '').toLowerCase().includes(query) || (c.description || '').toLowerCase().includes(query))
       .map(c => ({ ...c, entityType: 'campaign' })));
   }
 
   if (!type || type === 'content') {
-    const content = store.getContent().filter(c => c.owner === ownerId);
+    const content = await store.getContentByOwner(ownerId);
     results.push(...content
       .filter(c => (c.title || '').toLowerCase().includes(query) || (c.body || '').toLowerCase().includes(query))
       .map(c => ({ ...c, entityType: 'content' })));
   }
 
   if (!type || type === 'leads') {
-    const leads = store.getLeads().filter(l => l.owner === ownerId);
+    const leads = await store.getLeadsByOwner(ownerId);
     results.push(...leads
       .filter(l =>
         (l.firstName || '').toLowerCase().includes(query) ||
@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
   }
 
   if (!type || type === 'agents') {
-    const agents = store.getAgents();
+    const agents = await store.getAgents();
     results.push(...agents
       .filter(a => (a.name || '').toLowerCase().includes(query) || (a.role || '').toLowerCase().includes(query))
       .map(a => ({ ...a, entityType: 'agent' })));
