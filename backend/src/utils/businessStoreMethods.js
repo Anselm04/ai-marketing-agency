@@ -22,6 +22,11 @@ export function attachBusinessStoreMethods(store) {
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
       max: 4,
     });
+    const originalDisconnect = typeof store.disconnectDB === 'function' ? store.disconnectDB.bind(store) : null;
+    store.disconnectDB = async () => {
+      await pool.end();
+      if (originalDisconnect) await originalDisconnect();
+    };
 
     store.getBusinessesByOwner = async (ownerId) => {
       const { rows } = await pool.query(
