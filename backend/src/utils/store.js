@@ -1,4 +1,5 @@
 import jsonStore from './jsonStore.js';
+import { attachBusinessStoreMethods } from './businessStoreMethods.js';
 
 const hasPostgresUrl = Boolean(process.env.DATABASE_URL || process.env.SUPABASE_DB_URL);
 const mustUsePostgres = process.env.NODE_ENV === 'production';
@@ -12,6 +13,8 @@ if (mustUsePostgres && !hasPostgresUrl) {
 const store = hasPostgresUrl
   ? (await import('./postgresStore.js')).default
   : jsonStore;
+
+attachBusinessStoreMethods(store);
 
 if (hasPostgresUrl) {
   const { attachPostgresSocialMethods } = await import('./postgresSocialMethods.js');
