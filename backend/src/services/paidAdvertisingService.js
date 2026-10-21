@@ -152,6 +152,18 @@ export function providerManagedBillingAvailable(provider) {
   return allow.includes(String(provider || '').toLowerCase());
 }
 
+export function paidAdServiceFeeCheckoutPolicy(provider) {
+  const allowed = providerManagedBillingAvailable(provider);
+  return {
+    allowed,
+    code: allowed ? null : 'paid_ads_provider_adapter_required',
+  };
+}
+
+export function getManagedPaidAdProviders() {
+  return [...SUPPORTED_PROVIDERS].filter(providerManagedBillingAvailable);
+}
+
 export async function activatePaidAdBudget(userId, budgetId) {
   const current = await getPaidAdBudget(userId, budgetId);
   if (!current) return { error: 'not_found' };
