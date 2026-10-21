@@ -33,7 +33,6 @@ import AgentsPage from './pages/AgentsPage'
 import Tools from './pages/Tools'
 import Games from './pages/Games'
 import Software from './pages/Software'
-import Team from './pages/Team'
 import ProductMarketing from './pages/ProductMarketing'
 import AIModels from './pages/AIModels'
 import Connectors from './pages/Connectors'
@@ -91,7 +90,6 @@ function AppRoutes() {
         <Route path="billing" element={<Billing />} />
         <Route path="trends" element={<Trends />} />
         <Route path="settings" element={<Settings />} />
-        <Route path="team" element={<Team />} />
         <Route path="admin" element={<Admin />} />
         <Route path="ai-models" element={<AIModels />} />
         <Route path="connectors" element={<Connectors />} />
