@@ -4,8 +4,10 @@ import clippingAgencyService from '../services/clippingAgencyService.js';
 import mediaClipperService from '../services/mediaClipperService.js';
 import clippingAutomationService from '../services/clippingAutomationService.js';
 import { assertCampaignQuota } from '../services/planQuotaService.js';
+import { createBusinessWorkspaceService } from '../services/businessWorkspaceService.js';
 
 const router = express.Router();
+const businesses = createBusinessWorkspaceService(store);
 
 function ownerId(req) {
   return req.user?.id || req.userId;
@@ -33,11 +35,20 @@ function assertRights(campaign, res) {
   return true;
 }
 
-router.get('/campaigns', async (req, res) => {
-  const campaigns = (await store.getCampaignsByOwner(ownerId(req)))
-    .filter((campaign) => campaign.kind === 'ai-clipping')
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json(campaigns);
+router.get('/campaigns', async (req, res, next) => {
+  try {
+    const businessId = req.query.businessId ? String(req.query.businessId) : null;
+    if (businessId) await businesses.requireOwnedBusiness(ownerId(req), businessId);
+    const campaigns = businesses.filterByBusiness(
+      await store.getCampaignsByOwner(ownerId(req)),
+      businessId,
+    )
+      .filter((campaign) => campaign.kind === 'ai-clipping')
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(campaigns);
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.post('/campaigns', async (req, res, next) => {
@@ -56,8 +67,10 @@ router.post('/campaigns', async (req, res, next) => {
       agencyRate = 0.2,
       maxClips = 6,
       rightsManifest = {},
+      businessId = null,
     } = req.body || {};
 
+    if (businessId) await businesses.requireOwnedBusiness(ownerId(req), businessId);
     if (!String(name || '').trim()) return res.status(400).json({ error: 'Campaign name is required' });
     if (!String(brief || transcript || sourceUrl).trim()) return res.status(400).json({ error: 'Provide a campaign brief, transcript, or source URL' });
 
@@ -68,6 +81,7 @@ router.post('/campaigns', async (req, res, next) => {
 
     const campaign = await store.createCampaign({
       kind: 'ai-clipping',
+      ...(businessId ? { businessId } : {}),
       name: String(name).trim(),
       brief,
       transcript,
