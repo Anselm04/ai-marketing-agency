@@ -13,7 +13,7 @@ export const CATALOG = {
       interval: 'month',
       credits: null,
       paymentLink: 'https://buy.stripe.com/fZucN6ca51oe3ejaClao807',
-      features: { agents: 3, campaigns: 2, postsPerDay: 10, languages: 20, teamSeats: 1 },
+      features: { agents: 3, campaigns: 2, postsPerDay: 10, teamSeats: 1 },
     },
     {
       id: 'growth',
@@ -25,7 +25,7 @@ export const CATALOG = {
       interval: 'month',
       credits: null,
       paymentLink: 'https://buy.stripe.com/eVqeVegql1oe027dOxao808',
-      features: { agents: 8, campaigns: 10, postsPerDay: 50, languages: 20, teamSeats: 3 },
+      features: { agents: 8, campaigns: 10, postsPerDay: 50, teamSeats: 3 },
     },
     {
       id: 'agency',
@@ -37,7 +37,7 @@ export const CATALOG = {
       interval: 'month',
       credits: null,
       paymentLink: 'https://buy.stripe.com/00wcN6gqlaYO5mrbGpao809',
-      features: { agents: 14, campaigns: 25, postsPerDay: 100, languages: 20, teamSeats: 10, apiAccess: true },
+      features: { agents: 14, campaigns: 25, postsPerDay: 100, teamSeats: 10 },
     },
     {
       id: 'enterprise',
@@ -49,7 +49,7 @@ export const CATALOG = {
       interval: 'month',
       credits: null,
       paymentLink: 'https://buy.stripe.com/00wdRafmhd6Wg15bGpao80a',
-      features: { agents: 50, campaigns: 100, postsPerDay: 500, languages: 20, teamSeats: 25, apiAccess: true, whiteLabel: true },
+      features: { agents: 50, campaigns: 100, postsPerDay: 500, teamSeats: 25 },
     },
   ],
   credits: [
@@ -62,6 +62,8 @@ export const CATALOG = {
       currency: 'usd',
       interval: null,
       credits: 100,
+      purchasable: false,
+      unavailableReason: 'Credit consumption is not production-ready yet.',
       paymentLink: 'https://buy.stripe.com/28E4gA7TPeb0bKPh0Jao80b',
     },
     {
@@ -73,6 +75,8 @@ export const CATALOG = {
       currency: 'usd',
       interval: null,
       credits: 300,
+      purchasable: false,
+      unavailableReason: 'Credit consumption is not production-ready yet.',
       paymentLink: 'https://buy.stripe.com/14AdRa7TPgj83ej9yhao80c',
     },
     {
@@ -84,6 +88,8 @@ export const CATALOG = {
       currency: 'usd',
       interval: null,
       credits: 750,
+      purchasable: false,
+      unavailableReason: 'Credit consumption is not production-ready yet.',
       paymentLink: 'https://buy.stripe.com/00wdRaeid1oebKP8udao80d',
     },
   ],
@@ -98,6 +104,13 @@ export function findItem({ lookup_key, id, priceId } = {}) {
   ) || null;
 }
 
+export function isCatalogItemPurchasable(item) {
+  return Boolean(item && item.purchasable !== false && (item.interval || !item.credits));
+}
+
 export function publicCatalog() {
-  return { plans: CATALOG.plans, credits: CATALOG.credits };
+  return {
+    plans: CATALOG.plans.filter(isCatalogItemPurchasable),
+    credits: CATALOG.credits.filter(isCatalogItemPurchasable),
+  };
 }
