@@ -1,4 +1,3 @@
-
 import store from '../utils/store.js';
 
 const DEFAULT_WEIGHTS = {
@@ -39,7 +38,7 @@ function combinationKey(run) {
 }
 
 class AutoPostingAnalyticsService {
-  async recordMetrics({ owner, planId, runId, platformId, metrics = {}, observedAt }) {
+  async recordMetrics({ owner, businessId = null, planId, runId, platformId, metrics = {}, observedAt }) {
     const records = await store.getContentByOwner(owner);
     const plan = records.find(
       (item) => item.kind === 'auto_post_plan'
@@ -73,6 +72,7 @@ class AutoPostingAnalyticsService {
 
     const payload = {
       owner,
+      ...(businessId || plan.businessId ? { businessId: businessId || plan.businessId } : {}),
       planId: String(planId),
       runId: String(runId),
       platformId: platform,
@@ -181,6 +181,7 @@ class AutoPostingAnalyticsService {
 
     return {
       planId: String(planId),
+      businessId: plan.businessId || null,
       timezone: plan.timezone || 'UTC',
       preferredWindow: {
         startHour: plan.postingWindowStartHour ?? 8,
