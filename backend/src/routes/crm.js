@@ -6,31 +6,52 @@ import {
   suppressMarketingLead,
 } from '../services/marketingEmailConsentService.js';
 import { sendMarketingEmailToLead } from '../services/marketingEmailService.js';
+import { createBusinessWorkspaceService } from '../services/businessWorkspaceService.js';
 
 const router = express.Router();
+const businesses = createBusinessWorkspaceService(store);
 
 async function ownerLead(ownerId, leadId) {
   const leads = await store.getLeadsByOwner(ownerId);
   return leads.find((lead) => String(lead.id) === String(leadId)) || null;
 }
 
-router.get('/leads', async (req, res) => {
-  const leads = (await store.getLeadsByOwner(req.user.id))
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, 100);
-  res.json(leads.map((lead) => ({ ...lead, marketingEmailStatus: consentStatus(lead) })));
+router.get('/leads', async (req, res, next) => {
+  try {
+    const businessId = req.query.businessId ? String(req.query.businessId) : null;
+    if (businessId) await businesses.requireOwnedBusiness(req.user.id, businessId);
+    const leads = businesses.filterByBusiness(
+      await store.getLeadsByOwner(req.user.id),
+      businessId,
+    )
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 100);
+    res.json(leads.map((lead) => ({ ...lead, marketingEmailStatus: consentStatus(lead) })));
+  } catch (error) {
+    next(error);
+  }
 });
 
-router.post('/leads', async (req, res) => {
-  const lead = await store.createLead({
-    ...req.body,
-    marketingConsent: req.body?.marketingConsent?.status === 'granted'
-      ? { ...req.body.marketingConsent, status: 'unknown', grantedAt: null }
-      : req.body?.marketingConsent,
-    marketingSuppressed: req.body?.marketingSuppressed === true,
-    owner: req.user.id,
-  });
-  res.status(201).json({ ...lead, marketingEmailStatus: consentStatus(lead) });
+router.post('/leads', async (req, res, next) => {
+  try {
+    const businessId = req.body?.businessId || null;
+    if (businessId) await businesses.requireOwnedBusiness(req.user.id, businessId);
+    const safeInput = { ...(req.body || {}) };
+    delete safeInput.owner;
+    delete safeInput.ownerId;
+    const lead = await store.createLead({
+      ...safeInput,
+      ...(businessId ? { businessId } : {}),
+      marketingConsent: req.body?.marketingConsent?.status === 'granted'
+        ? { ...req.body.marketingConsent, status: 'unknown', grantedAt: null }
+        : req.body?.marketingConsent,
+      marketingSuppressed: req.body?.marketingSuppressed === true,
+      owner: req.user.id,
+    });
+    res.status(201).json({ ...lead, marketingEmailStatus: consentStatus(lead) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.get('/leads/:id', async (req, res) => {
@@ -39,18 +60,25 @@ router.get('/leads/:id', async (req, res) => {
   res.json({ ...lead, marketingEmailStatus: consentStatus(lead) });
 });
 
-router.patch('/leads/:id', async (req, res) => {
-  const lead = await ownerLead(req.user.id, req.params.id);
-  if (!lead) return res.status(404).json({ error: 'Lead not found' });
-  const safeUpdates = { ...req.body };
-  delete safeUpdates.owner;
-  delete safeUpdates.ownerId;
-  delete safeUpdates.marketingConsent;
-  delete safeUpdates.marketingSuppressed;
-  delete safeUpdates.unsubscribed;
-  await store.updateLead(lead.id, safeUpdates);
-  const updated = await ownerLead(req.user.id, req.params.id);
-  res.json({ ...updated, marketingEmailStatus: consentStatus(updated) });
+router.patch('/leads/:id', async (req, res, next) => {
+  try {
+    const lead = await ownerLead(req.user.id, req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    const safeUpdates = { ...req.body };
+    delete safeUpdates.owner;
+    delete safeUpdates.ownerId;
+    delete safeUpdates.marketingConsent;
+    delete safeUpdates.marketingSuppressed;
+    delete safeUpdates.unsubscribed;
+    if (safeUpdates.businessId) {
+      await businesses.requireOwnedBusiness(req.user.id, safeUpdates.businessId);
+    }
+    await store.updateLead(lead.id, safeUpdates);
+    const updated = await ownerLead(req.user.id, req.params.id);
+    res.json({ ...updated, marketingEmailStatus: consentStatus(updated) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.post('/leads/:id/marketing-consent', async (req, res, next) => {
