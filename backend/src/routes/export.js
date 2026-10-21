@@ -28,7 +28,7 @@ router.get('/leads', async (req, res, next) => {
     const leads = await store.getLeadsByOwner(req.user.id);
 
     if (format === 'csv') {
-      const csv = jsonToCsv(leads, ['id', 'name', 'email', 'company', 'status', 'score', 'source', 'createdAt']);
+      const csv = jsonToCsv(leads, ['id', 'businessId', 'name', 'email', 'company', 'status', 'score', 'source', 'createdAt']);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename=leads.csv');
       return res.send(csv);
@@ -46,7 +46,7 @@ router.get('/campaigns', async (req, res, next) => {
     const campaigns = await store.getCampaignsByOwner(req.user.id);
 
     if (format === 'csv') {
-      const csv = jsonToCsv(campaigns, ['id', 'name', 'status', 'budget', 'spent', 'channels', 'createdAt']);
+      const csv = jsonToCsv(campaigns, ['id', 'businessId', 'name', 'status', 'budget', 'spent', 'channels', 'createdAt']);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename=campaigns.csv');
       return res.send(csv);
@@ -64,7 +64,7 @@ router.get('/content', async (req, res, next) => {
     const content = await store.getContentByOwner(req.user.id);
 
     if (format === 'csv') {
-      const csv = jsonToCsv(content, ['id', 'title', 'type', 'status', 'language', 'createdAt']);
+      const csv = jsonToCsv(content, ['id', 'businessId', 'title', 'type', 'status', 'language', 'createdAt']);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename=content.csv');
       return res.send(csv);
@@ -79,9 +79,10 @@ router.get('/content', async (req, res, next) => {
 router.get('/backup', async (req, res, next) => {
   try {
     const owner = req.user.id;
-    const [user, preferences, campaigns, content, leads, subscriptions] = await Promise.all([
+    const [user, preferences, businesses, campaigns, content, leads, subscriptions] = await Promise.all([
       store.findUserById(owner),
       getUserPreferences(owner),
+      store.getBusinessesByOwner(owner),
       store.getCampaignsByOwner(owner),
       store.getContentByOwner(owner),
       store.getLeadsByOwner(owner),
@@ -90,11 +91,12 @@ router.get('/backup', async (req, res, next) => {
 
     const backup = {
       exportedAt: new Date().toISOString(),
-      version: '2.0',
+      version: '2.1',
       scope: 'authenticated-customer-only',
       data: {
         user: safeUser(user),
         preferences,
+        businesses,
         campaigns,
         content,
         leads,
