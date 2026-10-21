@@ -17,6 +17,8 @@ export default function PaidAdvertising() {
   const feePct = useMemo(() => ((policy?.serviceFeeBps || 500) / 100).toFixed(1), [policy])
   const projectedFee = Math.max(0.5, limit * ((policy?.serviceFeeBps || 500) / 10000))
   const projectedMedia = Math.max(0, limit - projectedFee)
+  const managedProviders = Array.isArray(policy?.managedProviders) ? policy.managedProviders : []
+  const selectedProviderReady = managedProviders.includes(provider)
 
   const load = async () => {
     const res = await api.get('/paid-ads')
@@ -31,11 +33,11 @@ export default function PaidAdvertising() {
     try {
       const res = await api.post('/paid-ads', {
         provider,
-        enabled,
+        enabled: selectedProviderReady ? enabled : false,
         totalBudgetCents: Math.round(limit * 100),
       })
       setBudgets((prev) => [res.data, ...prev])
-      addToast('Paid advertising budget created.', 'success')
+      addToast(selectedProviderReady ? 'Paid advertising budget created.' : 'Budget saved. Live managed ads are not available for this provider yet.', 'success')
     } catch (err) {
       addToast(err.response?.data?.error || 'Unable to create budget.', 'error')
     } finally {
@@ -44,6 +46,11 @@ export default function PaidAdvertising() {
   }
 
   const toggleBudget = async (budget) => {
+    const providerReady = managedProviders.includes(budget.provider)
+    if (!providerReady && !budget.enabled) {
+      addToast('This provider is not approved for managed paid advertising yet.', 'warning')
+      return
+    }
     try {
       const res = await api.patch('/paid-ads/' + budget.id, { enabled: !budget.enabled })
       setBudgets((prev) => prev.map((item) => item.id === budget.id ? res.data : item))
@@ -71,12 +78,17 @@ export default function PaidAdvertising() {
     }
   }
 
+  const changeProvider = (event) => {
+    setProvider(event.target.value)
+    setEnabled(false)
+  }
+
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
         <h2 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Paid Advertising Control</h2>
         <p className="mt-1" style={{ color: 'var(--text-muted)' }}>
-          Set an all-in spend ceiling before any paid ad can run. TrillionAI keeps a small disclosed service fee and the remaining amount becomes the external media cap.
+          Set an all-in spend ceiling before any paid ad can run. TrillionAI charges a management fee only after the selected provider has a production-approved managed-billing adapter with verified hard-stop controls.
         </p>
       </div>
 
@@ -84,13 +96,16 @@ export default function PaidAdvertising() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="font-semibold" style={{ color: 'var(--gold-bright)' }}>Paid advertising</div>
-            <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Nothing can activate while this switch is off.</div>
+            <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+              {selectedProviderReady ? 'Managed provider controls are available. Nothing can activate while this switch is off.' : 'Managed paid advertising is not production-ready for this provider. You can save a disabled budget, but you cannot be charged or launch ads.'}
+            </div>
           </div>
           <button
             type="button"
             aria-pressed={enabled}
+            disabled={!selectedProviderReady}
             onClick={() => setEnabled((v) => !v)}
-            className="relative h-7 w-12 rounded-full"
+            className="relative h-7 w-12 rounded-full disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: enabled ? 'var(--gold)' : 'var(--line)' }}
           >
             <span className={'absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ' + (enabled ? 'translate-x-6' : 'translate-x-1')} />
@@ -99,11 +114,14 @@ export default function PaidAdvertising() {
 
         <div>
           <label className="text-sm" style={{ color: 'var(--text-muted)' }}>Provider</label>
-          <select value={provider} onChange={(e) => setProvider(e.target.value)} className="block mt-1 px-3 py-2"
+          <select value={provider} onChange={changeProvider} className="block mt-1 px-3 py-2"
             style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--gold)' }}>
             <option value="meta">Meta / Facebook / Instagram Ads</option>
             <option value="google">Google Ads</option>
           </select>
+          {!selectedProviderReady && (
+            <p className="text-sm mt-2 text-amber-600">Provider connection and hard-stop enforcement are not externally verified for managed paid ads. Fee checkout and activation stay disabled.</p>
+          )}
         </div>
 
         <div>
@@ -130,52 +148,58 @@ export default function PaidAdvertising() {
 
         <div className="flex items-start gap-2 text-sm p-3 rounded-lg" style={{ background: 'rgba(196,163,90,0.08)', color: 'var(--text-muted)' }}>
           <ShieldCheck size={18} className="shrink-0" />
-          <span>Strict hard stop is mandatory. TrillionAI will not enable a live provider unless the provider adapter can enforce budget caps and pause campaigns. Ads you run directly outside TrillionAI are outside this limit and must be paid by you separately.</span>
+          <span>Strict hard stop is mandatory. TrillionAI will not charge its paid-ad management fee or enable a live provider unless the provider adapter can enforce budget caps and pause campaigns. Ads you run directly outside TrillionAI are outside this limit and must be paid by you separately.</span>
         </div>
 
         <button onClick={createBudget} disabled={busy} className="px-4 py-2 text-sm uppercase tracking-widest" style={{ background: 'var(--gold)', color: '#140f08' }}>
-          {busy ? 'Saving…' : 'Create budget'}
+          {busy ? 'Saving…' : selectedProviderReady ? 'Create budget' : 'Save disabled budget'}
         </button>
       </div>
 
       <div className="space-y-3">
-        {budgets.map((budget) => (
-          <div key={budget.id} className="p-5 rounded-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
-            <div className="flex flex-wrap justify-between gap-4">
-              <div>
-                <div className="font-semibold capitalize" style={{ color: 'var(--gold-bright)' }}>{budget.provider} paid ads</div>
-                <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                  Total ${dollars(budget.totalBudgetCents)} · service fee ${dollars(budget.serviceFeeCents)} · media cap ${dollars(budget.mediaSpendCapCents)}
+        {budgets.map((budget) => {
+          const providerReady = managedProviders.includes(budget.provider)
+          return (
+            <div key={budget.id} className="p-5 rounded-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+              <div className="flex flex-wrap justify-between gap-4">
+                <div>
+                  <div className="font-semibold capitalize" style={{ color: 'var(--gold-bright)' }}>{budget.provider} paid ads</div>
+                  <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                    Total ${dollars(budget.totalBudgetCents)} · service fee ${dollars(budget.serviceFeeCents)} · media cap ${dollars(budget.mediaSpendCapCents)}
+                  </div>
+                  <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                    Remaining media budget: ${dollars(budget.remainingMediaBudgetCents)} · Status: {budget.status}
+                  </div>
+                  {!providerReady && (
+                    <div className="text-sm mt-2 text-amber-600">Managed provider adapter is not production-ready. No new management-fee checkout or ad activation is permitted.</div>
+                  )}
                 </div>
-                <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                  Remaining media budget: ${dollars(budget.remainingMediaBudgetCents)} · Status: {budget.status}
-                </div>
+                <button onClick={() => toggleBudget(budget)} disabled={!providerReady && !budget.enabled} className="inline-flex items-center gap-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                  {budget.enabled ? <PauseCircle size={18} /> : <PlayCircle size={18} />}
+                  {budget.enabled ? 'Turn off' : 'Turn on'}
+                </button>
               </div>
-              <button onClick={() => toggleBudget(budget)} className="inline-flex items-center gap-2 text-sm">
-                {budget.enabled ? <PauseCircle size={18} /> : <PlayCircle size={18} />}
-                {budget.enabled ? 'Turn off' : 'Turn on'}
-              </button>
-            </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              {budget.enabled && !budget.serviceFeePaidAt && (
-                <button onClick={() => payFee(budget)} className="px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--gold)', color: 'var(--gold-bright)' }}>
-                  <DollarSign size={15} className="inline mr-1" /> Pay service fee
-                </button>
-              )}
-              {budget.enabled && budget.serviceFeePaidAt && budget.status !== 'hard_stopped' && (
-                <button onClick={() => activate(budget)} className="px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--cyan)', color: 'var(--cyan)' }}>
-                  Activate managed ads
-                </button>
-              )}
-              {budget.status === 'hard_stopped' && (
-                <span className="inline-flex items-center gap-2 text-sm text-red-500">
-                  <AlertTriangle size={16} /> Hard stopped because the spend limit was reached.
-                </span>
-              )}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {providerReady && budget.enabled && !budget.serviceFeePaidAt && (
+                  <button onClick={() => payFee(budget)} className="px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--gold)', color: 'var(--gold-bright)' }}>
+                    <DollarSign size={15} className="inline mr-1" /> Pay service fee
+                  </button>
+                )}
+                {providerReady && budget.enabled && budget.serviceFeePaidAt && budget.status !== 'hard_stopped' && (
+                  <button onClick={() => activate(budget)} className="px-3 py-2 text-sm rounded-lg" style={{ border: '1px solid var(--cyan)', color: 'var(--cyan)' }}>
+                    Activate managed ads
+                  </button>
+                )}
+                {budget.status === 'hard_stopped' && (
+                  <span className="inline-flex items-center gap-2 text-sm text-red-500">
+                    <AlertTriangle size={16} /> Hard stopped because the spend limit was reached.
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
