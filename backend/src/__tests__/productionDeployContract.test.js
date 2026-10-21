@@ -7,9 +7,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const workflow = readFileSync(resolve(here, '../../../.github/workflows/deploy-production.yml'), 'utf8');
 
 describe('production deployment contract', () => {
-  test('requires Stripe API and webhook verification secrets before Fly deploy', () => {
+  test('requires Stripe API access and verifies webhook readiness after deploy', () => {
     expect(workflow).toContain('STRIPE_SECRET_KEY');
-    expect(workflow).toContain('STRIPE_WEBHOOK_SECRET');
+    expect(workflow).toContain('stripeWebhookVerificationConfigured');
+    expect(workflow).toContain('stripeApiConfigured');
   });
 
   test('requires a real production email transport before Fly deploy', () => {
