@@ -28,11 +28,6 @@ import Translation from './pages/Translation'
 import LandingPage from './pages/LandingPage'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import TermsOfService from './pages/TermsOfService'
-import Apps from './pages/Apps'
-import AgentsPage from './pages/AgentsPage'
-import Tools from './pages/Tools'
-import Games from './pages/Games'
-import Software from './pages/Software'
 import ProductMarketing from './pages/ProductMarketing'
 import AIModels from './pages/AIModels'
 import Connectors from './pages/Connectors'
@@ -69,11 +64,6 @@ function AppRoutes() {
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
-      <Route path="/apps" element={<Apps />} />
-      <Route path="/agents" element={<AgentsPage />} />
-      <Route path="/tools" element={<Tools />} />
-      <Route path="/games" element={<Games />} />
-      <Route path="/software" element={<Software />} />
       <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="onboarding" element={<Onboarding />} />

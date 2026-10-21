@@ -37,7 +37,7 @@ export default function LandingPage() {
       <header className="studio-header">
         <div className="wrap">
           <Link className="studio-brand" to="/" aria-label="AI Marketing Agency home">
-            <img src="/appforge-logo.png" width="36" height="36" alt="" />
+            <img src="/marketing-logo.svg" width="36" height="36" alt="" />
             <span className="studio-brand-name"><strong>TrillionAI</strong><span>AI Marketing Agency</span></span>
           </Link>
           <nav className="studio-nav" aria-label="Primary">
@@ -86,7 +86,7 @@ export default function LandingPage() {
         <section className="studio-section"><div className="wrap"><div className="studio-card" style={{ textAlign: 'center', alignItems: 'center' }}><p className="studio-kicker">READY TO START?</p><h2 style={{ marginBottom: '0.5rem' }}>Build the first campaign around your real business</h2><p style={{ maxWidth: 720 }}>Create an account, choose a plan, describe the offer and start producing marketing work in one workspace.</p><div className="studio-actions" style={{ justifyContent: 'center' }}><Link className="studio-btn studio-btn-gold" to="/register">Create account</Link><Link className="studio-btn studio-btn-ghost" to="/login">Sign in</Link></div></div></div></section>
       </main>
 
-      <footer className="studio-footer"><div className="wrap"><div><div className="studio-brand" style={{ marginBottom: '0.8rem' }}><img src="/appforge-logo.png" width="28" height="28" alt="" /><span className="studio-brand-name"><strong>TrillionAI</strong><span>AI Marketing Agency</span></span></div><p className="fine">AI-assisted marketing software. External platform availability and results are not guaranteed.</p></div><div><div className="studio-mails"><a href="mailto:hello@trillionaitech.com">hello@trillionaitech.com</a><a href="mailto:support@trillionaitech.com">support@trillionaitech.com</a><Link to="/privacy">Privacy Policy</Link><Link to="/terms">Terms of Service</Link><Link to="/login">Customer sign in</Link><Link to="/register">Create account</Link></div><p className="fine" style={{ marginTop: '0.9rem' }}>© 2026 TrillionAI Tech</p></div></div></footer>
+      <footer className="studio-footer"><div className="wrap"><div><div className="studio-brand" style={{ marginBottom: '0.8rem' }}><img src="/marketing-logo.svg" width="28" height="28" alt="" /><span className="studio-brand-name"><strong>TrillionAI</strong><span>AI Marketing Agency</span></span></div><p className="fine">AI-assisted marketing software. External platform availability and results are not guaranteed.</p></div><div><div className="studio-mails"><a href="mailto:hello@trillionaitech.com">hello@trillionaitech.com</a><a href="mailto:support@trillionaitech.com">support@trillionaitech.com</a><Link to="/privacy">Privacy Policy</Link><Link to="/terms">Terms of Service</Link><Link to="/login">Customer sign in</Link><Link to="/register">Create account</Link></div><p className="fine" style={{ marginTop: '0.9rem' }}>© 2026 TrillionAI Tech</p></div></div></footer>
     </div>
   )
 }
