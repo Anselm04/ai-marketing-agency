@@ -9,12 +9,13 @@ import {
   LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
   FileText, Video, Users, TrendingUp, Settings, Scissors,
   Lock, LogOut, ChevronDown, Globe, Sun, Moon, Menu, X, ShoppingCart,
-  Cpu, Plug, Images, CalendarClock, BadgeDollarSign
+  Cpu, Plug, Images, CalendarClock, BadgeDollarSign, Building2
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard', label: 'Dashboard' },
+  { path: '/dashboard/onboarding', icon: Building2, label: 'Business Setup' },
   { path: '/dashboard/agents', icon: Bot, label: 'Agents' },
   { path: '/dashboard/campaigns', icon: Megaphone, label: 'Campaigns' },
   { path: '/dashboard/products', icon: ShoppingCart, label: 'Product Marketing' },
@@ -83,8 +84,8 @@ export default function Layout() {
         <div className="p-6 flex items-center gap-3" style={{ borderBottom: '1px solid var(--line)' }}>
           <img src="/appforge-logo.png" alt="" width="32" height="32" />
           <div>
-            <h1 className="text-xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>TrillionAI Tech</h1>
-            <p className="text-xs mt-1 tracking-widest uppercase" style={{ color: 'var(--cyan)' }}>Marketing</p>
+            <h1 className="text-xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>TrillionAI</h1>
+            <p className="text-xs mt-1 tracking-widest uppercase" style={{ color: 'var(--cyan)' }}>AI Marketing Agency</p>
           </div>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -148,9 +149,6 @@ export default function Layout() {
                 </button>
               </div>
             )}
-          </div>
-          <div className="text-xs mt-3 text-center" style={{ color: 'var(--text-dim)' }}>
-            Anselm Perkins, {t('founderCeo')}
           </div>
         </div>
       </aside>

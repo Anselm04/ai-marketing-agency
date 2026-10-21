@@ -2,6 +2,8 @@ import { generateAgentResponse } from './openaiService.js';
 import userVideoPublisherService from './userVideoPublisherService.js';
 
 const DEFAULT_PLATFORMS = ['TikTok', 'Instagram', 'YouTube'];
+const MIN_VERIFIED_OBSERVATIONS = 3;
+const MIN_VERIFIED_VIEWS = 100;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -29,11 +31,7 @@ function normalizePlatforms(platforms) {
 
 function fallbackClips({ transcript, brief, platforms, maxClips, sourceDurationSeconds }) {
   const text = String(transcript || brief || '').trim();
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
+  const sentences = text.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
   const count = clamp(maxClips || 6, 1, 12);
   const duration = Number(sourceDurationSeconds) > 0 ? Number(sourceDurationSeconds) : count * 45;
 
@@ -75,9 +73,7 @@ function normalizeClip(raw, index, platforms, sourceDurationSeconds) {
     durationSeconds: Math.max(8, Math.round(end - start)),
     platforms: normalizePlatforms(raw?.platforms?.length ? raw.platforms : platforms),
     caption: String(raw?.caption || raw?.hook || '').slice(0, 2200),
-    hashtags: Array.isArray(raw?.hashtags)
-      ? raw.hashtags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 15)
-      : [],
+    hashtags: Array.isArray(raw?.hashtags) ? raw.hashtags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 15) : [],
     qualityScore: clamp(Number(raw?.qualityScore) || 70, 0, 100),
     status: 'planned',
     mediaUrl: null,
@@ -86,24 +82,22 @@ function normalizeClip(raw, index, platforms, sourceDurationSeconds) {
   };
 }
 
+function verifiedPerformanceRows(performance = []) {
+  return (Array.isArray(performance) ? performance : []).filter((row) => (
+    row?.provenance?.kind === 'provider_verified'
+    && row?.provenance?.provider
+    && row?.provenance?.observedAt
+  ));
+}
+
 class ClippingAgencyService {
   validateRightsManifest(manifest = {}) {
     const errors = [];
-    if (manifest.confirmedOwnership !== true) {
-      errors.push('Content ownership or commercial-use permission must be confirmed.');
-    }
-    if (!Array.isArray(manifest.allowedPlatforms) || manifest.allowedPlatforms.length === 0) {
-      errors.push('At least one allowed publishing platform is required.');
-    }
-    if (!manifest.commercialUseAllowed) {
-      errors.push('Commercial use permission must be confirmed.');
-    }
-    if (manifest.expiresAt && Number.isNaN(new Date(manifest.expiresAt).getTime())) {
-      errors.push('Rights expiry date is invalid.');
-    }
-    if (manifest.expiresAt && new Date(manifest.expiresAt) <= new Date()) {
-      errors.push('Content rights have expired.');
-    }
+    if (manifest.confirmedOwnership !== true) errors.push('Content ownership or commercial-use permission must be confirmed.');
+    if (!Array.isArray(manifest.allowedPlatforms) || manifest.allowedPlatforms.length === 0) errors.push('At least one allowed publishing platform is required.');
+    if (!manifest.commercialUseAllowed) errors.push('Commercial use permission must be confirmed.');
+    if (manifest.expiresAt && Number.isNaN(new Date(manifest.expiresAt).getTime())) errors.push('Rights expiry date is invalid.');
+    if (manifest.expiresAt && new Date(manifest.expiresAt) <= new Date()) errors.push('Content rights have expired.');
     return { valid: errors.length === 0, errors };
   }
 
@@ -111,19 +105,13 @@ class ClippingAgencyService {
     const totalBudget = Math.max(0, Number(budget) || 0);
     const normalizedRate = clamp(Number(agencyRate) || 0.2, 0.05, 0.5);
     const agencyRevenue = Number((totalBudget * normalizedRate).toFixed(2));
-    return {
-      totalBudget,
-      agencyRate: normalizedRate,
-      agencyRevenue,
-      creatorPool: Number((totalBudget - agencyRevenue).toFixed(2)),
-    };
+    return { totalBudget, agencyRate: normalizedRate, agencyRevenue, creatorPool: Number((totalBudget - agencyRevenue).toFixed(2)) };
   }
 
   async generateClipPlan(input = {}) {
     const platforms = normalizePlatforms(input.platforms);
     const maxClips = clamp(Number(input.maxClips) || 6, 1, 12);
     const contextText = String(input.transcript || input.brief || '').slice(0, 18000);
-
     const prompt = [
       'Design a short-form clipping campaign from the supplied source material.',
       'Return JSON only with a top-level "clips" array.',
@@ -138,29 +126,23 @@ class ClippingAgencyService {
     ].join('\n');
 
     const ai = await generateAgentResponse('video', prompt, {
+      userId: input.owner || input.ownerId,
       campaignName: input.name,
       targetAudience: input.targetAudience,
       brandVoice: input.brandVoice,
     });
-
     const parsed = safeJson(ai?.content);
     const rawClips = Array.isArray(parsed?.clips) ? parsed.clips.slice(0, maxClips) : null;
     const clips = rawClips?.length
       ? rawClips.map((clip, index) => normalizeClip(clip, index, platforms, input.sourceDurationSeconds))
       : fallbackClips({ ...input, platforms, maxClips });
 
-    return {
-      generatedAt: new Date().toISOString(),
-      aiFallback: ai?.fallback === true || !rawClips?.length,
-      platforms,
-      clips,
-    };
+    return { generatedAt: new Date().toISOString(), aiFallback: ai?.fallback === true || !rawClips?.length, platforms, clips };
   }
 
   scheduleClips(clips = [], options = {}) {
     const startAt = options.startAt ? new Date(options.startAt) : new Date();
     const intervalMinutes = clamp(Number(options.intervalMinutes) || 180, 30, 1440);
-
     return clips.map((clip, index) => ({
       ...clip,
       scheduledAt: new Date(startAt.getTime() + index * intervalMinutes * 60_000).toISOString(),
@@ -171,7 +153,6 @@ class ClippingAgencyService {
   async publishClip(userId, clip = {}, publishingSettings = {}) {
     const results = [];
     const platforms = normalizePlatforms(clip.platforms);
-
     for (const platform of platforms) {
       results.push(await userVideoPublisherService.publish({
         userId,
@@ -183,13 +164,12 @@ class ClippingAgencyService {
         settings: publishingSettings[String(platform).toLowerCase()] || {},
       }));
     }
-
     return results;
   }
 
   async optimize(performance = [], campaign = {}) {
-    const normalized = Array.isArray(performance) ? performance : [];
-    const totals = normalized.reduce(
+    const verified = verifiedPerformanceRows(performance);
+    const totals = verified.reduce(
       (acc, row) => {
         acc.views += Number(row.views) || 0;
         acc.clicks += Number(row.clicks) || 0;
@@ -200,29 +180,37 @@ class ClippingAgencyService {
       { views: 0, clicks: 0, conversions: 0, revenue: 0 },
     );
 
+    if (verified.length < MIN_VERIFIED_OBSERVATIONS || totals.views < MIN_VERIFIED_VIEWS) {
+      return {
+        status: 'insufficient_verified_data',
+        generatedAt: new Date().toISOString(),
+        verifiedObservations: verified.length,
+        verifiedViews: totals.views,
+        minimumVerifiedObservations: MIN_VERIFIED_OBSERVATIONS,
+        minimumVerifiedViews: MIN_VERIFIED_VIEWS,
+        summary: null,
+        recommendations: null,
+        reason: 'Optimization requires provider-verified performance evidence and a minimum sample size.',
+      };
+    }
+
     const summary = {
       ...totals,
-      ctr: totals.views ? Number(((totals.clicks / totals.views) * 100).toFixed(2)) : 0,
-      conversionRate: totals.clicks
-        ? Number(((totals.conversions / totals.clicks) * 100).toFixed(2))
-        : 0,
-      roas: Number(campaign.budget) > 0
-        ? Number((totals.revenue / Number(campaign.budget)).toFixed(2))
-        : 0,
+      ctr: Number(((totals.clicks / totals.views) * 100).toFixed(2)),
+      conversionRate: totals.clicks ? Number(((totals.conversions / totals.clicks) * 100).toFixed(2)) : 0,
+      roas: Number(campaign.budget) > 0 ? Number((totals.revenue / Number(campaign.budget)).toFixed(2)) : null,
+      evidence: { kind: 'provider_verified', observations: verified.length },
     };
 
     const ai = await generateAgentResponse(
       'performance-optimizer',
-      'Recommend the next 3 actions for this clipping campaign. Focus on retention, hook testing, platform allocation, posting cadence, and conversion efficiency.',
-      { campaign: { name: campaign.name, platforms: campaign.platforms }, summary, performance: normalized.slice(-25) },
+      'Recommend the next 3 actions for this clipping campaign. Focus on retention, hook testing, platform allocation, posting cadence, and conversion efficiency. Use only the verified evidence supplied.',
+      { userId: campaign.owner || campaign.ownerId, campaign: { name: campaign.name, platforms: campaign.platforms }, summary, performance: verified.slice(-25) },
     );
 
-    return {
-      summary,
-      recommendations: ai?.content || 'Continue testing hooks and publish the highest-retention variants first.',
-      generatedAt: new Date().toISOString(),
-    };
+    return { status: 'verified_evidence', summary, recommendations: ai?.content || null, generatedAt: new Date().toISOString() };
   }
 }
 
+export { MIN_VERIFIED_OBSERVATIONS, MIN_VERIFIED_VIEWS, verifiedPerformanceRows };
 export default new ClippingAgencyService();

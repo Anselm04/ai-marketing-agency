@@ -1,6 +1,7 @@
 import express from 'express';
 import store from '../utils/store.js';
 import { getUserPreferences, saveUserPreferences } from '../services/accountMemoryService.js';
+import { deleteCustomerAccount } from '../services/accountLifecycleService.js';
 
 const router = express.Router();
 
@@ -16,13 +17,34 @@ router.patch('/profile', async (req, res) => {
   const current = await store.findUserById(req.user.id);
   if (!current) return res.status(404).json({ error: 'User not found' });
 
-  const { firstName, lastName, company } = req.body || {};
+  const stringFields = {
+    firstName: 100,
+    lastName: 100,
+    company: 180,
+    website: 500,
+    industry: 120,
+    companySize: 80,
+    targetAudience: 1000,
+    primaryOffer: 1000,
+    businessDescription: 3000,
+    primaryGoal: 1000,
+    preferredTone: 80,
+  };
+  const profilePatch = {};
+  for (const [key, max] of Object.entries(stringFields)) {
+    if (req.body?.[key] !== undefined) profilePatch[key] = String(req.body[key] || '').trim().slice(0, max);
+  }
+  if (Array.isArray(req.body?.goals)) {
+    profilePatch.goals = req.body.goals.map((goal) => String(goal).trim().slice(0, 300)).filter(Boolean).slice(0, 10);
+  }
+  if (req.body?.onboardingCompleted === true) {
+    profilePatch.onboardingCompletedAt = new Date().toISOString();
+  }
+
   const updated = await store.updateUser(req.user.id, {
     profile: {
       ...(current.profile || {}),
-      ...(firstName !== undefined ? { firstName: String(firstName).slice(0, 100) } : {}),
-      ...(lastName !== undefined ? { lastName: String(lastName).slice(0, 100) } : {}),
-      ...(company !== undefined ? { company: String(company).slice(0, 180) } : {}),
+      ...profilePatch,
     },
   });
 
@@ -79,6 +101,28 @@ router.get('/account-memory', async (req, res) => {
       subscriptions: subscriptions.length,
     },
   });
+});
+
+router.delete('/account', async (req, res, next) => {
+  try {
+    if (req.body?.confirmation !== 'DELETE') {
+      return res.status(400).json({
+        error: 'Type DELETE exactly to confirm permanent account deletion.',
+        code: 'account_deletion_confirmation_required',
+      });
+    }
+    const result = await deleteCustomerAccount({
+      userId: req.user.id,
+      password: req.body?.password,
+    });
+    return res.json({
+      success: true,
+      deleted: result.deleted,
+      cancelledStripeSubscriptions: result.cancelledStripeSubscriptions,
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.get('/integrations', (req, res) => {

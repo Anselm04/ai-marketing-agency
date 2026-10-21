@@ -3,20 +3,35 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { Layout, BarChart3, Users, FileText, Zap, Settings } from 'lucide-react';
 
+function limitLabel(value, unlimited) {
+  if (unlimited || value == null) return 'Unlimited';
+  return Number(value).toLocaleString();
+}
+
+function usageLabel(used, limit, unlimited) {
+  return `${Number(used || 0).toLocaleString()} / ${limitLabel(limit, unlimited)}`;
+}
+
+function verifiedMoney(value) {
+  return value == null ? 'Not verified' : `$${Number(value).toLocaleString()}`;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
+  const [usage, setUsage] = useState(null);
 
   useEffect(() => {
     api.get('/analytics').then(res => setStats(res.data)).catch(() => {});
+    api.get('/usage').then(res => setUsage(res.data)).catch(() => {});
   }, []);
 
   const navItems = [
-    { to: '/campaigns', label: 'Campaigns', icon: Zap },
-    { to: '/agents', label: 'Agents', icon: Layout },
-    { to: '/analytics', label: 'Analytics', icon: BarChart3 },
-    { to: '/content', label: 'Content', icon: FileText },
-    { to: '/crm', label: 'CRM', icon: Users },
-    { to: '/settings', label: 'Settings', icon: Settings },
+    { to: '/dashboard/campaigns', label: 'Campaigns', icon: Zap },
+    { to: '/dashboard/agents', label: 'Agents', icon: Layout },
+    { to: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
+    { to: '/dashboard/content', label: 'Content', icon: FileText },
+    { to: '/dashboard/crm', label: 'CRM', icon: Users },
+    { to: '/dashboard/settings', label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -34,15 +49,52 @@ export default function Dashboard() {
               <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.leads}</div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-              <div className="text-sm text-gray-500 dark:text-gray-400">Revenue</div>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">${stats.revenue?.toLocaleString() || 0}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Verified revenue</div>
+              <div className="text-xl font-bold text-green-600 dark:text-green-400">{verifiedMoney(stats.revenue)}</div>
+              {stats.revenue == null && Number(stats.reportedRevenue || 0) > 0 && (
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">${Number(stats.reportedRevenue).toLocaleString()} reported manually/unverified</div>
+              )}
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-              <div className="text-sm text-gray-500 dark:text-gray-400">Spend</div>
-              <div className="text-2xl font-bold text-red-600 dark:text-red-400">${stats.spend?.toLocaleString() || 0}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Verified spend</div>
+              <div className="text-xl font-bold text-red-600 dark:text-red-400">{verifiedMoney(stats.spend)}</div>
+              {stats.spend == null && Number(stats.reportedSpend || 0) > 0 && (
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">${Number(stats.reportedSpend).toLocaleString()} reported manually/unverified</div>
+              )}
             </div>
           </div>
         )}
+
+        {usage && (
+          <section className="mb-8" aria-labelledby="plan-usage-heading">
+            <div className="flex items-end justify-between gap-4 mb-3">
+              <div>
+                <h2 id="plan-usage-heading" className="text-lg font-semibold text-gray-900 dark:text-white">Plan usage</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{usage.plan} plan · measured usage</p>
+              </div>
+              <Link to="/dashboard/billing" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Manage plan</Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <div className="text-sm text-gray-500 dark:text-gray-400">AI tokens this month</div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white">{usageLabel(usage.usage?.aiTokensMonth, usage.limits?.monthlyAiTokens, usage.unlimited)}</div>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <div className="text-sm text-gray-500 dark:text-gray-400">Published posts today</div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white">{usageLabel(usage.usage?.socialPostsDay, usage.limits?.postsPerDay, usage.unlimited)}</div>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <div className="text-sm text-gray-500 dark:text-gray-400">Active campaigns</div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white">{usageLabel(usage.usage?.activeCampaigns, usage.limits?.campaigns, usage.unlimited)}</div>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <div className="text-sm text-gray-500 dark:text-gray-400">Team seats</div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white">{usageLabel(usage.usage?.teamSeatsUsed, usage.limits?.teamSeats, usage.unlimited)}</div>
+              </div>
+            </div>
+          </section>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {navItems.map(item => (
             <Link

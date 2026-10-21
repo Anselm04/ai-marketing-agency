@@ -7,6 +7,7 @@ import { OrchestratorProvider } from './context/OrchestratorContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
+import Onboarding from './pages/Onboarding'
 import Agents from './pages/Agents'
 import Campaigns from './pages/Campaigns'
 import Analytics from './pages/Analytics'
@@ -25,6 +26,8 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Translation from './pages/Translation'
 import LandingPage from './pages/LandingPage'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import TermsOfService from './pages/TermsOfService'
 import Apps from './pages/Apps'
 import AgentsPage from './pages/AgentsPage'
 import Tools from './pages/Tools'
@@ -58,13 +61,14 @@ function ProtectedRoute({ children }) {
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth()
-
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
       <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
       <Route path="/apps" element={<Apps />} />
       <Route path="/agents" element={<AgentsPage />} />
@@ -73,6 +77,7 @@ function AppRoutes() {
       <Route path="/software" element={<Software />} />
       <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
+        <Route path="onboarding" element={<Onboarding />} />
         <Route path="agents" element={<Agents />} />
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="products" element={<ProductMarketing />} />
