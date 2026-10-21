@@ -28,12 +28,17 @@ function settledError(result, label) {
  * Placeholder content is never persisted as if it were generated content.
  */
 class ProductMarketingService {
+  normalizeBudget(budget) {
+    return budget ?? 1000;
+  }
+
   async runMarketing({ productName, description, photos = [], platforms, targetAudience, budget, category, tone, ownerId }) {
+    const campaignBudget = this.normalizeBudget(budget);
     const productProfile = await this._analyzeProduct(productName, description, category, tone, targetAudience);
 
     const strategy = await generateCampaignStrategy(
       productProfile.name || productName || 'Product',
-      budget || 1000,
+      campaignBudget,
       platforms || ['TikTok', 'Instagram', 'Google'],
       productProfile.targetAudience || targetAudience || 'general consumers',
     );
@@ -80,7 +85,7 @@ class ProductMarketingService {
       description: productDesc,
       productProfile,
       platforms: allPlatforms,
-      budget: budget || 1000,
+      budget: campaignBudget,
       targetAudience: audience,
       category: category || 'other',
       tone: tone || 'professional',
