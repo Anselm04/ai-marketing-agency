@@ -17,7 +17,14 @@ function isBusinessScopedPath(url = '') {
     || url === '/crm/leads'
     || /^\/crm\/leads\/[^/]+$/.test(url)
     || url === '/content'
-    || /^\/content\/[^/]+$/.test(url);
+    || /^\/content\/[^/]+$/.test(url)
+    || url === '/clipping/campaigns'
+    || url === '/media-library'
+    || url === '/media-library/upload'
+    || url === '/media-library/compose'
+    || url === '/auto-posting'
+    || /^\/auto-posting\/[^/]+$/.test(url)
+    || url === '/paid-ads';
 }
 
 api.interceptors.request.use((config) => {
