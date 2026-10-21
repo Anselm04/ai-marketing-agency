@@ -48,6 +48,8 @@ jobs:
             DATABASE_URL
             JWT_SECRET
             TRILLION_ECOSYSTEM_SHARED_SECRET
+            STRIPE_SECRET_KEY
+            STRIPE_WEBHOOK_SECRET
           )
           missing=0
           for name in "${required[@]}"; do
@@ -69,8 +71,23 @@ jobs:
             missing=1
           fi
 
+          email_ready=0
+          for name in RESEND_API_KEY SENDGRID_API_KEY SMTP_HOST; do
+            if grep -Fxq "$name" <<<"$SECRET_NAMES"; then
+              email_ready=1
+              break
+            fi
+          done
+          if grep -Fxq "AWS_SES_ACCESS_KEY" <<<"$SECRET_NAMES" && grep -Fxq "AWS_SES_SECRET_KEY" <<<"$SECRET_NAMES"; then
+            email_ready=1
+          fi
+          if [ "$email_ready" -ne 1 ]; then
+            echo "No production email transport is configured."
+            missing=1
+          fi
+
           if [ "$missing" -ne 0 ]; then
-            echo "Marketing production deploy blocked until database, auth, AppForge bridge, and AI runtime are configured."
+            echo "Marketing production deploy blocked until database, auth, ecosystem bridge, billing, AI, and email runtime are configured."
             exit 1
           fi
 
