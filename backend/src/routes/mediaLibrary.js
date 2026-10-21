@@ -3,8 +3,10 @@ import store from '../utils/store.js';
 import { uploadMemory } from '../middleware/upload.js';
 import { isS3Configured, uploadPrivateToS3, getPrivateSignedDownloadUrl } from '../services/uploadService.js';
 import mediaComposerService from '../services/mediaComposerService.js';
+import { createBusinessWorkspaceService } from '../services/businessWorkspaceService.js';
 
 const router = express.Router();
+const businesses = createBusinessWorkspaceService(store);
 
 function ownerId(req) {
   return req.user?.id || req.userId;
@@ -16,77 +18,98 @@ function mediaType(mimetype = '') {
   return 'other';
 }
 
-router.get('/', async (req, res) => {
-  const owner = ownerId(req);
-  const records = (await store.getContentByOwner(owner))
-    .filter((item) => ['media_asset', 'generated_video'].includes(item.kind))
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  const assets = await Promise.all(records.map(async (item) => {
-    if (item.kind === 'media_asset' && item.storageKey && item.storageVisibility === 'private') {
-      return {
-        ...item,
-        url: await getPrivateSignedDownloadUrl(item.storageKey, 15 * 60),
-        urlExpiresInSeconds: 15 * 60,
-      };
-    }
-    return item;
-  }));
-  res.json({ assets });
-});
-
-router.post('/upload', uploadMemory.array('files', 20), async (req, res) => {
-  if (!req.files?.length) return res.status(400).json({ error: 'Choose at least one photo or video' });
-  if (!isS3Configured()) return res.status(503).json({ error: 'Durable S3-compatible storage is required for the media library' });
-
-  const owner = ownerId(req);
-  const created = [];
-
-  for (const file of req.files) {
-    const type = mediaType(file.mimetype);
-    if (!['image', 'video'].includes(type)) continue;
-
-    const safeName = String(file.originalname || 'media')
-      .replace(/[^a-zA-Z0-9._-]+/g, '-')
-      .slice(-120);
-    const key = `media-library/${owner}/${Date.now()}-${store._id()}-${safeName}`;
-    await uploadPrivateToS3(key, file.buffer, file.mimetype);
-
-    const item = await store.createContent({
-      kind: 'media_asset',
-      owner,
-      mediaType: type,
-      originalName: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size,
-      url: null,
-      storageKey: key,
-      storageVisibility: 'private',
-      source: 'user_album_picker',
-      createdAt: new Date().toISOString(),
-    });
-    created.push(item);
-  }
-
-  if (!created.length) return res.status(400).json({ error: 'No supported photo or video files were selected' });
-  res.status(201).json({ assets: created });
-});
-
-router.post('/compose', async (req, res) => {
-  const owner = ownerId(req);
-  const assetIds = Array.isArray(req.body?.assetIds) ? req.body.assetIds.map(String) : [];
-  if (!assetIds.length) return res.status(400).json({ error: 'assetIds must be a non-empty array' });
-
-  const all = await store.getContentByOwner(owner);
-  const assets = assetIds
-    .map((id) => all.find((item) => String(item.id) === id && item.owner === owner && item.kind === 'media_asset'))
-    .filter(Boolean);
-
-  if (assets.length !== assetIds.length) {
-    return res.status(404).json({ error: 'One or more selected media assets were not found' });
-  }
-
+router.get('/', async (req, res, next) => {
   try {
+    const owner = ownerId(req);
+    const businessId = req.query.businessId ? String(req.query.businessId) : null;
+    if (businessId) await businesses.requireOwnedBusiness(owner, businessId);
+    const records = businesses.filterByBusiness(
+      await store.getContentByOwner(owner),
+      businessId,
+    )
+      .filter((item) => ['media_asset', 'generated_video'].includes(item.kind))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const assets = await Promise.all(records.map(async (item) => {
+      if (item.kind === 'media_asset' && item.storageKey && item.storageVisibility === 'private') {
+        return {
+          ...item,
+          url: await getPrivateSignedDownloadUrl(item.storageKey, 15 * 60),
+          urlExpiresInSeconds: 15 * 60,
+        };
+      }
+      return item;
+    }));
+    res.json({ assets });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/upload', uploadMemory.array('files', 20), async (req, res, next) => {
+  try {
+    if (!req.files?.length) return res.status(400).json({ error: 'Choose at least one photo or video' });
+    if (!isS3Configured()) return res.status(503).json({ error: 'Durable S3-compatible storage is required for the media library' });
+
+    const owner = ownerId(req);
+    const businessId = req.body?.businessId || null;
+    if (businessId) await businesses.requireOwnedBusiness(owner, businessId);
+    const created = [];
+
+    for (const file of req.files) {
+      const type = mediaType(file.mimetype);
+      if (!['image', 'video'].includes(type)) continue;
+
+      const safeName = String(file.originalname || 'media')
+        .replace(/[^a-zA-Z0-9._-]+/g, '-')
+        .slice(-120);
+      const key = `media-library/${owner}/${Date.now()}-${store._id()}-${safeName}`;
+      await uploadPrivateToS3(key, file.buffer, file.mimetype);
+
+      const item = await store.createContent({
+        kind: 'media_asset',
+        owner,
+        ...(businessId ? { businessId } : {}),
+        mediaType: type,
+        originalName: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        url: null,
+        storageKey: key,
+        storageVisibility: 'private',
+        source: 'user_album_picker',
+        createdAt: new Date().toISOString(),
+      });
+      created.push(item);
+    }
+
+    if (!created.length) return res.status(400).json({ error: 'No supported photo or video files were selected' });
+    res.status(201).json({ assets: created });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/compose', async (req, res, next) => {
+  try {
+    const owner = ownerId(req);
+    const businessId = req.body?.businessId || null;
+    if (businessId) await businesses.requireOwnedBusiness(owner, businessId);
+    const assetIds = Array.isArray(req.body?.assetIds) ? req.body.assetIds.map(String) : [];
+    if (!assetIds.length) return res.status(400).json({ error: 'assetIds must be a non-empty array' });
+
+    const all = await store.getContentByOwner(owner);
+    const assets = assetIds
+      .map((id) => all.find((item) => String(item.id) === id && item.owner === owner && item.kind === 'media_asset'))
+      .filter(Boolean);
+
+    if (assets.length !== assetIds.length) {
+      return res.status(404).json({ error: 'One or more selected media assets were not found' });
+    }
+    if (businessId && assets.some((item) => item.businessId && item.businessId !== businessId)) {
+      return res.status(409).json({ error: 'Selected media belongs to a different business workspace.' });
+    }
+
     const output = await mediaComposerService.compose({
       ownerId: owner,
       assets,
@@ -98,6 +121,7 @@ router.post('/compose', async (req, res) => {
     const generated = await store.createContent({
       kind: 'generated_video',
       owner,
+      ...(businessId ? { businessId } : {}),
       mediaType: 'video',
       originalName: 'TrillionAI-generated-video.mp4',
       mimetype: output.mimetype,
@@ -112,7 +136,7 @@ router.post('/compose', async (req, res) => {
 
     res.status(201).json({ video: generated });
   } catch (error) {
-    res.status(422).json({ error: error.message });
+    next(error);
   }
 });
 
