@@ -33,6 +33,51 @@ function stripeSubscriptionPatch(stripeSubscription, current = {}) {
   };
 }
 
+export function stripeSubscriptionGrant(stripeSubscription, current = {}) {
+  if (!stripeSubscription?.id) return null;
+  const userId = stripeSubscription.metadata?.marketingUserId || current.userId || current.user || null;
+  const priceId = stripeSubscription.items?.data?.[0]?.price?.id || null;
+  const item = findItem({
+    id: stripeSubscription.metadata?.itemId || current.plan,
+    lookup_key: stripeSubscription.metadata?.lookup_key || current.lookup_key,
+    priceId,
+  });
+  if (!userId || !item?.interval) return null;
+
+  return {
+    userId,
+    user: userId,
+    plan: item.id,
+    source: 'stripe',
+    lookup_key: item.lookup_key,
+    unlimited: false,
+    lifetimeAccess: false,
+    accessMode: 'subscription',
+    expiresAt: null,
+    stripeCheckoutSessionId: current.stripeCheckoutSessionId || null,
+    ...stripeSubscriptionPatch(stripeSubscription, current),
+  };
+}
+
+async function syncStripeSubscription(stripeSubscription) {
+  let current = null;
+  const metadataUserId = stripeSubscription.metadata?.marketingUserId || null;
+  if (metadataUserId) {
+    const subscriptions = await store.getSubscriptionsByUser(metadataUserId);
+    current = subscriptions.find((sub) => sub.stripeSubscriptionId === stripeSubscription.id)
+      || subscriptions.find((sub) => sub.source === 'stripe')
+      || null;
+  } else {
+    const subscriptions = await store.getSubscriptions();
+    current = subscriptions.find((sub) => sub.stripeSubscriptionId === stripeSubscription.id) || null;
+  }
+
+  const grant = stripeSubscriptionGrant(stripeSubscription, current || {});
+  if (!grant) return null;
+  if (current) return store.updateSubscription(current.id, grant);
+  return store.createSubscription(grant);
+}
+
 export function getPlans(req, res) {
   res.json(CATALOG.plans);
 }
@@ -167,18 +212,12 @@ export async function stripeWebhookHandler(req, res) {
       }
     }
 
-    if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
-      const stripeSubscription = event.data.object;
-      const userId = stripeSubscription.metadata?.marketingUserId;
-      if (userId) {
-        const subscriptions = await store.getSubscriptionsByUser(userId);
-        const current = subscriptions.find(
-          (sub) => sub.stripeSubscriptionId === stripeSubscription.id || sub.source === 'stripe',
-        );
-        if (current) {
-          await store.updateSubscription(current.id, stripeSubscriptionPatch(stripeSubscription, current));
-        }
-      }
+    if (
+      event.type === 'customer.subscription.created'
+      || event.type === 'customer.subscription.updated'
+      || event.type === 'customer.subscription.deleted'
+    ) {
+      await syncStripeSubscription(event.data.object);
     }
 
     return res.json({ received: true });
