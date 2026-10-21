@@ -14,7 +14,7 @@ export const CATALOG = {
       interval: 'month',
       credits: null,
       paymentLink: 'https://buy.stripe.com/fZucN6ca51oe3ejaClao807',
-      features: { agents: 3, campaigns: 2, postsPerDay: 10, teamSeats: 1 },
+      features: { agents: 3, campaigns: 2, postsPerDay: 10 },
     },
     {
       id: 'growth',
@@ -26,7 +26,7 @@ export const CATALOG = {
       interval: 'month',
       credits: null,
       paymentLink: 'https://buy.stripe.com/eVqeVegql1oe027dOxao808',
-      features: { agents: 8, campaigns: 10, postsPerDay: 50, teamSeats: 3 },
+      features: { agents: 8, campaigns: 10, postsPerDay: 50 },
     },
     {
       id: 'agency',
@@ -38,7 +38,7 @@ export const CATALOG = {
       interval: 'month',
       credits: null,
       paymentLink: 'https://buy.stripe.com/00wcN6gqlaYO5mrbGpao809',
-      features: { agents: 14, campaigns: 25, postsPerDay: 100, teamSeats: 10 },
+      features: { agents: 14, campaigns: 25, postsPerDay: 100 },
     },
     {
       id: 'enterprise',
@@ -50,7 +50,7 @@ export const CATALOG = {
       interval: 'month',
       credits: null,
       paymentLink: 'https://buy.stripe.com/00wdRafmhd6Wg15bGpao80a',
-      features: { agents: 50, campaigns: 100, postsPerDay: 500, teamSeats: 25 },
+      features: { agents: 50, campaigns: 100, postsPerDay: 500 },
     },
   ],
   credits: [

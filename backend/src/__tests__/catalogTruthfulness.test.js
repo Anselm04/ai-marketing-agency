@@ -7,6 +7,7 @@ describe('commercial catalog truthfulness', () => {
       expect(plan.features).not.toHaveProperty('languages');
       expect(plan.features).not.toHaveProperty('apiAccess');
       expect(plan.features).not.toHaveProperty('whiteLabel');
+      expect(plan.features).not.toHaveProperty('teamSeats');
     }
   });
 });

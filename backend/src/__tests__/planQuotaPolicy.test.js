@@ -7,9 +7,9 @@ describe('plan quota policy', () => {
       agents: 3,
       campaigns: 2,
       postsPerDay: 10,
-      teamSeats: 1,
       monthlyAiTokens: 1_000_000,
     }));
+    expect(getPlanLimits('starter')).not.toHaveProperty('teamSeats');
   });
 
   test('higher plans have monotonically larger operating limits', () => {
@@ -22,7 +22,6 @@ describe('plan quota policy', () => {
     expect(growth.campaigns).toBeGreaterThan(starter.campaigns);
     expect(agency.monthlyAiTokens).toBeGreaterThan(growth.monthlyAiTokens);
     expect(enterprise.postsPerDay).toBeGreaterThan(agency.postsPerDay);
-    expect(enterprise.teamSeats).toBeGreaterThan(agency.teamSeats);
   });
 
   test('agent access is limited to the number advertised by the plan', () => {

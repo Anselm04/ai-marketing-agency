@@ -35,7 +35,6 @@ const navItems = [
   { path: '/dashboard/ai-models', icon: Cpu, label: 'AI Models' },
   { path: '/dashboard/connectors', icon: Plug, label: 'Connectors' },
   { path: '/dashboard/settings', icon: Settings, label: 'Settings' },
-  { path: '/dashboard/team', icon: Users, label: 'Team' },
   { path: '/dashboard/admin', icon: Lock, labelKey: 'admin', label: 'Admin', ownerOnly: true },
 ]
 

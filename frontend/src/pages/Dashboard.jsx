@@ -74,7 +74,7 @@ export default function Dashboard() {
               </div>
               <Link to="/dashboard/billing" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Manage plan</Link>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="text-sm text-gray-500 dark:text-gray-400">AI tokens this month</div>
                 <div className="text-xl font-bold text-gray-900 dark:text-white">{usageLabel(usage.usage?.aiTokensMonth, usage.limits?.monthlyAiTokens, usage.unlimited)}</div>
@@ -86,10 +86,6 @@ export default function Dashboard() {
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="text-sm text-gray-500 dark:text-gray-400">Active campaigns</div>
                 <div className="text-xl font-bold text-gray-900 dark:text-white">{usageLabel(usage.usage?.activeCampaigns, usage.limits?.campaigns, usage.unlimited)}</div>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <div className="text-sm text-gray-500 dark:text-gray-400">Team seats</div>
-                <div className="text-xl font-bold text-gray-900 dark:text-white">{usageLabel(usage.usage?.teamSeatsUsed, usage.limits?.teamSeats, usage.unlimited)}</div>
               </div>
             </div>
           </section>

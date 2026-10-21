@@ -234,7 +234,6 @@ export default function Billing() {
                 <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.agents} AI agents</li>
                 <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.campaigns} campaigns</li>
                 <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.postsPerDay} posts/day</li>
-                <li className="flex items-center gap-2 text-sm text-gray-600"><Check size={16} className="text-green-500" />{features.teamSeats} team seats</li>
               </ul>
               <button
                 onClick={() => handleCheckout(plan)}

@@ -18,7 +18,6 @@ export const PLAN_LIMITS = Object.freeze(Object.fromEntries(
       agents: plan.features.agents,
       campaigns: plan.features.campaigns,
       postsPerDay: plan.features.postsPerDay,
-      teamSeats: plan.features.teamSeats,
       monthlyAiTokens: AI_TOKEN_LIMITS[plan.id],
     }),
   ]),
@@ -30,7 +29,6 @@ export function getPlanLimits(plan, unlimited = false) {
       agents: Infinity,
       campaigns: Infinity,
       postsPerDay: Infinity,
-      teamSeats: Infinity,
       monthlyAiTokens: Infinity,
     };
   }
@@ -96,12 +94,11 @@ export async function assertCampaignQuota(userId, requested = 1) {
   return { ...context, quota: result };
 }
 
-export async function assertTeamSeatQuota(ownerUserId, currentMembers, pendingInvites = 0, requested = 1) {
-  const context = await getUserPlanContext(ownerUserId);
-  const used = Math.max(0, Number(currentMembers) || 0) + Math.max(0, Number(pendingInvites) || 0);
-  const result = checkQuota({ used, requested, limit: context.limits.teamSeats });
-  if (!result.allowed) throw quotaError('team seats', result, context.plan);
-  return { ...context, quota: result };
+export async function assertTeamSeatQuota() {
+  throw Object.assign(
+    new Error('Team collaboration is not available until shared-workspace tenancy is production-ready.'),
+    { status: 503, code: 'team_collaboration_unavailable' },
+  );
 }
 
 export async function assertDailyPostQuota(userId, requested = 1, now = new Date()) {
