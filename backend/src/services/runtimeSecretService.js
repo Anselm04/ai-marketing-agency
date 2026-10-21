@@ -45,6 +45,14 @@ export async function getStripeWebhookSecret({ env = process.env, query = null }
   }
 }
 
+export async function hydrateStripeWebhookSecret({ env = process.env, query = null } = {}) {
+  if (String(env.STRIPE_WEBHOOK_SECRET || '').trim()) return true;
+  const secret = await getStripeWebhookSecret({ env, query });
+  if (!secret) return false;
+  env.STRIPE_WEBHOOK_SECRET = secret;
+  return true;
+}
+
 export async function stripeWebhookVerificationConfigured(options = {}) {
   return Boolean(await getStripeWebhookSecret(options));
 }
