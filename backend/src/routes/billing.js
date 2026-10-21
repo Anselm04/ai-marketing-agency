@@ -1,10 +1,15 @@
 import express from 'express';
 import Stripe from 'stripe';
 import store from '../utils/store.js';
-import { CATALOG, findItem, publicCatalog } from '../config/stripeCatalog.js';
+import { CATALOG, findItem, isCatalogItemPurchasable, publicCatalog } from '../config/stripeCatalog.js';
 import { redeemGodCodeForUser, REDEEM_FAIL, normalizeSubscriptionAccess } from '../services/godCodeService.js';
 import { markServiceFeePaid } from '../services/paidAdvertisingService.js';
 import { cancelSubscription, resumeSubscription } from '../services/stripeService.js';
+import {
+  claimStripeWebhookEvent,
+  grantUserCredits,
+  releaseStripeWebhookEvent,
+} from '../services/billingPersistence.js';
 
 const router = express.Router();
 
@@ -41,6 +46,12 @@ export async function checkoutHandler(req, res) {
   const { lookup_key, priceId, id } = req.body || {};
   const item = findItem({ lookup_key, priceId, id });
   if (!item) return res.status(400).json({ error: 'Unknown plan' });
+  if (!isCatalogItemPurchasable(item)) {
+    return res.status(409).json({
+      error: item.unavailableReason || 'This item is not currently available for purchase.',
+      code: 'catalog_item_unavailable',
+    });
+  }
 
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) {
@@ -124,7 +135,11 @@ export async function stripeWebhookHandler(req, res) {
     return res.status(400).json({ error: 'Invalid Stripe webhook signature' });
   }
 
+  let claimed = false;
   try {
+    claimed = await claimStripeWebhookEvent(event.id, event.type);
+    if (!claimed) return res.json({ received: true, duplicate: true });
+
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       const userId = session.metadata?.marketingUserId || session.client_reference_id;
@@ -146,6 +161,8 @@ export async function stripeWebhookHandler(req, res) {
         });
         if (userId && item?.interval && session.payment_status !== 'unpaid') {
           await activateStripePlan({ userId, item, session });
+        } else if (userId && !item?.interval && item?.credits && session.payment_status === 'paid') {
+          await grantUserCredits(userId, item.credits);
         }
       }
     }
@@ -166,6 +183,13 @@ export async function stripeWebhookHandler(req, res) {
 
     return res.json({ received: true });
   } catch {
+    if (claimed) {
+      try {
+        await releaseStripeWebhookEvent(event.id);
+      } catch {
+        // Preserve the original processing failure response. A stuck event can be reconciled from Stripe history.
+      }
+    }
     return res.status(500).json({ error: 'Unable to process Stripe webhook' });
   }
 }

@@ -1,6 +1,7 @@
 import store from '../utils/store.js';
 import { hashGodCode } from '../utils/owner.js';
 import { findItem } from '../config/stripeCatalog.js';
+import { grantUserCredits } from './billingPersistence.js';
 
 const REDEEM_FAIL = 'Unable to redeem that code.';
 
@@ -44,12 +45,11 @@ export async function redeemGodCodeForUser(userId, rawCode) {
   if (!consumed) throw new Error(REDEEM_FAIL);
 
   const kind = item.interval ? 'plan' : 'credits';
-  const user = await store.findUserById(userId);
   let subscription = (await store.getSubscriptions()).find(
     (entry) => entry.user === userId || entry.userId === userId,
   );
   const creditAdd = kind === 'credits' ? (item.credits || 0) : 0;
-  const nextCredits = (user?.credits || 0) + creditAdd;
+  let nextCredits = Number((await store.findUserById(userId))?.profile?.credits || 0);
 
   if (kind === 'plan') {
     const grant = {
@@ -68,13 +68,20 @@ export async function redeemGodCodeForUser(userId, rawCode) {
     };
     if (subscription) subscription = await store.updateSubscription(subscription.id, grant);
     else subscription = await store.createSubscription(grant);
+  } else if (creditAdd > 0) {
+    const creditGrant = await grantUserCredits(userId, creditAdd);
+    nextCredits = creditGrant.credits;
   }
 
+  const user = await store.findUserById(userId);
   await store.updateUser(userId, {
-    godGrant: item.id,
-    godRedeemedAt: now,
-    credits: nextCredits,
-    plan: kind === 'plan' ? item.id : user?.plan,
+    profile: {
+      ...(user?.profile || {}),
+      godGrant: item.id,
+      godRedeemedAt: now,
+      ...(kind === 'plan' ? { plan: item.id } : {}),
+      ...(kind === 'credits' ? { credits: nextCredits } : {}),
+    },
   });
 
   return {

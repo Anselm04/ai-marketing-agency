@@ -8,18 +8,9 @@ const FROM_NAME = process.env.FROM_NAME || 'AI Marketing Agency';
 
 let transporter = null;
 
-/**
- * Fly secrets (pick one transport):
- *   RESEND_API_KEY (+ FROM_EMAIL verified in Resend)
- *   SENDGRID_API_KEY
- *   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_SECURE
- *   AWS_SES_ACCESS_KEY / AWS_SES_SECRET_KEY (/ AWS_SES_HOST)
- * JWT_SECRET is required separately for auth tokens (never put secrets in git).
- */
 function getTransporter() {
   if (transporter) return transporter;
 
-  // Resend via SMTP (https://resend.com/docs/send-with-smtp)
   if (process.env.RESEND_API_KEY) {
     transporter = nodemailer.createTransport({
       host: process.env.RESEND_SMTP_HOST || 'smtp.resend.com',
@@ -30,7 +21,6 @@ function getTransporter() {
     return transporter;
   }
 
-  // SendGrid via SMTP
   if (process.env.SENDGRID_API_KEY) {
     transporter = nodemailer.createTransport({
       host: 'smtp.sendgrid.net',
@@ -40,7 +30,6 @@ function getTransporter() {
     return transporter;
   }
 
-  // AWS SES via SMTP
   if (process.env.AWS_SES_ACCESS_KEY && process.env.AWS_SES_SECRET_KEY) {
     transporter = nodemailer.createTransport({
       host: process.env.AWS_SES_HOST || 'email-smtp.us-east-1.amazonaws.com',
@@ -50,7 +39,6 @@ function getTransporter() {
     return transporter;
   }
 
-  // Generic SMTP
   if (process.env.SMTP_HOST) {
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -63,7 +51,6 @@ function getTransporter() {
     return transporter;
   }
 
-  // Ethereal / test account for development only (never in production)
   if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
     transporter = nodemailer.createTransport({
       host: 'smtp.ethereal.email',
@@ -85,9 +72,20 @@ export function emailTransportConfigured() {
   );
 }
 
-export async function sendEmail({ to, subject, html, text, from = FROM_EMAIL, fromName = FROM_NAME }) {
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  text,
+  from = FROM_EMAIL,
+  fromName = FROM_NAME,
+  headers = undefined,
+}) {
   const t = getTransporter();
   if (!t) {
+    if (process.env.NODE_ENV === 'production') {
+      return { success: false, fallback: false, reason: 'no_email_transport' };
+    }
     console.log(`[Email no-transport] To: ${to}, Subject: ${subject}`);
     return { fallback: true, messageId: 'dev-' + Date.now(), reason: 'no_email_transport' };
   }
@@ -99,11 +97,12 @@ export async function sendEmail({ to, subject, html, text, from = FROM_EMAIL, fr
       subject,
       text,
       html,
+      headers,
     });
     return { success: true, messageId: info.messageId };
   } catch (err) {
     console.error('Email send failed:', err.message);
-    return { fallback: true, error: err.message };
+    return { success: false, fallback: false, error: err.message };
   }
 }
 
