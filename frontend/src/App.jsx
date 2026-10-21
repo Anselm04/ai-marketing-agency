@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { BusinessProvider } from './context/BusinessContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { LanguageProvider } from './context/LanguageContext'
 import { ToastProvider } from './context/ToastContext'
@@ -101,9 +102,11 @@ export default function App() {
         <LanguageProvider>
           <ToastProvider>
             <AuthProvider>
-              <OrchestratorProvider>
-                <AppRoutes />
-              </OrchestratorProvider>
+              <BusinessProvider>
+                <OrchestratorProvider>
+                  <AppRoutes />
+                </OrchestratorProvider>
+              </BusinessProvider>
             </AuthProvider>
           </ToastProvider>
         </LanguageProvider>
