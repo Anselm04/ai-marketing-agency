@@ -54,6 +54,7 @@ import { getMarketingEntitlement } from './services/marketingEntitlementService.
 import clippingSchedulerService from './services/clippingSchedulerService.js';
 import { openaiStatus } from './services/openaiService.js';
 import { costControlStatus } from './services/costControlStatus.js';
+import { hydrateStripeWebhookSecret } from './services/runtimeSecretService.js';
 import './services/withUserTokensPatch.js';
 
 import { metricsRouteHandler } from './utils/metrics.js';
@@ -70,6 +71,13 @@ if (process.env.NODE_ENV === 'production' && store.isPostgres?.() !== true) {
 }
 
 await store.connectDB();
+
+const stripeWebhookReady = await hydrateStripeWebhookSecret();
+if (process.env.NODE_ENV === 'production' && !stripeWebhookReady) {
+  throw new Error(
+    'Production startup blocked: Stripe webhook verification secret is not available from Fly environment or Supabase Vault.',
+  );
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = process.env.FRONTEND_DIST || path.resolve(__dirname, '../../frontend/dist');
@@ -141,6 +149,10 @@ app.get('/api/health', async (_req, res) => {
       database: store.isPostgres?.() ? 'postgres' : 'local',
       persistence,
       openai: ai,
+      billing: {
+        stripeApiConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+        stripeWebhookVerificationConfigured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+      },
       costControls: costControlStatus(),
     });
   } catch (error) {
