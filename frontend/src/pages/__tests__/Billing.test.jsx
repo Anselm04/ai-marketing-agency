@@ -19,26 +19,32 @@ vi.mock('../../context/LanguageContext', () => ({
 describe('Billing Stripe return', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    let subscriptionReads = 0
     api.get.mockImplementation((path) => {
       if (path === '/billing/plans') return Promise.resolve({ data: [] })
       if (path === '/billing/catalog') return Promise.resolve({ data: { credits: [] } })
       if (path === '/billing/subscription') {
+        subscriptionReads += 1
+        if (subscriptionReads === 1) return Promise.resolve({ data: { status: 'none' } })
         return Promise.resolve({ data: { status: 'active', plan: 'starter', source: 'stripe' } })
       }
       return Promise.reject(new Error(`Unexpected GET ${path}`))
     })
   })
 
-  test('offers a clear continuation to business setup after successful checkout', async () => {
+  test('rechecks entitlement and offers business setup after Stripe webhook confirmation', async () => {
     render(
       <MemoryRouter initialEntries={['/dashboard/billing?success=1&session_id=cs_test_123']}>
         <Billing />
       </MemoryRouter>,
     )
 
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/billing/subscription'))
+    await waitFor(() => {
+      const subscriptionCalls = api.get.mock.calls.filter(([path]) => path === '/billing/subscription')
+      expect(subscriptionCalls.length).toBeGreaterThanOrEqual(2)
+    })
 
     const continueLink = await screen.findByRole('link', { name: /continue business setup/i })
-    expect(continueLink).toHaveAttribute('href', '/dashboard/onboarding')
+    expect(continueLink.getAttribute('href')).toBe('/dashboard/onboarding')
   })
 })
