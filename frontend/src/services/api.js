@@ -15,7 +15,9 @@ function isBusinessScopedPath(url = '') {
     || url === '/products/marketing'
     || /^\/products\/portfolio\/[^/]+\/activate$/.test(url)
     || url === '/crm/leads'
-    || /^\/crm\/leads\/[^/]+$/.test(url);
+    || /^\/crm\/leads\/[^/]+$/.test(url)
+    || url === '/content'
+    || /^\/content\/[^/]+$/.test(url);
 }
 
 api.interceptors.request.use((config) => {
