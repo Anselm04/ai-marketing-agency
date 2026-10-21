@@ -5,6 +5,11 @@ import { assertTeamSeatQuota } from '../services/planQuotaService.js';
 
 const router = express.Router();
 
+router.use((_req, res) => res.status(503).json({
+  error: 'Team collaboration is not available until shared-workspace tenancy is production-ready.',
+  code: 'team_collaboration_unavailable',
+}));
+
 async function getUserOrg(userId) {
   return store.getOrganizationByUserId(userId);
 }
