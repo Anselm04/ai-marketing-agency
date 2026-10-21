@@ -1,6 +1,7 @@
 import express from 'express';
 import store from '../utils/store.js';
 import { getAccessibleAgents, getUserPlanContext } from '../services/planQuotaService.js';
+import { executeAgentTask } from '../services/agentExecutionService.js';
 
 const router = express.Router();
 
@@ -47,7 +48,18 @@ router.post('/:id/execute', async (req, res, next) => {
     const { accessible } = await planAgents(req);
     const agent = accessible.find((item) => String(item.id || item.agentId) === String(req.params.id) || item.agentId === req.params.id);
     if (!agent) return res.status(403).json({ error: 'This AI agent is not available on your current plan', code: 'plan_agent_limit' });
-    res.json({ success: true, agentId: agent.agentId || req.params.id, task: req.body.task, result: 'Task executed (placeholder)' });
+
+    const userId = req.user?.id || req.userId;
+    const result = await executeAgentTask({
+      agent,
+      task: req.body?.task,
+      userId,
+      context: {
+        requestedVia: 'agents-api',
+      },
+    });
+
+    res.json(result);
   } catch (error) {
     next(error);
   }
