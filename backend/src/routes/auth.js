@@ -78,35 +78,53 @@ router.get('/me', async (req, res) => {
 
 router.post('/forgot-password', async (req, res) => {
   try {
+    const transportConfigured = emailTransportConfigured();
+    if (process.env.NODE_ENV === 'production' && !transportConfigured) {
+      return res.status(503).json({
+        error: 'Password reset email is temporarily unavailable. Please try again later.',
+        code: 'password_reset_email_unavailable',
+      });
+    }
+
     const { email } = req.body;
     const user = await store.findUserByEmail(String(email || '').toLowerCase());
-    const generic = { success: true, message: 'If an account exists, a reset link has been sent.' };
+    const generic = {
+      success: true,
+      message: 'If an account exists and email delivery succeeds, a reset link will arrive shortly.',
+    };
     if (!user) {
       return res.json(generic);
     }
+
     const resetToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
     const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    await store.setSettings('password_reset:' + tokenHash, {
+    const resetKey = 'password_reset:' + tokenHash;
+    await store.setSettings(resetKey, {
       userId: user.id,
       expiresAt: resetTokenExpires,
     });
 
     const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
     const resetUrl = `${appUrl.replace(/\/$/, '')}/reset-password`;
-    if (emailTransportConfigured()) {
-      await sendPasswordReset(user.email, resetToken, resetUrl);
+    if (transportConfigured) {
+      const delivery = await sendPasswordReset(user.email, resetToken, resetUrl);
+      if (!delivery?.success) {
+        await store.deleteSetting(resetKey);
+        // Keep the public response non-enumerating. The wording above never claims that a message was sent.
+        return res.json(generic);
+      }
     }
 
     const response = { ...generic };
-    if (process.env.NODE_ENV !== 'production' && !emailTransportConfigured()) {
+    if (process.env.NODE_ENV !== 'production' && !transportConfigured) {
       response.devToken = resetToken;
       response.devResetUrl = `${resetUrl}?token=${encodeURIComponent(resetToken)}`;
       response.note = 'Email transport not configured; devToken returned for local testing only.';
     }
-    res.json(response);
+    return res.json(response);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -125,9 +143,9 @@ router.post('/reset-password', async (req, res) => {
     }
     const updated = await store.setUserPassword(reset.userId, password);
     if (!updated) return res.status(400).json({ error: 'Invalid or expired token' });
-    res.json({ success: true, message: 'Password updated successfully.' });
+    return res.json({ success: true, message: 'Password updated successfully.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
