@@ -1,24 +1,31 @@
 import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { CreditCard, Check, Zap, Crown, Building2, Star } from 'lucide-react'
 import api from '../services/api'
 import { CATALOG } from '../config/stripeCatalog'
 import { useLanguage } from '../context/LanguageContext'
 
 const dollars = (item) => item.price ?? (item.amount != null ? item.amount / 100 : 0)
+const CHECKOUT_CONFIRMATION_ATTEMPTS = 6
+const CHECKOUT_CONFIRMATION_INTERVAL_MS = 1500
 
 export default function Billing() {
   const [plans, setPlans] = useState([])
   const [credits, setCredits] = useState([])
   const [subscription, setSubscription] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [confirmingCheckout, setConfirmingCheckout] = useState(false)
   const [code, setCode] = useState('')
   const [redeemMsg, setRedeemMsg] = useState('')
   const [checkoutMsg, setCheckoutMsg] = useState('')
   const { t } = useLanguage()
+  const location = useLocation()
+  const checkoutSucceeded = new URLSearchParams(location.search).get('success') === '1'
 
   const refreshSubscription = async () => {
     const res = await api.get('/billing/subscription')
     setSubscription(res.data)
+    return res.data
   }
 
   useEffect(() => {
@@ -35,6 +42,41 @@ export default function Billing() {
 
     refreshSubscription().catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!checkoutSucceeded) return undefined
+
+    let cancelled = false
+    let timer = null
+    let attempts = 0
+
+    const pollForEntitlement = async () => {
+      attempts += 1
+      setConfirmingCheckout(true)
+      try {
+        const current = await refreshSubscription()
+        if (cancelled) return
+        if (current?.status === 'active') {
+          setConfirmingCheckout(false)
+          return
+        }
+      } catch {
+        if (cancelled) return
+      }
+
+      if (attempts >= CHECKOUT_CONFIRMATION_ATTEMPTS) {
+        setConfirmingCheckout(false)
+        return
+      }
+      timer = window.setTimeout(pollForEntitlement, CHECKOUT_CONFIRMATION_INTERVAL_MS)
+    }
+
+    pollForEntitlement()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [checkoutSucceeded])
 
   const handleCheckout = async (plan) => {
     setLoading(true)
@@ -108,6 +150,28 @@ export default function Billing() {
       {checkoutMsg && (
         <div className="p-4 text-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', color: 'var(--gold-bright)' }}>
           {checkoutMsg}
+        </div>
+      )}
+
+      {checkoutSucceeded && subscription?.status === 'active' && (
+        <div className="p-4 rounded-lg border border-green-200 bg-green-50 text-green-800 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold">Payment confirmed and your plan is active.</div>
+            <div className="text-sm">Continue the business setup you started before checkout, then create your first saved campaign.</div>
+          </div>
+          <Link to="/dashboard/onboarding" className="px-4 py-2 rounded-lg bg-green-700 text-white text-sm font-medium">Continue business setup</Link>
+        </div>
+      )}
+
+      {checkoutSucceeded && subscription?.status !== 'active' && (
+        <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold">{confirmingCheckout ? 'Confirming your Stripe payment…' : 'Payment returned, but access is not confirmed yet.'}</div>
+            <div className="text-sm">We keep paid features locked until the signed Stripe webhook confirms your subscription.</div>
+          </div>
+          {!confirmingCheckout && (
+            <button type="button" onClick={() => refreshSubscription().catch(() => {})} className="px-4 py-2 rounded-lg border border-amber-400 text-sm font-medium">Check again</button>
+          )}
         </div>
       )}
 
