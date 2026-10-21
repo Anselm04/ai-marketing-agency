@@ -1,9 +1,9 @@
 import store from '../utils/store.js';
 
 const KIND = 'paid_ad_budget';
-const DEFAULT_FEE_BPS = 500; // 5%
-const MIN_TOTAL_CENTS = 1000; // $10 all-in budget
-const MAX_TOTAL_CENTS = 10_000_000; // $100,000 safety ceiling
+const DEFAULT_FEE_BPS = 500;
+const MIN_TOTAL_CENTS = 1000;
+const MAX_TOTAL_CENTS = 10_000_000;
 const SUPPORTED_PROVIDERS = new Set(['meta', 'google']);
 
 function clampFeeBps(value) {
@@ -35,10 +35,10 @@ export function calculateBudgetBreakdown(totalBudgetCents, feeBps = getPlatformF
   };
 }
 
-export async function listPaidAdBudgets(userId) {
+export async function listPaidAdBudgets(userId, businessId = null) {
   const content = await store.getContentByOwner(userId);
   return content
-    .filter((item) => item.kind === KIND)
+    .filter((item) => item.kind === KIND && (!businessId || item.businessId === businessId))
     .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
 }
 
@@ -49,6 +49,7 @@ export async function getPaidAdBudget(userId, budgetId) {
 
 export async function createPaidAdBudget({
   userId,
+  businessId = null,
   portfolioProductId = null,
   provider,
   totalBudgetCents,
@@ -65,6 +66,7 @@ export async function createPaidAdBudget({
     kind: KIND,
     owner: userId,
     ownerId: userId,
+    ...(businessId ? { businessId } : {}),
     portfolioProductId: portfolioProductId || null,
     provider: normalizedProvider,
     enabled: Boolean(enabled),
@@ -88,6 +90,9 @@ export async function updatePaidAdBudget(userId, budgetId, updates = {}) {
   if (!current) return null;
 
   const patch = { updatedAt: new Date().toISOString() };
+  if (Object.prototype.hasOwnProperty.call(updates, 'businessId')) {
+    patch.businessId = updates.businessId || null;
+  }
   if (Object.prototype.hasOwnProperty.call(updates, 'enabled')) {
     patch.enabled = Boolean(updates.enabled);
     if (!patch.enabled) {
@@ -171,9 +176,6 @@ export async function activatePaidAdBudget(userId, budgetId) {
   if (!current.serviceFeePaidAt) return { error: 'service_fee_required', budget: current };
   if (current.remainingMediaBudgetCents <= 0) return { error: 'budget_exhausted', budget: current };
 
-  // We refuse to launch live paid media unless a provider adapter has been explicitly
-  // approved for managed billing + hard-stop control. This prevents fake green lights
-  // and prevents the app from pretending it can guarantee a cap it cannot enforce.
   if (!providerManagedBillingAvailable(current.provider)) {
     return { error: 'provider_adapter_required', budget: current };
   }
