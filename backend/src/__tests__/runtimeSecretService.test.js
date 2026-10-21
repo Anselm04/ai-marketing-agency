@@ -1,5 +1,5 @@
 import { describe, expect, jest, test } from '@jest/globals';
-import { getStripeWebhookSecret } from '../services/runtimeSecretService.js';
+import { getStripeWebhookSecret, hydrateStripeWebhookSecret } from '../services/runtimeSecretService.js';
 
 describe('runtime secret resolution', () => {
   test('prefers the Fly environment webhook secret when configured', async () => {
@@ -23,6 +23,13 @@ describe('runtime secret resolution', () => {
       expect.stringContaining('vault.decrypted_secrets'),
       ['marketing_stripe_webhook_secret'],
     );
+  });
+
+  test('hydrates the runtime environment without persisting plaintext in source', async () => {
+    const env = { DATABASE_URL: 'postgresql://example.invalid/db' };
+    const query = jest.fn().mockResolvedValue({ rows: [{ decrypted_secret: 'whsec_vault' }] });
+    await expect(hydrateStripeWebhookSecret({ env, query })).resolves.toBe(true);
+    expect(env.STRIPE_WEBHOOK_SECRET).toBe('whsec_vault');
   });
 
   test('returns null when neither environment nor Vault can provide the secret', async () => {
