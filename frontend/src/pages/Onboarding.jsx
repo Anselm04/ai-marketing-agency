@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { ArrowRight, Building2, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Building2, CheckCircle2, Plus } from 'lucide-react';
+import BusinessSelector from '../components/BusinessSelector';
+import { useBusiness } from '../context/BusinessContext';
 
-const initial = {
+const emptyBusiness = () => ({
   company: '',
   website: '',
   industry: '',
@@ -15,51 +17,97 @@ const initial = {
   preferredTone: 'professional',
   language: 'en',
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-};
+});
 
 export default function Onboarding() {
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState(emptyBusiness);
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const {
+    businesses,
+    selectedBusiness,
+    selectedBusinessId,
+    setSelectedBusinessId,
+    refreshBusinesses,
+  } = useBusiness();
 
   useEffect(() => {
     Promise.allSettled([
       api.get('/settings/profile'),
       api.get('/billing/subscription'),
-    ]).then(([profileResult, subscriptionResult]) => {
+      refreshBusinesses(),
+    ]).then(([profileResult, subscriptionResult, businessesResult]) => {
+      const rows = businessesResult.status === 'fulfilled' ? businessesResult.value : [];
+      if (!selectedBusinessId && rows.length === 1) setSelectedBusinessId(rows[0].id);
       if (profileResult.status === 'fulfilled') {
         const data = profileResult.value.data || {};
         const profile = data.profile || {};
-        setForm((current) => ({
-          ...current,
-          company: profile.company || '',
-          website: profile.website || '',
-          industry: profile.industry || '',
-          companySize: profile.companySize || 'small',
-          targetAudience: profile.targetAudience || '',
-          primaryOffer: profile.primaryOffer || '',
-          businessDescription: profile.businessDescription || '',
-          primaryGoal: profile.primaryGoal || '',
-          preferredTone: profile.preferredTone || 'professional',
-          language: data.preferences?.language || 'en',
-          timezone: data.preferences?.timezone || current.timezone,
-        }));
+        if (rows.length === 0) {
+          setForm((current) => ({
+            ...current,
+            company: profile.company || '',
+            website: profile.website || '',
+            industry: profile.industry || '',
+            companySize: profile.companySize || 'small',
+            targetAudience: profile.targetAudience || '',
+            primaryOffer: profile.primaryOffer || '',
+            businessDescription: profile.businessDescription || '',
+            primaryGoal: profile.primaryGoal || '',
+            preferredTone: profile.preferredTone || 'professional',
+            language: data.preferences?.language || 'en',
+            timezone: data.preferences?.timezone || current.timezone,
+          }));
+        }
       }
       if (subscriptionResult.status === 'fulfilled') setSubscription(subscriptionResult.value.data);
       setLoading(false);
     });
   }, []);
 
+  useEffect(() => {
+    if (!selectedBusiness) return;
+    setForm((current) => ({
+      ...emptyBusiness(),
+      ...current,
+      ...selectedBusiness,
+      company: selectedBusiness.company || selectedBusiness.name || '',
+      language: selectedBusiness.language || current.language || 'en',
+      timezone: selectedBusiness.timezone || current.timezone,
+    }));
+  }, [selectedBusiness]);
+
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+
+  const startNewBusiness = () => {
+    setSelectedBusinessId('');
+    setForm(emptyBusiness());
+    setError('');
+  };
 
   const save = async (event) => {
     event.preventDefault();
     setSaving(true);
     setError('');
     try {
+      const businessPayload = {
+        ...form,
+        name: form.company,
+      };
+      let businessId = selectedBusinessId;
+      if (businessId) {
+        await api.patch(`/settings/businesses/${businessId}`, businessPayload);
+      } else {
+        const created = await api.post('/settings/businesses', businessPayload);
+        businessId = created.data?.id;
+        if (!businessId) throw new Error('Business workspace was not created.');
+        setSelectedBusinessId(businessId);
+      }
+      await refreshBusinesses();
+
+      // Keep account-level preferences and legacy profile context compatible with existing services.
       await api.patch('/settings/profile', {
         ...form,
         goals: form.primaryGoal ? [form.primaryGoal] : [],
@@ -81,6 +129,7 @@ export default function Onboarding() {
       });
 
       const marketing = new FormData();
+      marketing.append('businessId', businessId);
       marketing.append('productName', form.primaryOffer || form.company);
       marketing.append('description', [
         `Business: ${form.company}`,
@@ -100,7 +149,7 @@ export default function Onboarding() {
       const campaignId = generated.data?.campaign?.id;
       navigate(campaignId ? `/dashboard/campaigns?created=${encodeURIComponent(campaignId)}` : '/dashboard/campaigns');
     } catch (err) {
-      setError(err.response?.data?.error || 'Business setup was saved, but the first marketing package could not be created. You can retry safely.');
+      setError(err.response?.data?.error || err.message || 'Business setup was saved, but the first marketing package could not be created. You can retry safely.');
     } finally {
       setSaving(false);
     }
@@ -110,21 +159,34 @@ export default function Onboarding() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-sm font-medium"><Building2 size={16} /> Business setup</div>
-        <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Tell the agency what you sell and who you want to reach</h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-300">This context is saved to your account. With an active plan, the final button creates your first real marketing package and saves the campaign.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-sm font-medium"><Building2 size={16} /> Business setup</div>
+          <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Manage each business or client separately</h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-300">Each business has its own context and can own separate campaigns, generated content and CRM leads. Your account remains the security boundary.</p>
+        </div>
+        <button type="button" onClick={startNewBusiness} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-300 text-blue-700 dark:text-blue-300">
+          <Plus size={16} /> New business
+        </button>
       </div>
 
+      {businesses.length > 0 && (
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+          <BusinessSelector allowAll={false} />
+          <p className="mt-2 text-xs text-gray-500">Choose an existing business to edit it, or select “New business” above to create another client workspace.</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><CheckCircle2 size={16} className="text-green-600 mb-1" /><div className="font-medium dark:text-white">1. Business context</div><div className="text-xs text-gray-500">Saved to your account</div></div>
+        <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><CheckCircle2 size={16} className="text-green-600 mb-1" /><div className="font-medium dark:text-white">1. Business context</div><div className="text-xs text-gray-500">Separate per business/client</div></div>
         <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><CheckCircle2 size={16} className={subscription?.status === 'active' ? 'text-green-600 mb-1' : 'text-gray-400 mb-1'} /><div className="font-medium dark:text-white">2. Active plan</div><div className="text-xs text-gray-500">{subscription?.status === 'active' ? `${subscription.plan || 'Marketing'} active` : 'Required before AI work'}</div></div>
-        <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><ArrowRight size={16} className="text-gray-400 mb-1" /><div className="font-medium dark:text-white">3. Create marketing</div><div className="text-xs text-gray-500">Saved campaign + generated assets</div></div>
+        <div className="rounded-lg border p-3 bg-white dark:bg-gray-800 dark:border-gray-700"><ArrowRight size={16} className="text-gray-400 mb-1" /><div className="font-medium dark:text-white">3. Create marketing</div><div className="text-xs text-gray-500">Campaign linked to this business</div></div>
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
 
       <form onSubmit={save} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-5">
+        <div className="text-sm font-medium text-gray-900 dark:text-white">{selectedBusiness ? `Editing: ${selectedBusiness.name || selectedBusiness.company}` : 'Creating a new business workspace'}</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm text-gray-700 dark:text-gray-200">Business name<input required value={form.company} onChange={update('company')} className="mt-1 w-full rounded-lg border px-3 py-2 bg-transparent" placeholder="Acme Ltd" /></label>
           <label className="text-sm text-gray-700 dark:text-gray-200">Website<input type="url" value={form.website} onChange={update('website')} className="mt-1 w-full rounded-lg border px-3 py-2 bg-transparent" placeholder="https://example.com" /></label>
@@ -144,12 +206,12 @@ export default function Onboarding() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          {subscription?.status !== 'active' && <p className="text-sm text-amber-700 dark:text-amber-300">Your business context will be saved first. Then choose a plan before AI generation.</p>}
+          {subscription?.status !== 'active' && <p className="text-sm text-amber-700 dark:text-amber-300">The business workspace will be saved first. Then choose a plan before AI generation.</p>}
           {subscription?.status === 'active' && <p className="text-sm text-gray-500 dark:text-gray-400">No ad spend is triggered. The $0 planning budget keeps this first package organic until you explicitly configure paid advertising.</p>}
           <div className="ml-auto flex gap-2">
             {subscription?.status === 'active' && <Link to="/dashboard" className="px-4 py-2 rounded-lg border text-sm">Skip for now</Link>}
             <button disabled={saving} className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">
-              {saving ? 'Working…' : subscription?.status === 'active' ? 'Save & create first campaign' : 'Save & choose plan'} <ArrowRight size={16} />
+              {saving ? 'Working…' : subscription?.status === 'active' ? 'Save business & create campaign' : 'Save business & choose plan'} <ArrowRight size={16} />
             </button>
           </div>
         </div>
