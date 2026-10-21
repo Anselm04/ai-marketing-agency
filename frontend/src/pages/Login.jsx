@@ -35,10 +35,10 @@ export default function Login() {
       <header className="studio-header">
         <div className="wrap">
           <Link className="studio-brand" to="/">
-            <img src="/appforge-logo.png" width="36" height="36" alt="" />
+            <img src="/marketing-logo.svg" width="36" height="36" alt="" />
             <span className="studio-brand-name">
               <strong>TrillionAI</strong>
-              <span>Tech</span>
+              <span>AI Marketing Agency</span>
             </span>
           </Link>
           <nav className="studio-nav">
