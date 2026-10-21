@@ -3,10 +3,12 @@ import Stripe from 'stripe';
 import {
   activatePaidAdBudget,
   createPaidAdBudget,
+  getManagedPaidAdProviders,
   getPaidAdBudget,
   getPlatformFeeBps,
   listPaidAdBudgets,
   markServiceFeeCheckoutCreated,
+  paidAdServiceFeeCheckoutPolicy,
   paidAdvertisingLimits,
   updatePaidAdBudget,
 } from '../services/paidAdvertisingService.js';
@@ -21,6 +23,7 @@ router.get('/', async (req, res) => {
       serviceFeeBps: getPlatformFeeBps(),
       strictHardStop: true,
       currency: 'usd',
+      managedProviders: getManagedPaidAdProviders(),
       ...paidAdvertisingLimits,
     },
   });
@@ -59,6 +62,15 @@ router.post('/:id/service-fee-checkout', async (req, res) => {
   if (!budget) return res.status(404).json({ error: 'Paid advertising budget not found.' });
   if (!budget.enabled) return res.status(400).json({ error: 'Enable paid advertising before checkout.' });
   if (budget.serviceFeePaidAt) return res.json({ alreadyPaid: true, budget });
+
+  const checkoutPolicy = paidAdServiceFeeCheckoutPolicy(budget.provider);
+  if (!checkoutPolicy.allowed) {
+    return res.status(409).json({
+      error: 'The management fee cannot be charged until this provider has an approved managed-billing adapter with verified hard-stop enforcement.',
+      code: checkoutPolicy.code,
+      budget,
+    });
+  }
 
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) {
