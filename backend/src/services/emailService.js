@@ -151,8 +151,8 @@ export async function sendWelcomeEmail(email, firstName) {
         <p>Get started by:</p>
         <ul>
           <li>Creating your first campaign</li>
-          <li>Connecting social media accounts</li>
-          <li>Inviting your team</li>
+          <li>Connecting supported social media accounts</li>
+          <li>Reviewing generated marketing work before publishing</li>
         </ul>
       </div>
     `,
