@@ -81,7 +81,7 @@ export default function Layout() {
         style={{ background: 'var(--bg-elev)', borderRight: '1px solid var(--line)' }}
       >
         <div className="p-6 flex items-center gap-3" style={{ borderBottom: '1px solid var(--line)' }}>
-          <img src="/appforge-logo.png" alt="" width="32" height="32" />
+          <img src="/marketing-logo.svg" alt="" width="32" height="32" />
           <div>
             <h1 className="text-xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>TrillionAI</h1>
             <p className="text-xs mt-1 tracking-widest uppercase" style={{ color: 'var(--cyan)' }}>AI Marketing Agency</p>
