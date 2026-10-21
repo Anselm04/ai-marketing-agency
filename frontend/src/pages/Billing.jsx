@@ -40,7 +40,7 @@ export default function Billing() {
       .then(res => setCredits(Array.isArray(res.data?.credits) ? res.data.credits : []))
       .catch(() => setCredits([]))
 
-    refreshSubscription().catch(() => {})
+    if (!checkoutSucceeded) refreshSubscription().catch(() => {})
   }, [])
 
   useEffect(() => {
