@@ -7,6 +7,7 @@ import { OrchestratorProvider } from './context/OrchestratorContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
+import Onboarding from './pages/Onboarding'
 import Agents from './pages/Agents'
 import Campaigns from './pages/Campaigns'
 import Analytics from './pages/Analytics'
@@ -60,7 +61,6 @@ function ProtectedRoute({ children }) {
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth()
-
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -77,6 +77,7 @@ function AppRoutes() {
       <Route path="/software" element={<Software />} />
       <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
+        <Route path="onboarding" element={<Onboarding />} />
         <Route path="agents" element={<Agents />} />
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="products" element={<ProductMarketing />} />

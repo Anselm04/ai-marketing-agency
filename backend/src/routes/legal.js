@@ -1,10 +1,8 @@
 import express from 'express';
 import store from '../utils/store.js';
 import { generateLegalDocument } from '../services/openaiService.js';
-import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
-router.use(authenticate);
 
 router.get('/templates', (req, res) => {
   res.json([
@@ -17,16 +15,22 @@ router.get('/templates', (req, res) => {
   ]);
 });
 
-router.get('/documents', (req, res) => {
-  const docs = store.getLegalDocs().filter(d => d.owner === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json(docs);
+router.get('/documents', async (req, res, next) => {
+  try {
+    const docs = (await store.getLegalDocs())
+      .filter((doc) => doc.owner === req.user.id || doc.ownerId === req.user.id)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(docs);
+  } catch (error) {
+    next(error);
+  }
 });
 
-router.post('/generate', async (req, res) => {
+router.post('/generate', async (req, res, next) => {
   const { type, businessName, jurisdiction } = req.body;
   try {
     const result = await generateLegalDocument(type, businessName || 'AI Marketing Agency', jurisdiction || 'Global');
-    const doc = store.createLegalDoc({
+    const doc = await store.createLegalDoc({
       type,
       title: `${type} - ${businessName || 'AI Marketing Agency'}`,
       businessName: businessName || 'AI Marketing Agency',
@@ -37,8 +41,9 @@ router.post('/generate', async (req, res) => {
       owner: req.user.id,
     });
     res.json({ success: true, document: doc });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    if (error?.code === 'plan_quota_exceeded' || error?.status === 402) return next(error);
+    return next(error);
   }
 });
 

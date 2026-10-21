@@ -31,7 +31,7 @@ export default function Register() {
     try {
       const { confirmPassword, ...payload } = form;
       await register(payload);
-      navigate('/dashboard/billing');
+      navigate('/dashboard/onboarding');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');
     } finally {
@@ -60,7 +60,7 @@ export default function Register() {
       <div className="flex-1 flex items-center justify-center px-4 py-16">
         <div className="w-full max-w-md studio-card">
           <h1 style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--gold-bright)', fontSize: '2rem', margin: 0 }}>{t('createAccount')}</h1>
-          <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>Create your customer workspace, then choose the plan that fits your marketing workload.</p>
+          <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>After signup, we will ask a few simple questions about your business before you choose a plan.</p>
           {error && <div className="mt-4 p-3 text-sm text-red-400">{error}</div>}
           <form onSubmit={handleSubmit} className="space-y-4 mt-6">
             <div className="grid grid-cols-2 gap-3">

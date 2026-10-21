@@ -4,6 +4,9 @@ import store from '../utils/store.js';
 import mediaComposerService from './mediaComposerService.js';
 import userVideoPublisherService from './userVideoPublisherService.js';
 import { generateAgentResponse } from './openaiService.js';
+import { reserveDailyPostQuota } from './planQuotaService.js';
+import { recordUsage } from './usageMeteringService.js';
+import { releaseQuotaReservation, settleUsageReservation } from './quotaReservationService.js';
 import { logger } from '../utils/logger.js';
 import autoPostingAnalyticsService from './autoPostingAnalyticsService.js';
 import socialPerformanceSyncService from './socialPerformanceSyncService.js';
@@ -161,7 +164,7 @@ class AutoPostingService {
         'Source media names: ' + selectedAssets.map((asset) => asset.originalName).join(', '),
         'Previous post count: ' + (Number(plan.completedPosts) || 0),
       ].join('\n'),
-      {},
+      { userId: plan.owner },
     );
 
     return parseMetadata(result && result.content, fallback);
@@ -172,96 +175,125 @@ class AutoPostingService {
     if (!plan.sourceAssetIds || !plan.sourceAssetIds.length) throw new Error('Auto-posting plan has no selected source media');
     if (!plan.platformIds || !plan.platformIds.length) throw new Error('Auto-posting plan has no selected platforms');
 
-    const allContent = await store.getContentByOwner(plan.owner);
-    let recommendation = null;
-    if (plan.aiOptimizationEnabled !== false) {
-      try {
-        recommendation = await autoPostingAnalyticsService.recommend(plan.owner, plan.id);
-      } catch {
-        recommendation = null;
+    let postReservation = null;
+    try {
+      postReservation = (await reserveDailyPostQuota(plan.owner, plan.platformIds.length)).reservation;
+
+      const allContent = await store.getContentByOwner(plan.owner);
+      let recommendation = null;
+      if (plan.aiOptimizationEnabled !== false) {
+        try {
+          recommendation = await autoPostingAnalyticsService.recommend(plan.owner, plan.id);
+        } catch {
+          recommendation = null;
+        }
+      }
+
+      const selectedAssets = this.pickAssets(
+        plan,
+        allContent.filter((item) => item.owner === plan.owner && item.kind === 'media_asset'),
+        recommendation?.recommendedContentCombination,
+      );
+      if (!selectedAssets.length) throw new Error('Selected source media is no longer available');
+
+      const metadata = await this.generateMetadata(plan, selectedAssets);
+      const generatedVideo = await mediaComposerService.compose({
+        ownerId: plan.owner,
+        assets: selectedAssets,
+        aspectRatio: plan.aspectRatio,
+        secondsPerImage: plan.secondsPerImage,
+        maxVideoSeconds: plan.maxVideoSeconds,
+      });
+
+      const outputRecord = await store.createContent({
+        kind: 'generated_video',
+        owner: plan.owner,
+        mediaType: 'video',
+        originalName: 'auto-post-' + Date.now() + '.mp4',
+        mimetype: generatedVideo.mimetype,
+        size: generatedVideo.size,
+        url: generatedVideo.url,
+        storageKey: generatedVideo.key,
+        aspectRatio: generatedVideo.aspectRatio,
+        sourceAssetIds: generatedVideo.sourceAssetIds,
+        source: 'auto_posting',
+        autoPostingPlanId: plan.id,
+        createdAt: generatedVideo.generatedAt,
+      });
+
+      const results = await userVideoPublisherService.publishMany({
+        userId: plan.owner,
+        platformIds: plan.platformIds,
+        mediaUrl: generatedVideo.url,
+        title: metadata.title,
+        caption: metadata.caption,
+        hashtags: metadata.hashtags,
+        settings: plan.publishingSettings || {},
+      });
+
+      const successful = results.filter((result) => result.success).length;
+      if (postReservation?.id) {
+        await settleUsageReservation({
+          id: postReservation.id,
+          userId: plan.owner,
+          metric: 'social_posts',
+          quantity: successful,
+          metadata: { autoPostingPlanId: plan.id },
+        });
+      } else if (successful > 0) {
+        await recordUsage({
+          userId: plan.owner,
+          metric: 'social_posts',
+          quantity: successful,
+          metadata: { autoPostingPlanId: plan.id },
+        });
+      }
+      postReservation = null;
+
+      const startedAt = new Date().toISOString();
+      const localHour = this.localHourAt(Date.now(), plan.timezone || 'UTC');
+      const run = {
+        id: store._id(),
+        startedAt,
+        generatedVideoId: outputRecord.id,
+        mediaUrl: generatedVideo.url,
+        sourceAssetIds: generatedVideo.sourceAssetIds,
+        metadata,
+        results,
+        successful,
+        failed: results.length - successful,
+        timezone: plan.timezone || 'UTC',
+        scheduledLocalHour: this.localHourAt(new Date(plan.nextRunAt || startedAt).getTime(), plan.timezone || 'UTC'),
+        actualLocalHour: localHour,
+        aspectRatio: plan.aspectRatio,
+        assetsPerPost: selectedAssets.length,
+        optimizationApplied: Boolean(recommendation?.hasEnoughData),
+        optimizationRecommendation: recommendation || null,
+      };
+
+      const updated = await store.updateContent(plan.id, {
+        completedPosts: (Number(plan.completedPosts) || 0) + 1,
+        rotationIndex: (Number(plan.rotationIndex) || 0) + selectedAssets.length,
+        lastRunAt: run.startedAt,
+        nextRunAt: this.nextRunAt(
+          plan,
+          Date.now(),
+          plan.aiOptimizationEnabled !== false ? recommendation?.recommendedHours || [] : [],
+        ),
+        lastRun: run,
+        recentRuns: [run, ...(plan.recentRuns || [])].slice(0, 20),
+        status: successful > 0 ? 'running' : 'attention_required',
+        updatedAt: new Date().toISOString(),
+      });
+
+      return { plan: updated, run };
+    } finally {
+      if (postReservation?.id) {
+        await releaseQuotaReservation(postReservation.id).catch((error) => {
+          logger.warn('Unable to release social post quota reservation', { error: error.message, planId: plan.id });
+        });
       }
     }
-
-    const selectedAssets = this.pickAssets(
-      plan,
-      allContent.filter((item) => item.owner === plan.owner && item.kind === 'media_asset'),
-      recommendation?.recommendedContentCombination,
-    );
-    if (!selectedAssets.length) throw new Error('Selected source media is no longer available');
-
-    const metadata = await this.generateMetadata(plan, selectedAssets);
-    const generatedVideo = await mediaComposerService.compose({
-      ownerId: plan.owner,
-      assets: selectedAssets,
-      aspectRatio: plan.aspectRatio,
-      secondsPerImage: plan.secondsPerImage,
-      maxVideoSeconds: plan.maxVideoSeconds,
-    });
-
-    const outputRecord = await store.createContent({
-      kind: 'generated_video',
-      owner: plan.owner,
-      mediaType: 'video',
-      originalName: 'auto-post-' + Date.now() + '.mp4',
-      mimetype: generatedVideo.mimetype,
-      size: generatedVideo.size,
-      url: generatedVideo.url,
-      storageKey: generatedVideo.key,
-      aspectRatio: generatedVideo.aspectRatio,
-      sourceAssetIds: generatedVideo.sourceAssetIds,
-      source: 'auto_posting',
-      autoPostingPlanId: plan.id,
-      createdAt: generatedVideo.generatedAt,
-    });
-
-    const results = await userVideoPublisherService.publishMany({
-      userId: plan.owner,
-      platformIds: plan.platformIds,
-      mediaUrl: generatedVideo.url,
-      title: metadata.title,
-      caption: metadata.caption,
-      hashtags: metadata.hashtags,
-      settings: plan.publishingSettings || {},
-    });
-
-    const successful = results.filter((result) => result.success).length;
-    const startedAt = new Date().toISOString();
-    const localHour = this.localHourAt(Date.now(), plan.timezone || 'UTC');
-    const run = {
-      id: store._id(),
-      startedAt,
-      generatedVideoId: outputRecord.id,
-      mediaUrl: generatedVideo.url,
-      sourceAssetIds: generatedVideo.sourceAssetIds,
-      metadata,
-      results,
-      successful,
-      failed: results.length - successful,
-      timezone: plan.timezone || 'UTC',
-      scheduledLocalHour: this.localHourAt(new Date(plan.nextRunAt || startedAt).getTime(), plan.timezone || 'UTC'),
-      actualLocalHour: localHour,
-      aspectRatio: plan.aspectRatio,
-      assetsPerPost: selectedAssets.length,
-      optimizationApplied: Boolean(recommendation?.hasEnoughData),
-      optimizationRecommendation: recommendation || null,
-    };
-
-    const updated = await store.updateContent(plan.id, {
-      completedPosts: (Number(plan.completedPosts) || 0) + 1,
-      rotationIndex: (Number(plan.rotationIndex) || 0) + selectedAssets.length,
-      lastRunAt: run.startedAt,
-      nextRunAt: this.nextRunAt(
-        plan,
-        Date.now(),
-        plan.aiOptimizationEnabled !== false ? recommendation?.recommendedHours || [] : [],
-      ),
-      lastRun: run,
-      recentRuns: [run, ...(plan.recentRuns || [])].slice(0, 20),
-      status: successful > 0 ? 'running' : 'attention_required',
-      updatedAt: new Date().toISOString(),
-    });
-
-    return { plan: updated, run };
   }
 
   start() {
