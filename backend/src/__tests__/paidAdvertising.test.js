@@ -13,6 +13,7 @@ async function registerEntitledUser(label) {
   const email = `paid-ads-${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
   const res = await request(app).post('/api/auth/register').send({
     email,
+    acceptedTerms: true,
     password: 'SecurePass123!',
   });
   const user = await store.findUserByEmail(email);
@@ -124,3 +125,4 @@ describe('Paid advertising budget guardrails', () => {
     expect(off.body.hardStopReason).toBe('user_disabled');
   });
 });
+
