@@ -11,6 +11,7 @@ describe('AI Clipping Agency API', () => {
       .post('/api/auth/register')
       .send({
         email,
+        acceptedTerms: true,
         password: 'SecurePass123!',
         firstName: 'Clip',
         lastName: 'Tester',
@@ -27,7 +28,7 @@ describe('AI Clipping Agency API', () => {
     });
   });
 
-  test('creates, plans, rights-gates, activates, and optimizes a clipping campaign', async () => {
+  test('creates, plans, rights-gates, activates, and records manual metrics without claiming verified optimization', async () => {
     const createRes = await request(app)
       .post('/api/clipping/campaigns')
       .set('Authorization', `Bearer ${token}`)
@@ -85,9 +86,14 @@ describe('AI Clipping Agency API', () => {
       });
 
     expect(metricsRes.status).toBe(200);
-    expect(metricsRes.body.optimization.summary.views).toBe(15000);
-    expect(metricsRes.body.optimization.summary.clicks).toBe(650);
-    expect(metricsRes.body.optimization.summary.revenue).toBe(3000);
+    expect(metricsRes.body.performance).toEqual(expect.arrayContaining([
+      expect.objectContaining({ clipId: 'clip-1', views: 10000, clicks: 500, revenue: 2500, provenance: expect.objectContaining({ kind: 'manual_user_entry' }) }),
+      expect.objectContaining({ clipId: 'clip-2', views: 5000, clicks: 150, revenue: 500, provenance: expect.objectContaining({ kind: 'manual_user_entry' }) }),
+    ]));
+    expect(metricsRes.body.optimization.status).toBe('insufficient_verified_data');
+    expect(metricsRes.body.optimization.verifiedObservations).toBe(0);
+    expect(metricsRes.body.optimization.summary).toBeNull();
+    expect(metricsRes.body.optimization.recommendations).toBeNull();
   });
 
   test('blocks autonomous activation when commercial rights are not confirmed', async () => {
@@ -121,3 +127,4 @@ describe('AI Clipping Agency API', () => {
     expect(activateRes.body.details.length).toBeGreaterThan(0);
   });
 });
+
