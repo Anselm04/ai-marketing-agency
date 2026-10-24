@@ -41,7 +41,8 @@ describe('quota reservations', () => {
     };
 
     const first = await reserveUsageQuota(base);
-    await settleUsageReservation({ id: first.id, userId: 'user-a', metric: 'social_posts', quantity: 1 });
+    await settleUsageReservation({ id: first.id, userId: 'user-a', metric: 'social_posts', quantity: 1, createdAt: '2026-10-21T12:00:00.000Z' });
     await expect(reserveUsageQuota(base)).rejects.toMatchObject({ code: 'plan_quota_exceeded' });
   });
 });
+
