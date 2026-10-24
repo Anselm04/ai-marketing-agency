@@ -9,7 +9,7 @@ export async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
     }
     const token = authHeader.split(' ')[1];
-    const decoded = store.verifyToken(token);
+    const decoded = await store.verifyToken(token);
     const user = await store.findUserById(decoded.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
@@ -38,3 +38,4 @@ export function requireRole(...roles) {
 export function requireAdmin(req, res, next) {
   return requireRole('admin')(req, res, next);
 }
+
