@@ -175,7 +175,7 @@ export class IntelligentOrchestrator {
     const allModels = aiModelRegistry.getAllModels();
     const availableModels = allModels.filter((m) => {
       const provider = aiModelRegistry.getProvider(m.providerId);
-      return provider?.isAvailable() && m.score >= qualityThreshold;
+      return provider?.isAvailable() && m.quality >= qualityThreshold;
     });
 
     if (availableModels.length === 0) {
@@ -741,3 +741,4 @@ export class IntelligentOrchestrator {
 
 export const intelligentOrchestrator = new IntelligentOrchestrator();
 export default intelligentOrchestrator;
+
