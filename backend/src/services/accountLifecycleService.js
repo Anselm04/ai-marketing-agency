@@ -169,7 +169,7 @@ export async function deleteCustomerAccount({ userId, password }) {
     await client.query('commit');
     return { deleted: true, cancelledStripeSubscriptions: activeStripe.length, deletedRecords: counts };
   } catch (error) {
-    try { await client.query('rollback'); } catch {}
+    try { await client.query('rollback'); } catch { /* Preserve the original transaction error. */ }
     throw error;
   } finally {
     client.release();
@@ -177,3 +177,4 @@ export async function deleteCustomerAccount({ userId, password }) {
 }
 
 export default deleteCustomerAccount;
+
