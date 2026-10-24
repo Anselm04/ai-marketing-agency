@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { issueSessionToken, verifySessionToken } from './sessionTokens.js';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -149,10 +149,10 @@ const store = {
   async updateUser(userId, updates) {
     const existing = await this.findUserById(userId);
     if (!existing) return null;
-    const passwordHash = updates.password ? await bcrypt.hash(updates.password, 12) : existing.password;
+    const passwordHash = updates.password ? await bcrypt.hash(updates.password, 12) : null;
     const { rows } = await pool.query(
       `update marketing.users
-       set email = lower($2), password_hash = $3, role = $4, profile = $5::jsonb, updated_at = now()
+       set email = lower($2), password_hash = coalesce($3, password_hash), role = $4, profile = $5::jsonb, updated_at = now()
        where id = $1 returning *`,
       [
         userId,
@@ -175,13 +175,11 @@ const store = {
     );
     return result.rowCount > 0;
   },
-  generateToken(userId) {
-    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
-    return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  async generateToken(userId, authenticatedHash) {
+    return issueSessionToken(await this.findUserById(userId), authenticatedHash);
   },
   verifyToken(token) {
-    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return verifySessionToken(token, (userId) => this.findUserById(userId));
   },
   hashPassword(password) {
     return bcrypt.hash(password, 12);
@@ -495,6 +493,13 @@ const store = {
     );
     return rows[0]?.value ?? null;
   },
+  async takeSetting(key) {
+    const { rows } = await pool.query(
+      'delete from marketing.settings where key = $1 returning value',
+      [key],
+    );
+    return rows[0]?.value ?? null;
+  },
   async setSettings(key, value) {
     await pool.query(
       `insert into marketing.settings (key, value) values ($1, $2::jsonb)
@@ -565,3 +570,4 @@ const store = {
 };
 
 export default store;
+
