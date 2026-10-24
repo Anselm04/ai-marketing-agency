@@ -14,11 +14,12 @@ class TranslationService {
 
     const result = await generateAgentResponse('content', `Translate the following text from ${sourceLanguage} to ${targetLanguage}. Maintain the original tone, formatting, and marketing intent. Only return the translated text, no explanations.\n\nText: ${content}`, {});
 
+    const fallback = Boolean(result.fallback || !result.content?.trim());
     return {
-      translated: result.content || result.fallback ? `[${targetLanguage}] ${content}` : content,
+      translated: fallback ? `[${targetLanguage}] ${content}` : result.content,
       language: targetLanguage,
       auto: true,
-      fallback: result.fallback || false,
+      fallback,
     };
   }
 
@@ -40,3 +41,4 @@ class TranslationService {
 }
 
 export default new TranslationService();
+
