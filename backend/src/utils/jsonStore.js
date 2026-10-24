@@ -3,13 +3,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { issueSessionToken, verifySessionToken } from './sessionTokens.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const testStore = process.env.NODE_ENV === 'test';
 const dataDir = path.join(__dirname, '..', '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+if (!testStore && !fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 function loadFile(name, defaultVal = []) {
+  if (testStore) return defaultVal;
   const file = path.join(dataDir, `${name}.json`);
   try {
     return JSON.parse(fs.readFileSync(file, 'utf-8'));
@@ -19,6 +21,7 @@ function loadFile(name, defaultVal = []) {
 }
 
 function saveFile(name, data) {
+  if (testStore) return;
   fs.writeFileSync(path.join(dataDir, `${name}.json`), JSON.stringify(data, null, 2));
 }
 
@@ -111,13 +114,11 @@ const store = {
     this._save();
     return true;
   },
-  generateToken(userId) {
-    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
-    return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  async generateToken(userId, authenticatedHash) {
+    return issueSessionToken(await this.findUserById(userId), authenticatedHash);
   },
   verifyToken(token) {
-    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return verifySessionToken(token, (userId) => this.findUserById(userId));
   },
   async hashPassword(password) {
     return bcrypt.hash(password, 12);
@@ -377,6 +378,12 @@ const store = {
   getSetting(key) {
     return Promise.resolve(settings[key] ?? null);
   },
+  async takeSetting(key) {
+    const value = settings[key] ?? null;
+    delete settings[key];
+    this._save();
+    return value;
+  },
   async setSettings(key, value) {
     settings[key] = value;
     this._save();
@@ -431,3 +438,4 @@ const store = {
 };
 
 export default store;
+
