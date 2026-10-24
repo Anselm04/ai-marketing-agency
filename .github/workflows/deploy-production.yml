@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: marketing-production
@@ -16,8 +17,13 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 25
@@ -26,6 +32,26 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Verify current main revision and successful push validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ] || [ "$(git rev-parse FETCH_HEAD)" != "$DEPLOY_SHA" ]; then
+            echo 'Refusing to deploy a revision that is not current upstream main.'
+            exit 1
+          fi
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            "$API_URL/repos/$REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$DEPLOY_SHA&event=push&status=success&per_page=100" \
+            | jq -e --arg sha "$DEPLOY_SHA" --arg repo "$REPOSITORY" \
+              'any(.workflow_runs[]; .head_sha == $sha and .head_branch == "main" and .event == "push" and .head_repository.full_name == $repo)' >/dev/null
 
       - name: Set up Fly.io
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
@@ -135,3 +161,4 @@ jobs:
           fi
 
           echo "Marketing production health, PostgreSQL persistence, Stripe verification, public UI, and auth boundary passed."
+
