@@ -13,6 +13,7 @@ describe('Per-user social video distribution', () => {
       .post('/api/auth/register')
       .send({
         email,
+        acceptedTerms: true,
         password: 'SecurePass123!',
         firstName: 'Social',
         lastName: 'Video',
@@ -93,3 +94,4 @@ describe('Per-user social video distribution', () => {
     }
   });
 });
+
