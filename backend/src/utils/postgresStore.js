@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { issueSessionToken, verifySessionToken } from './sessionTokens.js';
 import pg from 'pg';
+import { POSTGRES_READINESS_SQL } from './postgresReadiness.js';
 
 const { Pool } = pg;
 
@@ -106,6 +107,10 @@ const store = {
   _id: id,
   async connectDB() {
     await pool.query('select 1');
+    return true;
+  },
+  async checkReadiness() {
+    await pool.query({ text: POSTGRES_READINESS_SQL, query_timeout: 3000 });
     return true;
   },
   async disconnectDB() {

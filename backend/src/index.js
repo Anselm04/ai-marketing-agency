@@ -52,8 +52,7 @@ import unsubscribeRoutes from './routes/unsubscribe.js';
 import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
-import { openaiStatus } from './services/openaiService.js';
-import { costControlStatus } from './services/costControlStatus.js';
+import { mountHealthRoutes } from './utils/systemHealth.js';
 import { hydrateStripeWebhookSecret } from './services/runtimeSecretService.js';
 import './services/withUserTokensPatch.js';
 
@@ -118,48 +117,13 @@ app.use(
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan('combined'));
+mountHealthRoutes(app, store);
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 app.use('/api/unsubscribe', unsubscribeRoutes);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeBody);
 app.use(rateLimit);
-
-app.get('/health', async (_req, res) => {
-  try {
-    await store.connectDB();
-    res.json({ status: 'ok', database: store.isPostgres?.() ? 'postgres' : 'local', timestamp: new Date().toISOString() });
-  } catch (error) {
-    logger.error('Health check failed', { error: error?.message });
-    res.status(503).json({ status: 'degraded', database: 'unavailable', timestamp: new Date().toISOString() });
-  }
-});
-
-app.get('/api/health', async (_req, res) => {
-  try {
-    await store.connectDB();
-    const persistence = store.getPersistenceInfo
-      ? store.getPersistenceInfo()
-      : { mode: store.isPostgres?.() ? 'supabase-postgres' : 'local-json' };
-    const ai = openaiStatus();
-    res.json({
-      status: 'ok',
-      service: 'trillionai-marketing',
-      timestamp: new Date().toISOString(),
-      database: store.isPostgres?.() ? 'postgres' : 'local',
-      persistence,
-      openai: ai,
-      billing: {
-        stripeApiConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
-        stripeWebhookVerificationConfigured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
-      },
-      costControls: costControlStatus(),
-    });
-  } catch (error) {
-    logger.error('API health check failed', { error: error?.message });
-    res.status(503).json({ status: 'degraded', database: 'unavailable', timestamp: new Date().toISOString() });
-  }
-});
 
 app.get('/metrics', metricsRouteHandler);
 
@@ -286,3 +250,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
+
