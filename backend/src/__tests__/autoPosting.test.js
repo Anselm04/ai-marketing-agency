@@ -14,6 +14,7 @@ describe('Automated posting scheduler', () => {
       .post('/api/auth/register')
       .send({
         email,
+        acceptedTerms: true,
         password: 'SecurePass123!',
         firstName: 'Auto',
         lastName: 'Posting',
@@ -116,3 +117,4 @@ describe('Automated posting scheduler', () => {
     expect(res.body.error).toMatch(/source photos\/videos/i);
   });
 });
+
