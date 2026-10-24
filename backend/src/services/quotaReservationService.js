@@ -102,7 +102,7 @@ export async function settleUsageReservation({ id, userId, metric, quantity, pro
     await client.query('commit');
     return { id, userId, metric, quantity: actualQuantity };
   } catch (error) {
-    try { await client.query('rollback'); } catch {}
+    try { await client.query('rollback'); } catch { /* Preserve the original transaction error. */ }
     throw error;
   } finally {
     client.release();
@@ -117,3 +117,4 @@ export async function releaseQuotaReservation(id) {
 }
 
 export function resetQuotaReservationsForTests() { memoryReservations.clear(); }
+
