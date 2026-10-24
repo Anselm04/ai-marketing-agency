@@ -12,6 +12,7 @@ describe('Per-user account memory and privacy', () => {
       .post('/api/auth/register')
       .send({
         email: 'memory-a-' + stamp + '@example.com',
+        acceptedTerms: true,
         password: 'SecurePass123!',
         firstName: 'Memory',
         lastName: 'A',
@@ -22,6 +23,7 @@ describe('Per-user account memory and privacy', () => {
       .post('/api/auth/register')
       .send({
         email: 'memory-b-' + stamp + '@example.com',
+        acceptedTerms: true,
         password: 'SecurePass123!',
         firstName: 'Memory',
         lastName: 'B',
@@ -90,6 +92,7 @@ describe('Per-user account memory and privacy', () => {
       .post('/api/auth/register')
       .send({
         email,
+        acceptedTerms: true,
         password: 'SecurePass123!',
         firstName: 'Password',
         lastName: 'Memory',
@@ -121,3 +124,4 @@ describe('Per-user account memory and privacy', () => {
     expect(login.status).toBe(200);
   });
 });
+
