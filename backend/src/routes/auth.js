@@ -9,7 +9,7 @@ const LEGAL_VERSION = '2026-10-21';
 
 router.post('/register', async (req, res) => {
   const { email, password, firstName, lastName, acceptedTerms } = req.body;
-  if (!email || !password || password.length < 8) {
+  if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || password.length < 8) {
     return res.status(400).json({ error: 'Email and password (min 8 chars) required' });
   }
   if (acceptedTerms !== true) {
@@ -18,10 +18,13 @@ router.post('/register', async (req, res) => {
       code: 'legal_acceptance_required',
     });
   }
+  if (isOwnerEmail(email)) {
+    return res.status(403).json({ error: 'This identity must be provisioned by the operator.', code: 'reserved_identity' });
+  }
   try {
     const acceptedAt = new Date().toISOString();
     const user = await store.createUser({
-      email: email.toLowerCase(),
+      email: email.trim().toLowerCase(),
       password,
       profile: {
         firstName,
@@ -34,7 +37,7 @@ router.post('/register', async (req, res) => {
         },
       },
     });
-    const token = store.generateToken(user.id);
+    const token = await store.generateToken(user.id);
     res.status(201).json({ token, user: { ...user, isOwner: isOwnerEmail(user.email) } });
   } catch (err) {
     res.status(409).json({ error: err.message });
@@ -43,18 +46,20 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
+  if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || !password) {
     return res.status(400).json({ error: 'Email and password required' });
   }
   try {
-    const user = await store.findUserByEmail(email.toLowerCase());
-    if (!user || !(await store.comparePassword(password, user.password))) {
+    const user = await store.findUserByEmail(email.trim().toLowerCase());
+    const authenticatedHash = user?.password;
+    if (!user || !(await store.comparePassword(password, authenticatedHash))) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    const token = store.generateToken(user.id);
+    const token = await store.generateToken(user.id, authenticatedHash);
     const { password: _, resetToken, resetTokenExpires, ...safe } = user;
     res.json({ token, user: { ...safe, isOwner: isOwnerEmail(user.email) } });
   } catch (err) {
+    if (err.code === 'credentials_changed') return res.status(401).json({ error: 'Credentials changed; please sign in again' });
     res.status(500).json({ error: err.message });
   }
 });
@@ -66,7 +71,7 @@ router.get('/me', async (req, res) => {
       return res.status(401).json({ error: 'Missing token' });
     }
     const token = authHeader.split(' ')[1];
-    const decoded = store.verifyToken(token);
+    const decoded = await store.verifyToken(token);
     const user = await store.findUserById(decoded.userId);
     if (!user) return res.status(401).json({ error: 'User not found' });
     const { password, resetToken, resetTokenExpires, ...safe } = user;
@@ -131,13 +136,12 @@ router.post('/forgot-password', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   try {
     const { token, password } = req.body;
-    if (!token || !password || password.length < 8) {
+    if (typeof token !== 'string' || !token || typeof password !== 'string' || password.length < 8) {
       return res.status(400).json({ error: 'Token and password (min 8 chars) required' });
     }
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const key = 'password_reset:' + tokenHash;
-    const reset = await store.getSetting(key);
-    await store.deleteSetting(key);
+    const reset = await store.takeSetting(key);
     if (!reset?.userId || !reset.expiresAt || new Date(reset.expiresAt) < new Date()) {
       return res.status(400).json({ error: 'Invalid or expired token' });
     }
@@ -150,3 +154,4 @@ router.post('/reset-password', async (req, res) => {
 });
 
 export default router;
+
