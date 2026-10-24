@@ -21,15 +21,15 @@ describe('LandingPage', () => {
     expect(screen.getAllByText(/TrillionAI/i).length).toBeGreaterThan(0);
   });
 
-  it('shows pricing tiers and library', () => {
+  it('shows Marketing plans and excludes the retired unrelated app library', () => {
     render(wrap(<LandingPage />));
     expect(screen.getAllByText(/Starter/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Quick Tasks/i)).toBeInTheDocument();
-    expect(screen.getByText(/Orb Catch/i)).toBeInTheDocument();
-    expect(screen.getByText(/Brief Agent/i)).toBeInTheDocument();
-    expect(screen.getByText(/CaseCount/i)).toBeInTheDocument();
-    expect(screen.getByText(/Quick Notes/i)).toBeInTheDocument();
-    expect(screen.getByText(/Northstar Waitlist/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Choose the workload your business needs/i })).toBeInTheDocument();
+    expect(screen.getByText(/Plans are currently single-user workspaces/i)).toBeInTheDocument();
+    for (const title of ['Quick Tasks', 'Orb Catch', 'Brief Agent', 'CaseCount', 'Quick Notes', 'Northstar Waitlist']) {
+      expect(screen.queryByText(title)).not.toBeInTheDocument();
+    }
     expect(screen.getAllByText(/Growth/i).length).toBeGreaterThan(0);
   });
 });
+
