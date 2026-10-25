@@ -60,41 +60,69 @@ function deriveSegmentsFromEvidence(lesson = {}, sourceDurationSeconds) {
   return normalizeSourceSegments(inferred, sourceDurationSeconds);
 }
 
+function evidenceLooksUninformative(segments = []) {
+  if (!segments.length) return true;
+  return segments.every((segment) => segment.startSeconds === 0 && segment.endSeconds <= 60);
+}
+
 export function buildLessonRenderPlan(project = {}) {
   if (project.approval?.status !== 'approved') {
     throw new Error('Course must be approved before lesson video rendering.');
   }
   if (!project.sourceUrl) throw new Error('A source video is required before lesson video rendering.');
   const modules = Array.isArray(project.coursePackage?.modules) ? project.coursePackage.modules : [];
-  const lessons = [];
+  const flattened = [];
 
   for (const module of modules) {
     for (const lesson of Array.isArray(module.lessons) ? module.lessons : []) {
-      const segments = deriveSegmentsFromEvidence(lesson, project.sourceDurationSeconds);
-      if (!segments.length) continue;
-      const durationSeconds = Math.min(
-        MAX_LESSON_SECONDS,
-        Math.round(segments.reduce((sum, segment) => sum + (segment.endSeconds - segment.startSeconds), 0)),
-      );
-      lessons.push({
-        id: safeText(lesson.id, 120) || randomUUID(),
-        moduleId: safeText(module.id, 120),
-        moduleTitle: safeText(module.title, 200),
-        title: safeText(lesson.title, 200) || 'Course lesson',
-        segments,
-        durationSeconds,
-        outputAspect: '16:9',
-        outputResolution: '1920x1080',
-        status: 'planned',
-      });
+      flattened.push({ module, lesson });
     }
   }
+
+  const sourceDuration = Number(project.sourceDurationSeconds) || 0;
+  const fallbackPartitionSize = sourceDuration > 0 && flattened.length > 0
+    ? sourceDuration / flattened.length
+    : 0;
+  const lessons = [];
+  let reviewRequired = false;
+
+  flattened.forEach(({ module, lesson }, index) => {
+    let segments = deriveSegmentsFromEvidence(lesson, sourceDuration);
+    const shouldPartition = fallbackPartitionSize > 0 && evidenceLooksUninformative(segments);
+    if (shouldPartition) {
+      const startSeconds = Math.round((fallbackPartitionSize * index) * 100) / 100;
+      const endSeconds = Math.round((index === flattened.length - 1 ? sourceDuration : fallbackPartitionSize * (index + 1)) * 100) / 100;
+      segments = [{
+        startSeconds,
+        endSeconds,
+        purpose: 'automatic source partition — creator review required',
+      }];
+      reviewRequired = true;
+    }
+    if (!segments.length) return;
+
+    const totalSegmentSeconds = Math.round(segments.reduce((sum, segment) => sum + (segment.endSeconds - segment.startSeconds), 0));
+    const durationSeconds = Math.min(MAX_LESSON_SECONDS, totalSegmentSeconds);
+    lessons.push({
+      id: safeText(lesson.id, 120) || randomUUID(),
+      moduleId: safeText(module.id, 120),
+      moduleTitle: safeText(module.title, 200),
+      title: safeText(lesson.title, 200) || 'Course lesson',
+      segments,
+      durationSeconds,
+      outputAspect: '16:9',
+      outputResolution: '1920x1080',
+      status: 'planned',
+      reviewRequired: shouldPartition || lesson?.provenance?.reviewRequired === true,
+    });
+  });
 
   return {
     generatedAt: new Date().toISOString(),
     sourceUrl: project.sourceUrl,
     lessons,
-    note: 'Only creator-approved course structure is eligible for lesson rendering.',
+    reviewRequired: reviewRequired || lessons.some((lesson) => lesson.reviewRequired),
+    note: 'Only creator-approved course structure is eligible for lesson rendering. Automatically partitioned source ranges remain review-required.',
   };
 }
 
