@@ -156,6 +156,7 @@ export function validateMultipartParts(parts = []) {
   return normalized.sort((a, b) => a.PartNumber - b.PartNumber);
 }
 
+// Kept as an explicit development/test helper only. Production generation methods below never use it.
 export function buildFallbackCoursePackage(input = {}) {
   const title = safeText(input.name || input.title, 180) || 'Professional Course';
   const modules = fallbackModules(input);
@@ -261,6 +262,14 @@ export function normalizeCoursePackage(raw = {}, input = {}) {
   };
 }
 
+function generationError(message, cause = null) {
+  const error = new Error(message);
+  error.code = 'course_ai_generation_failed';
+  error.statusCode = 503;
+  if (cause) error.cause = cause;
+  return error;
+}
+
 async function generateWithAI(input = {}) {
   const transcript = safeText(input.transcript, 24000);
   const visualObservations = Array.isArray(input.visualAnalysis?.observations)
@@ -286,20 +295,36 @@ async function generateWithAI(input = {}) {
     `Visual observations: ${JSON.stringify(visualObservations).slice(0, 16000)}`,
   ].join('\n');
 
-  const ai = await generateAgentResponse('content-writer', prompt, {
-    userId: input.owner || input.ownerId,
-    courseFactory: true,
-    projectName: input.name,
-  });
+  let ai;
+  try {
+    ai = await generateAgentResponse('content-writer', prompt, {
+      userId: input.owner || input.ownerId,
+      courseFactory: true,
+      projectName: input.name,
+    });
+  } catch (error) {
+    throw generationError('Professional course generation failed. No fallback course was substituted.', error);
+  }
+
+  if (ai?.fallback === true) {
+    throw generationError('Professional course generation is unavailable because the configured AI provider did not complete the request. No fallback course was substituted.');
+  }
+
   const parsed = safeJson(ai?.content);
-  if (!parsed) return null;
-  return normalizeCoursePackage(parsed, input);
+  if (!parsed) {
+    throw generationError('The AI provider returned an invalid course package. No fallback course was substituted.');
+  }
+
+  const normalized = normalizeCoursePackage(parsed, input);
+  if (!normalized.modules.length) {
+    throw generationError('The AI provider returned an empty course package. No fallback course was substituted.');
+  }
+  return normalized;
 }
 
 class CourseFactoryService {
   async generateCurriculum(input = {}) {
-    const fullPackage = await generateWithAI(input);
-    const packageData = fullPackage || buildFallbackCoursePackage(input);
+    const packageData = await generateWithAI(input);
     return {
       generatedAt: packageData.generatedAt,
       title: packageData.title,
@@ -309,12 +334,12 @@ class CourseFactoryService {
       modules: packageData.modules,
       provenance: packageData.provenance,
       review: packageData.review,
-      aiFallback: !fullPackage,
+      aiFallback: false,
     };
   }
 
   async generatePackage(input = {}) {
-    return (await generateWithAI(input)) || buildFallbackCoursePackage(input);
+    return generateWithAI(input);
   }
 }
 
