@@ -2,6 +2,7 @@ import { getUserPlanContext } from './planQuotaService.js';
 import { reserveUsageQuota, releaseQuotaReservation, settleUsageReservation } from './quotaReservationService.js';
 
 const PROVIDER_PREFIXES = ['OPENAI', 'ANTHROPIC', 'GOOGLE', 'COHERE', 'MISTRAL', 'GROQ', 'AZURE', 'BEDROCK'];
+const MARKETING_PLANS = ['starter', 'growth', 'agency', 'enterprise'];
 
 function positiveNumber(value) {
   const number = Number(value);
@@ -17,7 +18,6 @@ function providerRates(prefix) {
   const normalized = String(prefix || '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
   const input = positiveNumber(process.env[`${normalized}_INPUT_USD_PER_1M`]);
   const output = positiveNumber(process.env[`${normalized}_OUTPUT_USD_PER_1M`]);
-  // Monetary enforcement must not guess a missing side of provider pricing.
   if (input == null || output == null) return null;
   return { provider: normalized.toLowerCase(), input, output };
 }
@@ -94,8 +94,6 @@ export async function settleMonthlyAiCostQuota({ monetary, userId, provider = nu
     quantity,
     provider,
     model,
-    // ai_tokens already stores the provider cost in cost_usd. This event uses
-    // quantity as the atomic quota metric so analytics cannot double-count cost_usd.
     costUsd: null,
     metadata: {
       operation,
@@ -111,11 +109,26 @@ export async function releaseMonthlyAiCostQuota(monetary) {
 }
 
 export function aiMonetaryCapStatus(plan = null) {
-  const capUsd = plan ? configuredMonthlyAiCostCap(plan) : positiveNumber(process.env.AI_MONTHLY_USD_CAP);
+  if (plan) {
+    const capUsd = configuredMonthlyAiCostCap(plan);
+    return {
+      implemented: true,
+      configured: capUsd != null,
+      capUsd,
+      configuredPlans: capUsd != null ? [String(plan)] : [],
+      planCapsUsd: { [String(plan)]: capUsd },
+      pricingConfigured: Boolean(configuredAiPricing()),
+    };
+  }
+
+  const planCapsUsd = Object.fromEntries(MARKETING_PLANS.map((id) => [id, configuredMonthlyAiCostCap(id)]));
+  const configuredPlans = MARKETING_PLANS.filter((id) => planCapsUsd[id] != null);
   return {
     implemented: true,
-    configured: capUsd != null,
-    capUsd,
+    configured: configuredPlans.length > 0,
+    capUsd: positiveNumber(process.env.AI_MONTHLY_USD_CAP),
+    configuredPlans,
+    planCapsUsd,
     pricingConfigured: Boolean(configuredAiPricing()),
   };
 }
