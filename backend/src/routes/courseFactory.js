@@ -5,6 +5,7 @@ import courseFactoryService, {
   validateMultipartParts,
 } from '../services/courseFactoryService.js';
 import mediaClipperService from '../services/mediaClipperService.js';
+import courseVisualAnalysisService from '../services/courseVisualAnalysisService.js';
 import {
   abortMultipartUpload,
   completeMultipartUpload,
@@ -248,6 +249,32 @@ router.post('/projects/:id/transcribe', async (req, res) => {
         provenance: { kind: 'creator_evidence' },
       },
       status: 'transcribed',
+    });
+    return res.json(updated);
+  } catch (error) {
+    return res.status(422).json({ error: error.message });
+  }
+});
+
+router.post('/projects/:id/analyse-visuals', async (req, res) => {
+  const project = await getOwnedProject(req, res);
+  if (!project) return;
+  if (!assertRights(project, res)) return;
+  if (!project.sourceUrl) return res.status(400).json({ error: 'Upload or provide a source video before visual analysis.' });
+
+  try {
+    const visualAnalysis = await courseVisualAnalysisService.analyse({
+      sourceUrl: project.sourceUrl,
+      durationSeconds: project.sourceDurationSeconds,
+      name: project.name,
+      targetAudience: project.targetAudience,
+      desiredOutcome: project.desiredOutcome,
+    });
+    const updated = await store.updateCampaign(project.id, {
+      visualAnalysis,
+      sourceDurationSeconds: project.sourceDurationSeconds || visualAnalysis.durationSeconds,
+      approval: { ...project.approval, status: 'pending', approvedAt: null, approvedBy: null },
+      status: project.transcript ? 'analysed' : 'visuals_ready',
     });
     return res.json(updated);
   } catch (error) {
