@@ -11,6 +11,18 @@ function unavailableSource(source, reason) {
   };
 }
 
+function requireRealHypothesis(result, kind) {
+  const content = String(result?.content || '').trim();
+  if (!result || result.fallback === true || !content) {
+    const error = new Error(`The AI provider could not generate the ${kind} hypothesis.`);
+    error.status = 503;
+    error.statusCode = 503;
+    error.code = 'ai_provider_unavailable';
+    throw error;
+  }
+  return content;
+}
+
 class TrendScanner {
   constructor() {
     this.cache = new Map();
@@ -73,7 +85,7 @@ class TrendScanner {
       evidenceType: 'model-hypothesis',
       verifiedExternalResearch: false,
       warning: 'This is an AI hypothesis, not measured current market research.',
-      result,
+      hypothesis: requireRealHypothesis(result, 'trend'),
     };
   }
 
@@ -87,9 +99,10 @@ class TrendScanner {
       evidenceType: 'creative-hypothesis',
       verifiedExternalResearch: false,
       warning: 'These are ideas to test, not evidence that content will go viral.',
-      result,
+      ideas: requireRealHypothesis(result, 'content-test'),
     };
   }
 }
 
+export { requireRealHypothesis, unavailableSource };
 export default new TrendScanner();
