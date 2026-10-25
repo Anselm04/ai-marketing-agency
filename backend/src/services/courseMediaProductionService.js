@@ -65,11 +65,20 @@ function evidenceLooksUninformative(segments = []) {
   return segments.every((segment) => segment.startSeconds === 0 && segment.endSeconds <= 60);
 }
 
+function getSourceRef(project = {}) {
+  if (project.sourceUrl) return { kind: 'http', url: project.sourceUrl };
+  if (project.upload?.status === 'complete' && project.upload?.key && project.upload?.privateBucket === true) {
+    return { kind: 'private_object', key: project.upload.key };
+  }
+  return null;
+}
+
 export function buildLessonRenderPlan(project = {}) {
   if (project.approval?.status !== 'approved') {
     throw new Error('Course must be approved before lesson video rendering.');
   }
-  if (!project.sourceUrl) throw new Error('A source video is required before lesson video rendering.');
+  const sourceRef = getSourceRef(project);
+  if (!sourceRef) throw new Error('A source video is required before lesson video rendering.');
   const modules = Array.isArray(project.coursePackage?.modules) ? project.coursePackage.modules : [];
   const flattened = [];
 
@@ -119,7 +128,8 @@ export function buildLessonRenderPlan(project = {}) {
 
   return {
     generatedAt: new Date().toISOString(),
-    sourceUrl: project.sourceUrl,
+    ...(sourceRef.kind === 'http' ? { sourceUrl: sourceRef.url } : {}),
+    sourceRef,
     lessons,
     reviewRequired: reviewRequired || lessons.some((lesson) => lesson.reviewRequired),
     note: 'Only creator-approved course structure is eligible for lesson rendering. Automatically partitioned source ranges remain review-required.',
