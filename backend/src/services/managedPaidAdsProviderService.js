@@ -121,10 +121,27 @@ export async function listManagedPaidAdAccounts(userId, provider) {
   return id === 'meta' ? listMetaAdAccounts(userId) : listGoogleAdAccounts(userId);
 }
 
+export async function requireManagedPaidAdAccount(userId, provider, providerAccountId) {
+  const wanted = String(providerAccountId || '').trim();
+  if (!wanted) {
+    throw providerError('Select an advertising account.', 'paid_ads_provider_account_required', 400);
+  }
+  const accounts = await listManagedPaidAdAccounts(userId, provider);
+  const account = accounts.find((item) => item.providerAccountId === wanted || item.accountId === wanted);
+  if (!account) {
+    throw providerError(
+      'The selected advertising account is not accessible through the connected provider account.',
+      'paid_ads_provider_account_not_accessible',
+      409,
+    );
+  }
+  return account;
+}
+
 export function managedPaidAdsProviderInfo(provider) {
   const id = normalizeProvider(provider);
   return { id, ...PROVIDERS[id] };
 }
 
 export { PROVIDERS as MANAGED_PAID_AD_PROVIDERS };
-export default { listManagedPaidAdAccounts, managedPaidAdsProviderInfo };
+export default { listManagedPaidAdAccounts, requireManagedPaidAdAccount, managedPaidAdsProviderInfo };
