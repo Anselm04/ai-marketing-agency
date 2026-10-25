@@ -26,10 +26,16 @@ import { majorToMinor, minorToMajor } from '../services/currencyService.js';
 const router = express.Router();
 
 function routeError(res, error, fallback = 'Paid advertising operation failed.') {
-  const status = Number(error?.statusCode) || 400;
+  const statusCandidate = Number(error?.statusCode || error?.status);
+  const code = String(error?.code || 'paid_ads_operation_failed');
+  const safeClientError = code.startsWith('paid_ads_')
+    && Number.isInteger(statusCandidate)
+    && statusCandidate >= 400
+    && statusCandidate < 500;
+  const status = safeClientError ? statusCandidate : 502;
   return res.status(status).json({
-    error: error?.message || fallback,
-    code: error?.code || 'paid_ads_operation_failed',
+    error: safeClientError ? (error?.message || fallback) : fallback,
+    code: safeClientError ? code : 'paid_ads_provider_operation_failed',
   });
 }
 
@@ -239,4 +245,5 @@ router.post('/:id/reconcile', async (req, res) => {
   }
 });
 
+export { routeError as paidAdsRouteError };
 export default router;
