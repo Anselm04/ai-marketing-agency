@@ -1,4 +1,12 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  UploadPartCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import dotenv from 'dotenv';
 
@@ -21,6 +29,10 @@ const s3Client = hasStorageCredentials ? new S3Client({
 const BUCKET = process.env.S3_BUCKET || process.env.S3_BUCKET_NAME || 'ai-marketing-uploads';
 const PRIVATE_BUCKET = process.env.S3_PRIVATE_BUCKET || BUCKET;
 const PUBLIC_BASE_URL = process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, '') || null;
+
+function selectBucket(privateBucket = false) {
+  return privateBucket ? PRIVATE_BUCKET : BUCKET;
+}
 
 export function isS3Configured() {
   return !!s3Client && hasStorageCredentials;
@@ -60,6 +72,59 @@ export async function getSignedDownloadUrl(key, expiresIn = 3600) {
 export async function getPrivateSignedDownloadUrl(key, expiresIn = 3600) {
   if (!isS3Configured()) throw new Error('S3 not configured');
   return getSignedUrl(s3Client, new GetObjectCommand({ Bucket: PRIVATE_BUCKET, Key: key }), { expiresIn });
+}
+
+export async function createMultipartUpload(key, contentType = 'application/octet-stream', options = {}) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  const privateBucket = options.privateBucket === true;
+  const result = await s3Client.send(new CreateMultipartUploadCommand({
+    Bucket: selectBucket(privateBucket),
+    Key: key,
+    ContentType: contentType,
+  }));
+  if (!result.UploadId) throw new Error('Storage provider did not return a multipart upload ID');
+  return { uploadId: result.UploadId, key, privateBucket };
+}
+
+export async function getMultipartPartUploadUrl({ key, uploadId, partNumber, expiresIn = 3600, privateBucket = false }) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  const normalizedPart = Number(partNumber);
+  if (!Number.isInteger(normalizedPart) || normalizedPart < 1 || normalizedPart > 10000) {
+    throw new Error('Multipart part number must be between 1 and 10000');
+  }
+  return getSignedUrl(s3Client, new UploadPartCommand({
+    Bucket: selectBucket(privateBucket),
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: normalizedPart,
+  }), { expiresIn });
+}
+
+export async function completeMultipartUpload({ key, uploadId, parts, privateBucket = false }) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  const result = await s3Client.send(new CompleteMultipartUploadCommand({
+    Bucket: selectBucket(privateBucket),
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: { Parts: parts },
+  }));
+  return {
+    key,
+    url: privateBucket ? null : getUploadUrl(key),
+    etag: result.ETag || null,
+    location: privateBucket ? null : result.Location || null,
+    privateBucket,
+  };
+}
+
+export async function abortMultipartUpload({ key, uploadId, privateBucket = false }) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  await s3Client.send(new AbortMultipartUploadCommand({
+    Bucket: selectBucket(privateBucket),
+    Key: key,
+    UploadId: uploadId,
+  }));
+  return { aborted: true, key, privateBucket };
 }
 
 export function getUploadUrl(key) {
