@@ -55,6 +55,7 @@ import unsubscribeRoutes from './routes/unsubscribe.js';
 import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
+import { installAnthropicStreaming } from './services/anthropicStreamingService.js';
 import { mountHealthRoutes } from './utils/systemHealth.js';
 import { hydrateStripeWebhookSecret } from './services/runtimeSecretService.js';
 import './services/withUserTokensPatch.js';
@@ -65,6 +66,8 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { sanitizeBody } from './middleware/sanitize.js';
 import { auditLog } from './middleware/auditLog.js';
+
+installAnthropicStreaming();
 
 if (process.env.NODE_ENV === 'production' && store.isPostgres?.() !== true) {
   throw new Error(
