@@ -68,6 +68,19 @@ export function installOrchestratorPersistencePatch(service = intelligentOrchest
 
   const originalBuild = service.buildUserProfile.bind(service);
   const originalLog = service.logTaskHistory.bind(service);
+  const originalClassify = service.classifyTask.bind(service);
+
+  // The legacy classifier mutates a shared classification object. Always invoke
+  // it with empty content and return a fresh object whose complexity belongs to
+  // this request only.
+  service.classifyTask = function classifyTaskWithoutSharedMutation(taskType, content = '') {
+    const base = { ...originalClassify(taskType, '') };
+    const length = String(content || '').length;
+    return {
+      ...base,
+      complexity: length > 10000 ? 'high' : length > 3000 ? 'medium' : 'low',
+    };
+  };
 
   service.buildUserProfile = async function buildPersistentUserProfile(userId, userData = {}) {
     const profile = await originalBuild(userId, userData);
@@ -78,11 +91,10 @@ export function installOrchestratorPersistencePatch(service = intelligentOrchest
   service.getUserProfile = async function getPersistentUserProfile(userId) {
     const owned = await store.getContentByOwner(userId);
     const record = owned.find((item) => item.kind === PROFILE_KIND);
-    if (!record?.profile) return null;
-
     const profile = {
-      ...sanitizeProfile(record.profile),
+      ...sanitizeProfile(record?.profile || { userId }),
       connectedConnectors: await connectedConnectorsForUser(userId),
+      persisted: Boolean(record?.profile),
     };
     service.userProfiles?.set(userId, profile);
     return profile;
