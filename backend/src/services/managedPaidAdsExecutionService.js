@@ -65,15 +65,6 @@ async function metaPost(path, token, values) {
   }, 'meta_ads_execution_failed');
 }
 
-async function metaDelete(id, token) {
-  if (!id) return;
-  try {
-    await jsonRequest(`${META_BASE}/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }, 'meta_ads_cleanup_failed');
-  } catch {
-    // Failed cleanup is reported on the launch error through provider resource ids; never claim cleanup succeeded.
-  }
-}
-
 export function validateManagedPaidAdLaunch(budget) {
   if (!budget?.providerAccountId || !budget?.providerAccount?.currency || !budget?.campaignConfig) {
     throw executionError('A verified advertising account, account currency, and campaign configuration are required.', 'paid_ads_campaign_configuration_required');
@@ -167,68 +158,75 @@ async function launchMeta(userId, budget) {
     created.adId = ad.id;
     if (!created.adId) throw executionError('Meta did not return an ad id.', 'meta_ads_execution_failed', 502);
 
-    // Enable children before the parent campaign so nothing can serve before the full hierarchy exists.
     await metaPost(created.adId, token, { status: 'ACTIVE' });
     await metaPost(created.adSetId, token, { status: 'ACTIVE' });
     await metaPost(created.campaignId, token, { status: 'ACTIVE' });
     return { ...created, provider: 'meta', status: 'active' };
   } catch (error) {
     if (created.campaignId) {
-      try { await metaPost(created.campaignId, token, { status: 'PAUSED' }); } catch { /* retain truthful partial ids below */ }
+      try { await metaPost(created.campaignId, token, { status: 'PAUSED' }); } catch { /* partial ids retained */ }
     }
     error.providerResources = created;
     throw error;
   }
 }
 
-async function googlePost(path, token, body, code = 'google_ads_execution_failed') {
+function googleHeaders(token, loginCustomerId = null) {
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  if (loginCustomerId) headers['login-customer-id'] = String(loginCustomerId).replace(/\D/g, '');
+  return headers;
+}
+
+async function googlePost(path, token, body, code = 'google_ads_execution_failed', loginCustomerId = null) {
   return jsonRequest(`${GOOGLE_BASE}/${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: googleHeaders(token, loginCustomerId),
     body: JSON.stringify(body),
   }, code);
 }
 
-function googleDateTime(date) {
-  return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
-}
-
-async function googleLookupTarget(customerId, token, config) {
-  const escapedCountry = String(config.countryCode).replace(/'/g, "\\'");
-  const escapedLanguage = String(config.languageCode || 'en').replace(/'/g, "\\'");
-  const query = [
-    `SELECT geo_target_constant.resource_name, geo_target_constant.name FROM geo_target_constant WHERE geo_target_constant.country_code = '${escapedCountry}' AND geo_target_constant.target_type = 'Country' AND geo_target_constant.status = 'ENABLED' LIMIT 1`,
-    `SELECT language_constant.resource_name, language_constant.name FROM language_constant WHERE language_constant.code = '${escapedLanguage}' LIMIT 1`,
-  ];
-  const results = [];
-  for (const statement of query) {
-    const body = await googlePost(`customers/${customerId}/googleAds:searchStream`, token, { query: statement }, 'google_ads_targeting_lookup_failed');
-    const batches = Array.isArray(body) ? body : [body];
-    results.push(batches.flatMap((batch) => Array.isArray(batch?.results) ? batch.results : [])[0] || null);
+function googleCampaignDateTime(dateText, endOfDay = false) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateText || ''))) {
+    throw executionError('Google campaign date must use YYYY-MM-DD format.', 'paid_ads_schedule_invalid');
   }
-  const geo = results[0]?.geoTargetConstant?.resourceName;
-  const language = results[1]?.languageConstant?.resourceName;
-  if (!geo || !language) throw executionError('Google Ads could not resolve the requested country/language targeting.', 'google_ads_targeting_lookup_failed', 409);
-  return { geo, language };
+  return `${dateText} ${endOfDay ? '23:59:59' : '00:00:00'}`;
 }
 
-async function googleRemove(customerId, token, service, resourceName) {
+async function googleLookupGeoTarget(customerId, token, config, loginCustomerId = null) {
+  const escapedCountry = String(config.countryCode).replace(/'/g, "\\'");
+  const statement = `SELECT geo_target_constant.resource_name, geo_target_constant.name FROM geo_target_constant WHERE geo_target_constant.country_code = '${escapedCountry}' AND geo_target_constant.target_type = 'Country' AND geo_target_constant.status = 'ENABLED' LIMIT 1`;
+  const body = await googlePost(
+    `customers/${customerId}/googleAds:searchStream`,
+    token,
+    { query: statement },
+    'google_ads_targeting_lookup_failed',
+    loginCustomerId,
+  );
+  const batches = Array.isArray(body) ? body : [body];
+  const result = batches.flatMap((batch) => Array.isArray(batch?.results) ? batch.results : [])[0] || null;
+  const geo = result?.geoTargetConstant?.resourceName;
+  if (!geo) throw executionError('Google Ads could not resolve the requested country targeting.', 'google_ads_targeting_lookup_failed', 409);
+  return geo;
+}
+
+async function googleRemove(customerId, token, service, resourceName, loginCustomerId = null) {
   if (!resourceName) return;
   try {
-    await googlePost(`customers/${customerId}/${service}:mutate`, token, { operations: [{ remove: resourceName }] }, 'google_ads_cleanup_failed');
+    await googlePost(`customers/${customerId}/${service}:mutate`, token, { operations: [{ remove: resourceName }] }, 'google_ads_cleanup_failed', loginCustomerId);
   } catch { /* launch error carries resource ids for remediation */ }
 }
 
 async function launchGoogle(userId, budget) {
   const config = budget.campaignConfig;
-  const { start, end } = validateManagedPaidAdLaunch(budget);
+  validateManagedPaidAdLaunch(budget);
   const token = await tokenFor(userId, 'google_ads');
   const customerId = String(budget.providerAccountId).replace(/\D/g, '');
+  const loginCustomerId = budget.providerAccount?.loginCustomerId || null;
   if (!/^\d{10}$/.test(customerId)) throw executionError('Google Ads customer id must contain 10 digits.', 'google_ads_customer_invalid');
   const created = { budgetResourceName: null, campaignResourceName: null, adGroupResourceName: null, adResourceName: null };
 
   try {
-    const targeting = await googleLookupTarget(customerId, token, config);
+    const geoTarget = await googleLookupGeoTarget(customerId, token, config, loginCustomerId);
     const budgetResponse = await googlePost(`customers/${customerId}/campaignBudgets:mutate`, token, {
       operations: [{ create: {
         name: `${config.name} — TrillionAI Budget ${Date.now()}`,
@@ -237,7 +235,7 @@ async function launchGoogle(userId, budget) {
         explicitlyShared: false,
         deliveryMethod: 'STANDARD',
       } }],
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
     created.budgetResourceName = budgetResponse?.results?.[0]?.resourceName;
     if (!created.budgetResourceName) throw executionError('Google Ads did not return a campaign budget resource.', 'google_ads_execution_failed', 502);
 
@@ -255,19 +253,18 @@ async function launchGoogle(userId, budget) {
           targetContentNetwork: false,
           targetPartnerSearchNetwork: false,
         },
-        startDateTime: googleDateTime(start),
-        endDateTime: googleDateTime(end),
+        startDateTime: googleCampaignDateTime(config.startDate, false),
+        endDateTime: googleCampaignDateTime(config.endDate, true),
       } }],
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
     created.campaignResourceName = campaignResponse?.results?.[0]?.resourceName;
     if (!created.campaignResourceName) throw executionError('Google Ads did not return a campaign resource.', 'google_ads_execution_failed', 502);
 
     await googlePost(`customers/${customerId}/campaignCriteria:mutate`, token, {
       operations: [
-        { create: { campaign: created.campaignResourceName, location: { geoTargetConstant: targeting.geo } } },
-        { create: { campaign: created.campaignResourceName, language: { languageConstant: targeting.language } } },
+        { create: { campaign: created.campaignResourceName, location: { geoTargetConstant: geoTarget } } },
       ],
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
 
     const adGroupResponse = await googlePost(`customers/${customerId}/adGroups:mutate`, token, {
       operations: [{ create: {
@@ -276,7 +273,7 @@ async function launchGoogle(userId, budget) {
         status: 'PAUSED',
         type: 'SEARCH_STANDARD',
       } }],
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
     created.adGroupResourceName = adGroupResponse?.results?.[0]?.resourceName;
     if (!created.adGroupResourceName) throw executionError('Google Ads did not return an ad group resource.', 'google_ads_execution_failed', 502);
 
@@ -286,7 +283,7 @@ async function launchGoogle(userId, budget) {
         status: 'ENABLED',
         keyword: { text: keyword, matchType: 'PHRASE' },
       } })),
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
 
     const adResponse = await googlePost(`customers/${customerId}/adGroupAds:mutate`, token, {
       operations: [{ create: {
@@ -300,19 +297,19 @@ async function launchGoogle(userId, budget) {
           },
         },
       } }],
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
     created.adResourceName = adResponse?.results?.[0]?.resourceName;
     if (!created.adResourceName) throw executionError('Google Ads did not return an ad resource.', 'google_ads_execution_failed', 502);
 
     await googlePost(`customers/${customerId}/adGroupAds:mutate`, token, {
       operations: [{ update: { resourceName: created.adResourceName, status: 'ENABLED' }, updateMask: 'status' }],
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
     await googlePost(`customers/${customerId}/adGroups:mutate`, token, {
       operations: [{ update: { resourceName: created.adGroupResourceName, status: 'ENABLED' }, updateMask: 'status' }],
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
     await googlePost(`customers/${customerId}/campaigns:mutate`, token, {
       operations: [{ update: { resourceName: created.campaignResourceName, status: 'ENABLED' }, updateMask: 'status' }],
-    });
+    }, 'google_ads_execution_failed', loginCustomerId);
 
     return {
       provider: 'google',
@@ -328,11 +325,11 @@ async function launchGoogle(userId, budget) {
       try {
         await googlePost(`customers/${customerId}/campaigns:mutate`, token, {
           operations: [{ update: { resourceName: created.campaignResourceName, status: 'PAUSED' }, updateMask: 'status' }],
-        });
+        }, 'google_ads_cleanup_failed', loginCustomerId);
       } catch { /* partial ids retained */ }
     }
     if (!created.campaignResourceName && created.budgetResourceName) {
-      await googleRemove(customerId, token, 'campaignBudgets', created.budgetResourceName);
+      await googleRemove(customerId, token, 'campaignBudgets', created.budgetResourceName, loginCustomerId);
     }
     error.providerResources = created;
     throw error;
@@ -356,10 +353,11 @@ export async function pauseManagedPaidAdCampaign(userId, budget) {
   if (budget.provider === 'google') {
     const token = await tokenFor(userId, 'google_ads');
     const customerId = String(budget.providerAccountId).replace(/\D/g, '');
+    const loginCustomerId = budget.providerAccount?.loginCustomerId || null;
     const resourceName = budget.providerCampaignResourceName || `customers/${customerId}/campaigns/${budget.providerCampaignId}`;
     await googlePost(`customers/${customerId}/campaigns:mutate`, token, {
       operations: [{ update: { resourceName, status: 'PAUSED' }, updateMask: 'status' }],
-    });
+    }, 'google_ads_pause_failed', loginCustomerId);
     return { paused: true };
   }
   throw executionError('Unsupported managed advertising provider.', 'paid_ads_provider_invalid');
@@ -383,10 +381,11 @@ export async function readManagedPaidAdSpend(userId, budget) {
   if (budget.provider === 'google') {
     const token = await tokenFor(userId, 'google_ads');
     const customerId = String(budget.providerAccountId).replace(/\D/g, '');
+    const loginCustomerId = budget.providerAccount?.loginCustomerId || null;
     const campaignId = String(budget.providerCampaignId).replace(/\D/g, '');
     const body = await googlePost(`customers/${customerId}/googleAds:searchStream`, token, {
       query: `SELECT metrics.cost_micros FROM campaign WHERE campaign.id = ${campaignId}`,
-    }, 'google_ads_spend_read_failed');
+    }, 'google_ads_spend_read_failed', loginCustomerId);
     const batches = Array.isArray(body) ? body : [body];
     const micros = batches.flatMap((batch) => Array.isArray(batch?.results) ? batch.results : [])
       .reduce((sum, row) => sum + Number(row?.metrics?.costMicros || 0), 0);
