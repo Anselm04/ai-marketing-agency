@@ -55,6 +55,7 @@ import unsubscribeRoutes from './routes/unsubscribe.js';
 import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
+import paidAdvertisingSchedulerService from './services/paidAdvertisingSchedulerService.js';
 import { installAnthropicStreaming } from './services/anthropicStreamingService.js';
 import { mountHealthRoutes } from './utils/systemHealth.js';
 import { hydrateStripeWebhookSecret } from './services/runtimeSecretService.js';
@@ -231,6 +232,7 @@ if (process.env.NODE_ENV !== 'test') {
   httpServer.listen(PORT, '0.0.0.0', () => {
     clippingSchedulerService.start();
     autoPostingService.start();
+    paidAdvertisingSchedulerService.start();
     logger.info(`Server running on port ${PORT}`, {
       environment: process.env.NODE_ENV,
       frontendDist: fs.existsSync(frontendDist) ? frontendDist : 'none',
@@ -243,6 +245,7 @@ const shutdown = async () => {
   try {
     clippingSchedulerService.stop();
     autoPostingService.stop();
+    paidAdvertisingSchedulerService.stop();
     await store.disconnectDB();
   } finally {
     if (httpServer.listening) {
