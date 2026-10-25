@@ -1,4 +1,4 @@
-import socialMediaService from '../services/socialMediaService.js';
+import socialMediaService from '../services/withUserTokensPatch.js';
 
 describe('Social publishing truthfulness', () => {
   const cases = [
