@@ -27,10 +27,10 @@
   "dependencies": {
     "caniuse-lite": "^1.0.30001809",
     "compression": "^1.8.2",
-    "qs": "6.16.0"
+    "qs": "6.16.1"
   },
   "overrides": {
-    "qs": "6.16.0",
+    "qs": "6.16.1",
     "postcss-selector-parser": "7.1.7"
   }
 }
