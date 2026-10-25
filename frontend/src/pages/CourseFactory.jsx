@@ -228,6 +228,7 @@ export default function CourseFactory() {
           const busy = workingId?.startsWith(`${project.id}:`)
           const progress = uploadProgress[project.id]
           const modules = project.coursePackage?.modules || project.curriculum?.modules || []
+          const hasSource = Boolean(project.sourceUrl || project.upload?.status === 'complete')
           return (
             <article key={project.id} className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -240,6 +241,7 @@ export default function CourseFactory() {
                     <span className="rounded-full px-2.5 py-1" style={{ background: 'var(--bg-elev)', color: 'var(--text-muted)' }}>{project.status}</span>
                     <span className="rounded-full px-2.5 py-1" style={{ background: project.approval?.status === 'approved' ? 'rgba(34,197,94,.15)' : 'rgba(245,158,11,.15)', color: project.approval?.status === 'approved' ? '#22c55e' : '#f59e0b' }}>{statusLabel(project)}</span>
                     {modules.length > 0 && <span className="rounded-full px-2.5 py-1" style={{ background: 'rgba(34,211,238,.12)', color: 'var(--cyan)' }}>{modules.length} modules</span>}
+                    {project.mediaProduction?.status && <span className="rounded-full px-2.5 py-1" style={{ background: 'rgba(168,85,247,.12)', color: '#c084fc' }}>Media {project.mediaProduction.status}</span>}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -247,17 +249,18 @@ export default function CourseFactory() {
                     <UploadCloud size={16} /> Upload long video
                     <input type="file" accept="video/*" className="hidden" onChange={(e) => uploadSource(project, e.target.files?.[0])} />
                   </label>
-                  <button disabled={busy || !project.sourceUrl} onClick={() => runAction(project, 'transcribe')} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--line)' }}><WandSparkles size={16} /> Transcribe</button>
-                  <button disabled={busy || !project.sourceUrl} onClick={() => runAction(project, 'analyse-visuals')} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--line)' }}><Eye size={16} /> Analyse silent footage</button>
+                  <button disabled={busy || !hasSource} onClick={() => runAction(project, 'transcribe')} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--line)' }}><WandSparkles size={16} /> Transcribe</button>
+                  <button disabled={busy || !hasSource} onClick={() => runAction(project, 'analyse-visuals')} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--line)' }}><Eye size={16} /> Analyse silent footage</button>
                   <button disabled={busy} onClick={() => runAction(project, 'generate-curriculum')} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--line)' }}><BookOpen size={16} /> Generate curriculum</button>
                   <button disabled={busy} onClick={() => runAction(project, 'generate-package')} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--gold)', color: '#111' }}><Sparkles size={16} /> Generate Professional Package</button>
                   <button disabled={busy || (!project.coursePackage && !project.curriculum) || project.approval?.status === 'approved'} onClick={() => runAction(project, 'approve')} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--line)' }}><CheckCircle2 size={16} /> Approve Course</button>
+                  <button disabled={busy || project.approval?.status !== 'approved' || !project.coursePackage || !hasSource} onClick={() => runAction(project, 'render-lessons')} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--line)', color: 'var(--cyan)' }}><FileVideo size={16} /> Produce Lesson Videos</button>
                 </div>
               </div>
 
               {typeof progress === 'number' && progress < 100 && (
                 <div className="mt-4">
-                  <div className="mb-1 flex justify-between text-xs" style={{ color: 'var(--text-muted)' }}><span>Direct multipart upload</span><span>{progress}%</span></div>
+                  <div className="mb-1 flex justify-between text-xs" style={{ color: 'var(--text-muted)' }}><span>Private multipart upload</span><span>{progress}%</span></div>
                   <div className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--bg-elev)' }}><div className="h-full" style={{ width: `${progress}%`, background: 'var(--gold)' }} /></div>
                 </div>
               )}
@@ -265,6 +268,12 @@ export default function CourseFactory() {
               {project.visualAnalysis?.sampledFrames > 0 && (
                 <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: 'var(--bg-elev)' }}>
                   Visual analysis sampled {project.visualAnalysis.sampledFrames} frames. Machine observations remain review-required until you approve the course.
+                </div>
+              )}
+
+              {project.mediaProduction?.renderedLessons?.length > 0 && (
+                <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: 'var(--bg-elev)' }}>
+                  {project.mediaProduction.renderedLessons.length} lesson video{project.mediaProduction.renderedLessons.length === 1 ? '' : 's'} rendered from the approved source footage.
                 </div>
               )}
 
