@@ -9,6 +9,8 @@ const providers = {
 const models = [
   { id: 'model-a', providerId: 'providerA', name: 'Model A' },
   { id: 'model-b', providerId: 'providerB', name: 'Model B' },
+  { id: 'shared-model', providerId: 'providerA', name: 'Shared A' },
+  { id: 'shared-model', providerId: 'providerB', name: 'Shared B' },
 ];
 
 jest.unstable_mockModule('../aiModelRegistry.js', () => ({
@@ -61,8 +63,12 @@ describe('bounded AI orchestration fallback', () => {
       selectedModel: 'model-b',
       provider: 'providerB',
       requestedPrimaryModel: 'model-a',
+      requestedPrimaryProvider: 'providerA',
       fallbackUsed: true,
-      attemptedModels: ['model-a', 'model-b'],
+      attemptedModels: [
+        { modelId: 'model-a', providerId: 'providerA' },
+        { modelId: 'model-b', providerId: 'providerB' },
+      ],
     });
   });
 
@@ -89,5 +95,28 @@ describe('bounded AI orchestration fallback', () => {
     expect(generateChatCompletion).toHaveBeenCalledTimes(1);
     expect(generateChatCompletion.mock.calls[0][1]).toMatchObject({ provider: 'providerB', model: 'model-b' });
     expect(result.orchestration.fallbackUsed).toBe(false);
+  });
+
+  test('binds duplicate model ids to the explicitly requested provider', async () => {
+    const target = installOrchestratorAiFallbackPatch(service());
+    generateChatCompletion.mockResolvedValueOnce({ content: 'provider B result', usage: { total_tokens: 7 } });
+
+    const result = await target.executeAITask(
+      'user-4',
+      'content-generation',
+      [{ role: 'user', content: 'hello' }],
+      { model: 'shared-model', provider: 'providerB' },
+    );
+
+    expect(generateChatCompletion).toHaveBeenCalledTimes(1);
+    expect(generateChatCompletion.mock.calls[0][1]).toMatchObject({ provider: 'providerB', model: 'shared-model' });
+    expect(result.provider).toBe('providerB');
+    expect(result.model).toBe('shared-model');
+    expect(result.orchestration).toMatchObject({
+      requestedPrimaryModel: 'shared-model',
+      requestedPrimaryProvider: 'providerB',
+      selectedModel: 'shared-model',
+      provider: 'providerB',
+    });
   });
 });
