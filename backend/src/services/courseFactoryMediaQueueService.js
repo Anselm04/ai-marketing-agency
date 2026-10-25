@@ -45,7 +45,7 @@ class CourseFactoryMediaQueueService {
         ownerId,
         lessonPlan,
       }, {
-        jobId: `${project.id}:${lessonPlan.id}`,
+        jobId: `${project.id}-${lessonPlan.id}`.replace(/[^a-zA-Z0-9_-]/g, '-'),
         attempts: 3,
       });
       jobs.push({ id: String(job.id), lessonId: lessonPlan.id, status: job.status || 'queued' });
