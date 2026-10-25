@@ -18,6 +18,20 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: marketing_migration_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: migration-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d marketing_migration_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - name: Block cross-project lane contamination
@@ -45,6 +59,8 @@ jobs:
       - name: Backend lint
         run: npm run lint --workspace=backend
       - name: Backend tests
+        env:
+          MARKETING_MIGRATION_TEST_DATABASE_URL: postgresql://postgres:migration-test-only@127.0.0.1:5432/marketing_migration_test
         run: timeout 8m npm test --workspace=backend -- --runInBand --detectOpenHandles --passWithNoTests
       - name: Frontend tests
         run: npm test --workspace=frontend
@@ -84,3 +100,4 @@ jobs:
           tags: ai-marketing-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
