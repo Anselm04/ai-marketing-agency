@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import { fixture, change, time } from './fixtures/jsonMigrationFixture.js';
+import { queueManualSocialPost } from '../utils/manualSocialQueue.js';
 import { importJsonSnapshot, snapshotDigest } from '../utils/jsonMigration.js';
 
 const url = process.env.MARKETING_MIGRATION_TEST_DATABASE_URL;
@@ -32,7 +33,7 @@ databaseTests('JSON migration with real PostgreSQL', () => {
       CREATE TABLE marketing.usage_events (id text primary key);
     `);
     const entity = 'id text primary key, data jsonb not null, created_at timestamptz not null, updated_at timestamptz not null';
-    for (const table of ['campaigns', 'content_items', 'leads', 'tasks']) await client.query(`CREATE TABLE marketing.${table} (${entity}, owner_id text)`);
+    for (const table of ['campaigns', 'content_items', 'leads', 'tasks', 'social_posts']) await client.query(`CREATE TABLE marketing.${table} (${entity}, owner_id text)`);
     await client.query(`CREATE TABLE marketing.agents (${entity}, agent_id text unique)`);
     await client.query(`CREATE TABLE marketing.legal_docs (${entity})`);
     await client.query(`CREATE TABLE marketing.subscriptions (${entity}, user_id text not null)`);
@@ -128,6 +129,24 @@ databaseTests('JSON migration with real PostgreSQL', () => {
       expect(JSON.parse(applied.stdout).committed).toBe(true);
       await expect(execute(process.execPath, [script, 'apply', ...args], { env })).rejects.toMatchObject({ code: 1 });
     } finally { await fs.rm(directory, { recursive: true, force: true }); }
+  });
+
+  test('manual queue update preserves ownership and concurrent publication state', async () => {
+    await client.query("INSERT INTO marketing.social_posts (id, owner_id, data, created_at, updated_at) VALUES ('post-1', 'u1', '{\"body\":\"Keep this copy\",\"status\":\"draft\"}', now(), now())");
+    expect(await queueManualSocialPost(client, 'post-1', 'other-user')).toBeNull();
+    const queued = await queueManualSocialPost(client, 'post-1', 'u1');
+    expect(queued.data).toMatchObject({ body: 'Keep this copy', status: 'queued', scheduledAt: null, queueMode: 'manual', automaticPublishing: false });
+    const publisher = new pg.Client({ connectionString: url });
+    await publisher.connect();
+    try {
+      await publisher.query('BEGIN');
+      await publisher.query("UPDATE marketing.social_posts SET data = data || '{\"published\":true,\"status\":\"published\",\"externalPostId\":\"real-post\"}'::jsonb WHERE id='post-1'");
+      const staleQueue = queueManualSocialPost(client, 'post-1', 'u1');
+      await publisher.query('COMMIT');
+      expect(await staleQueue).toBeNull();
+      const saved = (await client.query("SELECT data FROM marketing.social_posts WHERE id='post-1'")).rows[0].data;
+      expect(saved).toMatchObject({ published: true, status: 'published', externalPostId: 'real-post' });
+    } finally { await publisher.query('ROLLBACK'); await publisher.end(); }
   });
 
 });

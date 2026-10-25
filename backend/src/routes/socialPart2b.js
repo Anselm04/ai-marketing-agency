@@ -28,12 +28,19 @@ router.post('/queue', async (req, res) => {
   const uid = userIdOf(req);
   const post = await store.getSocialPostById(req.body?.id, uid);
   if (!post) return res.status(404).json({ error: 'Post not found' });
-  const updated = await store.updateSocialPost(post.id, {
-    status: 'queued',
-    published: false,
-    scheduledAt: req.body?.scheduledAt || post.scheduledAt || new Date(Date.now() + 3600000).toISOString(),
-  }, uid);
-  res.json({ ...updated, published: false, message: 'Queued in your workspace. Not sent to the network.' });
+  if (post.published || ['published', 'publishing'].includes(post.status)) {
+    return res.status(409).json({ error: 'Published or currently publishing posts cannot be added to the manual queue.' });
+  }
+  if (req.body?.scheduledAt != null) {
+    return res.status(503).json({
+      code: 'social_scheduling_unavailable',
+      automaticPublishing: false,
+      error: 'Automatic scheduling is unavailable. Save to the manual queue, then choose Publish now when ready.',
+    });
+  }
+  const updated = await store.queueSocialPost(post.id, uid);
+  if (!updated) return res.status(409).json({ error: 'This post changed while saving. Refresh before trying again.' });
+  res.json({ ...updated, published: false, message: 'Saved to your manual queue. Choose Publish now when ready; posts do not publish automatically.' });
 });
 
 router.post('/posts/:id/publish', async (req, res) => {
@@ -103,3 +110,4 @@ router.post('/:platform', async (req, res) => {
 });
 
 }
+

@@ -4,6 +4,7 @@
  */
 import crypto from 'crypto';
 import pg from 'pg';
+import { queueManualSocialPost } from './manualSocialQueue.js';
 
 const { Pool } = pg;
 
@@ -187,6 +188,9 @@ export function attachPostgresSocialMethods(store) {
         owner_id: item.ownerId || item.owner || null,
       });
     },
+    async queueSocialPost(postId, userId) {
+      return entity(await queueManualSocialPost(pool, postId, userId));
+    },
     async updateSocialPost(postId, updates, userId) {
       const current = await getEntity('social_posts', postId);
       if (!current) return null;
@@ -304,3 +308,4 @@ export function attachPostgresSocialMethods(store) {
 }
 
 export default { attachPostgresSocialMethods };
+
