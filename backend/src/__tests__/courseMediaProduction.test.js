@@ -47,6 +47,26 @@ describe('Course Factory media production', () => {
     expect(plan.lessons[0].segments).toHaveLength(2);
   });
 
+  test('partitions the source across lessons when AI has no trustworthy timestamps yet', () => {
+    const plan = buildLessonRenderPlan({
+      id: 'course-partition',
+      sourceUrl: 'https://cdn.example.com/source.mp4',
+      sourceDurationSeconds: 1200,
+      approval: { status: 'approved' },
+      coursePackage: {
+        modules: [
+          { id: 'm1', title: 'First', lessons: [{ id: 'l1', title: 'First lesson', sourceEvidence: [] }] },
+          { id: 'm2', title: 'Second', lessons: [{ id: 'l2', title: 'Second lesson', sourceEvidence: [] }] },
+        ],
+      },
+    });
+
+    expect(plan.lessons).toHaveLength(2);
+    expect(plan.lessons[0].segments[0]).toEqual({ startSeconds: 0, endSeconds: 600, purpose: 'automatic source partition — creator review required' });
+    expect(plan.lessons[1].segments[0]).toEqual({ startSeconds: 600, endSeconds: 1200, purpose: 'automatic source partition — creator review required' });
+    expect(plan.reviewRequired).toBe(true);
+  });
+
   test('refuses to render unapproved AI course structure', () => {
     expect(() => buildLessonRenderPlan({
       id: 'course-2',
