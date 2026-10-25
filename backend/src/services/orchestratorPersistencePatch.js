@@ -3,6 +3,7 @@ import { allConnectors } from './connectors/index.js';
 import { getTokens } from './appConnector.js';
 import { getUserConnectorHealth } from './connectorUserHealthService.js';
 import { installOrchestratorConnectorHealthPatch } from './orchestratorConnectorHealthPatch.js';
+import { installOrchestratorAiFallbackPatch } from './orchestratorAiFallbackPatch.js';
 import { intelligentOrchestrator } from './intelligentOrchestrator.js';
 
 const PROFILE_KIND = 'orchestrator_user_profile';
@@ -136,6 +137,7 @@ export function installOrchestratorPersistencePatch(service = intelligentOrchest
   };
 
   installOrchestratorConnectorHealthPatch(service);
+  installOrchestratorAiFallbackPatch(service);
 
   Object.defineProperty(service, '__persistencePatchApplied', {
     value: true,
