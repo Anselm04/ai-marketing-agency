@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Bot, Megaphone, BarChart3, Shield, Share2,
   FileText, Video, Users, TrendingUp, Settings, Scissors,
   Lock, LogOut, ChevronDown, Globe, Sun, Moon, Menu, X, ShoppingCart,
-  Cpu, Plug, Images, CalendarClock, BadgeDollarSign, Building2
+  Cpu, Plug, Images, CalendarClock, BadgeDollarSign, Building2, GraduationCap
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
@@ -27,6 +27,7 @@ const navItems = [
   { path: '/dashboard/content', icon: FileText, label: 'Content Studio' },
   { path: '/dashboard/video', icon: Video, label: 'Video Studio' },
   { path: '/dashboard/clipping', icon: Scissors, label: 'AI Clipping Agency' },
+  { path: '/dashboard/course-factory', icon: GraduationCap, label: 'Course Factory' },
   { path: '/dashboard/translation', icon: Globe, label: 'Translation' },
   { path: '/dashboard/crm', icon: Users, label: 'CRM' },
   { path: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
