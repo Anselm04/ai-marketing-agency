@@ -1,9 +1,11 @@
 /**
- * Adds per-request OAuth user-token overrides and enforces truthful publishing
- * semantics for platforms that require a manual or unsupported workflow.
+ * Installs runtime truthfulness patches and adds per-request OAuth user-token
+ * overrides. These patches preserve the existing service architecture while
+ * preventing fallback/placeholder output from being reported as real work.
  */
 import socialMediaService from './socialMediaService.js';
 import { applyPublishingTruthPatch } from './publishingTruthPatch.js';
+import './autoPostingTruthPatch.js';
 
 applyPublishingTruthPatch(socialMediaService);
 
