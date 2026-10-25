@@ -58,6 +58,7 @@ import clippingSchedulerService from './services/clippingSchedulerService.js';
 import paidAdvertisingSchedulerService from './services/paidAdvertisingSchedulerService.js';
 import { installAnthropicStreaming } from './services/anthropicStreamingService.js';
 import { installBedrockProviderPatch } from './services/bedrockProviderPatch.js';
+import { installAzureOpenAIProviderPatch } from './services/azureProviderPatch.js';
 import { mountHealthRoutes } from './utils/systemHealth.js';
 import { hydrateStripeWebhookSecret } from './services/runtimeSecretService.js';
 import './services/withUserTokensPatch.js';
@@ -71,6 +72,7 @@ import { auditLog } from './middleware/auditLog.js';
 
 installAnthropicStreaming();
 installBedrockProviderPatch();
+installAzureOpenAIProviderPatch();
 
 if (process.env.NODE_ENV === 'production' && store.isPostgres?.() !== true) {
   throw new Error(
