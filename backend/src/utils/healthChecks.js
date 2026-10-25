@@ -1,7 +1,7 @@
 /**
  * Health Check Service
  * Provides /health (deep), /ready (readiness), /live (liveness) endpoints.
- * Checks Redis, MongoDB, AI providers, and connector health.
+ * Checks Redis/cache, PostgreSQL persistence, AI providers, queues, and memory health.
  */
 
 import { logger } from './logger.js';
@@ -40,9 +40,7 @@ export async function runHealthChecks() {
         latency: Date.now() - start,
         detail: result.detail || null,
       };
-      if (result.status !== 'up' && critical) {
-        healthy = false;
-      }
+      if (result.status !== 'up' && critical) healthy = false;
     } catch (err) {
       results[name] = {
         status: 'down',
@@ -55,11 +53,6 @@ export async function runHealthChecks() {
   return { healthy, checks: results, timestamp: new Date().toISOString() };
 }
 
-/**
- * Built-in health checks.
- */
-
-// Cache health check
 registerHealthCheck('cache', async () => {
   const stats = await cacheStats();
   if (stats.fallback && stats.backend === 'memory') {
@@ -68,22 +61,16 @@ registerHealthCheck('cache', async () => {
   return { status: 'up', detail: stats.backend };
 }, false);
 
-// AI providers health check (lightweight ping)
 registerHealthCheck('ai-providers', async () => {
   const { aiModelRegistry } = await import('../services/aiModelRegistry.js');
   const providers = aiModelRegistry.getAllProviders();
-  const available = providers.filter((p) => p.isAvailable()).length;
+  const available = providers.filter((provider) => provider.available === true).length;
   const total = providers.length;
-  if (available === 0) {
-    return { status: 'down', detail: 'No AI providers available' };
-  }
-  if (available < total) {
-    return { status: 'degraded', detail: `${available}/${total} AI providers available` };
-  }
+  if (available === 0) return { status: 'down', detail: 'No AI providers available' };
+  if (available < total) return { status: 'degraded', detail: `${available}/${total} AI providers available` };
   return { status: 'up', detail: `${available}/${total} providers available` };
 }, false);
 
-// Queue health check
 registerHealthCheck('queue', async () => {
   try {
     const status = await getQueueStatus(QueueNames.AI_GENERATION);
@@ -93,44 +80,43 @@ registerHealthCheck('queue', async () => {
   }
 }, false);
 
-// Database health check (critical)
 registerHealthCheck('database', async () => {
-  const { store } = await import('../utils/store.js');
+  const { default: store } = await import('./store.js');
   try {
-    await store.ping?.();
+    if (typeof store.checkReadiness === 'function') {
+      await store.checkReadiness();
+    } else if (typeof store.ping === 'function') {
+      await store.ping();
+    } else if (typeof store.connectDB === 'function') {
+      await store.connectDB();
+    } else {
+      throw new Error('Persistence adapter has no readiness probe');
+    }
     return { status: 'up', detail: 'Database responding' };
   } catch (err) {
     return { status: 'down', detail: err.message };
   }
 }, true);
 
-// Memory usage check
 registerHealthCheck('memory', async () => {
   const used = process.memoryUsage();
   const heapUsedMB = Math.round(used.heapUsed / 1024 / 1024);
   const heapTotalMB = Math.round(used.heapTotal / 1024 / 1024);
   const rssMB = Math.round(used.rss / 1024 / 1024);
-  const thresholdMB = 1024; // 1GB
-  if (rssMB > thresholdMB) {
-    return { status: 'degraded', detail: `Memory usage high: ${rssMB}MB RSS` };
-  }
+  const thresholdMB = 1024;
+  if (rssMB > thresholdMB) return { status: 'degraded', detail: `Memory usage high: ${rssMB}MB RSS` };
   return { status: 'up', detail: `Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB` };
 }, false);
 
-/**
- * Express middleware mounting health check routes.
- */
 export function mountHealthChecks(app) {
-  // Liveness probe — always returns 200 if process is running
   app.get('/live', (req, res) => {
     res.status(200).json({ status: 'alive', timestamp: new Date().toISOString() });
   });
 
-  // Readiness probe — checks if the app can serve traffic
   app.get('/ready', async (req, res) => {
     const result = await runHealthChecks();
     const criticalDown = Object.entries(result.checks).filter(
-      ([name, check]) => check.status === 'down' && checks.get(name)?.critical
+      ([name, check]) => check.status === 'down' && checks.get(name)?.critical,
     );
     const status = criticalDown.length > 0 ? 503 : 200;
     res.status(status).json({
@@ -140,7 +126,6 @@ export function mountHealthChecks(app) {
     });
   });
 
-  // Deep health check — full system status
   app.get('/health', async (req, res) => {
     const result = await runHealthChecks();
     const statusCode = result.healthy ? 200 : 503;
