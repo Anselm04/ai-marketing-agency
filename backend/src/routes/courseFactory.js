@@ -11,12 +11,14 @@ import {
   completeMultipartUpload,
   createMultipartUpload,
   getMultipartPartUploadUrl,
+  getPrivateSignedDownloadUrl,
   isS3Configured,
 } from '../services/uploadService.js';
 
 const router = express.Router();
 const DEFAULT_PART_SIZE = Number(process.env.COURSE_FACTORY_MULTIPART_PART_BYTES) || 64 * 1024 * 1024;
 const MAX_SOURCE_BYTES = Number(process.env.COURSE_FACTORY_MAX_SOURCE_BYTES) || 500 * 1024 * 1024 * 1024;
+const SOURCE_SIGNED_URL_SECONDS = Number(process.env.COURSE_FACTORY_SOURCE_SIGNED_URL_SECONDS) || 21600;
 
 function ownerId(req) {
   return req.user?.id || req.userId;
@@ -56,6 +58,14 @@ function assertRights(project, res) {
     return false;
   }
   return true;
+}
+
+async function resolveSourceUrl(project) {
+  if (project.sourceUrl) return project.sourceUrl;
+  if (project.upload?.status === 'complete' && project.upload?.key && project.upload?.privateBucket === true) {
+    return getPrivateSignedDownloadUrl(project.upload.key, SOURCE_SIGNED_URL_SECONDS);
+  }
+  return null;
 }
 
 async function getOwnedProject(req, res) {
@@ -138,7 +148,7 @@ router.post('/projects/:id/uploads/multipart', async (req, res) => {
 
   try {
     const key = buildCourseProjectKey(ownerId(req), project.id, filename);
-    const session = await createMultipartUpload(key, contentType);
+    const session = await createMultipartUpload(key, contentType, { privateBucket: true });
     const upload = {
       ...session,
       filename,
@@ -154,6 +164,7 @@ router.post('/projects/:id/uploads/multipart', async (req, res) => {
       upload: {
         uploadId: session.uploadId,
         key,
+        privateBucket: true,
         partSize: DEFAULT_PART_SIZE,
         maxParts: 10000,
       },
@@ -176,6 +187,7 @@ router.post('/projects/:id/uploads/multipart/part', async (req, res) => {
       uploadId: project.upload.uploadId,
       partNumber,
       expiresIn: 3600,
+      privateBucket: project.upload.privateBucket === true,
     });
     return res.json({ partNumber, url });
   } catch (error) {
@@ -193,20 +205,19 @@ router.post('/projects/:id/uploads/multipart/complete', async (req, res) => {
       key: project.upload.key,
       uploadId: project.upload.uploadId,
       parts,
+      privateBucket: project.upload.privateBucket === true,
     });
-    if (!completed.url) {
-      return res.status(409).json({ error: 'Upload completed but no HTTP source URL is configured. Set S3_PUBLIC_BASE_URL for Course Factory processing.' });
-    }
     const upload = {
       ...project.upload,
       status: 'complete',
       completedAt: new Date().toISOString(),
       etag: completed.etag,
       url: completed.url,
+      privateBucket: completed.privateBucket === true,
     };
     const updated = await store.updateCampaign(project.id, {
       upload,
-      sourceUrl: completed.url,
+      sourceUrl: completed.privateBucket ? project.sourceUrl || '' : completed.url || project.sourceUrl || '',
       status: 'uploaded',
     });
     return res.json(updated);
@@ -220,7 +231,11 @@ router.post('/projects/:id/uploads/multipart/abort', async (req, res) => {
   if (!project) return;
   if (!project.upload?.uploadId || !project.upload?.key) return res.status(409).json({ error: 'No multipart upload exists for this project.' });
   try {
-    await abortMultipartUpload({ key: project.upload.key, uploadId: project.upload.uploadId });
+    await abortMultipartUpload({
+      key: project.upload.key,
+      uploadId: project.upload.uploadId,
+      privateBucket: project.upload.privateBucket === true,
+    });
     const updated = await store.updateCampaign(project.id, {
       upload: { ...project.upload, status: 'aborted', abortedAt: new Date().toISOString() },
       status: 'draft',
@@ -235,10 +250,11 @@ router.post('/projects/:id/transcribe', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
   if (!assertRights(project, res)) return;
-  if (!project.sourceUrl) return res.status(400).json({ error: 'Upload or provide a source video before transcription.' });
 
   try {
-    const transcription = await mediaClipperService.transcribeSource(project.sourceUrl);
+    const sourceUrl = await resolveSourceUrl(project);
+    if (!sourceUrl) return res.status(400).json({ error: 'Upload or provide a source video before transcription.' });
+    const transcription = await mediaClipperService.transcribeSource(sourceUrl);
     const updated = await store.updateCampaign(project.id, {
       transcript: transcription.transcript,
       sourceDurationSeconds: transcription.durationSeconds,
@@ -260,11 +276,12 @@ router.post('/projects/:id/analyse-visuals', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
   if (!assertRights(project, res)) return;
-  if (!project.sourceUrl) return res.status(400).json({ error: 'Upload or provide a source video before visual analysis.' });
 
   try {
+    const sourceUrl = await resolveSourceUrl(project);
+    if (!sourceUrl) return res.status(400).json({ error: 'Upload or provide a source video before visual analysis.' });
     const visualAnalysis = await courseVisualAnalysisService.analyse({
-      sourceUrl: project.sourceUrl,
+      sourceUrl,
       durationSeconds: project.sourceDurationSeconds,
       name: project.name,
       targetAudience: project.targetAudience,
@@ -341,5 +358,5 @@ router.post('/projects/:id/approve', async (req, res) => {
   return res.json(updated);
 });
 
-export { normalizeRightsManifest, validateRightsManifest };
+export { normalizeRightsManifest, validateRightsManifest, resolveSourceUrl };
 export default router;
