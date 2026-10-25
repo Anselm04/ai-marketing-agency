@@ -21,6 +21,7 @@ const deleteContent = jest.fn(async (id) => {
 const getTokens = jest.fn(async () => null);
 const getUserConnectorHealth = jest.fn(() => ({ status: 'unknown', lastChecked: null }));
 const installOrchestratorConnectorHealthPatch = jest.fn((service) => service);
+const installOrchestratorAiFallbackPatch = jest.fn((service) => service);
 
 jest.unstable_mockModule('../../utils/store.js', () => ({
   default: { createContent, getContentByOwner, updateContent, deleteContent },
@@ -28,6 +29,7 @@ jest.unstable_mockModule('../../utils/store.js', () => ({
 jest.unstable_mockModule('../appConnector.js', () => ({ getTokens }));
 jest.unstable_mockModule('../connectorUserHealthService.js', () => ({ getUserConnectorHealth }));
 jest.unstable_mockModule('../orchestratorConnectorHealthPatch.js', () => ({ installOrchestratorConnectorHealthPatch }));
+jest.unstable_mockModule('../orchestratorAiFallbackPatch.js', () => ({ installOrchestratorAiFallbackPatch }));
 jest.unstable_mockModule('../connectors/index.js', () => ({
   allConnectors: [{ id: 'connector-a', name: 'Connector A', category: 'crm' }],
 }));
@@ -65,8 +67,9 @@ beforeEach(() => {
 });
 
 describe('orchestrator durable persistence', () => {
-  test('installs the tenant-safe connector patch on the orchestrator', () => {
+  test('installs tenant-safe connector and bounded AI fallback patches', () => {
     expect(installOrchestratorConnectorHealthPatch).toHaveBeenCalledWith(fakeService);
+    expect(installOrchestratorAiFallbackPatch).toHaveBeenCalledWith(fakeService);
   });
 
   test('persists and restores a customer profile from durable storage', async () => {
