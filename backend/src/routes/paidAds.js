@@ -100,22 +100,23 @@ router.patch('/:id', async (req, res) => {
     const current = await getPaidAdBudget(req.user.id, req.params.id);
     if (!current) return res.status(404).json({ error: 'Paid advertising budget not found.' });
 
-    let totalBudgetMinor = req.body?.totalBudgetCents;
+    const updates = {};
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'enabled')) updates.enabled = req.body.enabled;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'providerAccountId')) updates.providerAccountId = req.body.providerAccountId;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'campaignConfig')) updates.campaignConfig = req.body.campaignConfig;
+
     if (req.body?.totalBudgetMajor != null) {
       let currency = current.currency || current.providerAccount?.currency || 'USD';
       if (req.body?.providerAccountId) {
         const account = await requireManagedPaidAdAccount(req.user.id, current.provider, req.body.providerAccountId);
         currency = account.currency;
       }
-      totalBudgetMinor = majorToMinor(req.body.totalBudgetMajor, currency);
+      updates.totalBudgetCents = majorToMinor(req.body.totalBudgetMajor, currency);
+    } else if (Object.prototype.hasOwnProperty.call(req.body || {}, 'totalBudgetCents')) {
+      updates.totalBudgetCents = req.body.totalBudgetCents;
     }
 
-    const budget = await updatePaidAdBudget(req.user.id, req.params.id, {
-      enabled: req.body?.enabled,
-      totalBudgetCents: totalBudgetMinor,
-      providerAccountId: req.body?.providerAccountId,
-      campaignConfig: req.body?.campaignConfig,
-    });
+    const budget = await updatePaidAdBudget(req.user.id, req.params.id, updates);
     return res.json(budget);
   } catch (error) {
     return routeError(res, error, 'Unable to update paid advertising budget.');
