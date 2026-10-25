@@ -4,6 +4,7 @@ import {
   Sparkles, UploadCloud, WandSparkles,
 } from 'lucide-react'
 import api from '../services/api'
+import CourseFactoryDownloads from '../components/CourseFactoryDownloads'
 
 const emptyForm = {
   name: '',
@@ -293,6 +294,8 @@ export default function CourseFactory() {
                   <strong>Output package:</strong> Skool-ready course structure, YouTube metadata, printable manual content, worksheets, quizzes, marketing kit and short-form plan. Direct Skool publishing is not claimed until a supported integration is connected.
                 </div>
               )}
+
+              <CourseFactoryDownloads project={project} onError={setError} />
             </article>
           )
         })}
