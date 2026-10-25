@@ -2,8 +2,9 @@ import { aiModelRegistry } from './aiModelRegistry.js';
 import { intelligentOrchestrator } from './intelligentOrchestrator.js';
 import { logger } from '../utils/logger.js';
 
-function modelById(modelId) {
-  return aiModelRegistry.getAllModels().find((model) => model.id === modelId) || null;
+function modelById(modelId, providerId = null) {
+  return aiModelRegistry.getAllModels().find((model) =>
+    model.id === modelId && (!providerId || model.providerId === providerId)) || null;
 }
 
 function candidateFromModel(model) {
@@ -13,13 +14,37 @@ function candidateFromModel(model) {
   return { modelId: model.id, providerId: model.providerId, modelName: model.name };
 }
 
+function candidateKey(candidate) {
+  return `${candidate?.providerId || ''}:${candidate?.modelId || ''}`;
+}
+
 function uniqueCandidates(candidates) {
   const seen = new Set();
   return candidates.filter((candidate) => {
-    if (!candidate?.modelId || seen.has(candidate.modelId)) return false;
-    seen.add(candidate.modelId);
+    const key = candidateKey(candidate);
+    if (!candidate?.modelId || !candidate?.providerId || seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
+}
+
+function fallbackCandidates(selection = {}, options = {}) {
+  if (Array.isArray(options.fallbackChain) && options.fallbackChain.length) {
+    return options.fallbackChain.map((item) => {
+      if (typeof item === 'object' && item?.id) {
+        return candidateFromModel(modelById(item.id, item.provider || item.providerId || null));
+      }
+      return candidateFromModel(modelById(item));
+    });
+  }
+
+  const alternatives = (selection.alternatives || []).map((item) =>
+    candidateFromModel(modelById(item.id, item.provider || item.providerId || null)));
+  const alternativeKeys = new Set(alternatives.filter(Boolean).map(candidateKey));
+  const legacy = (selection.fallbackChain || [])
+    .map((modelId) => candidateFromModel(modelById(modelId)))
+    .filter((candidate) => !alternativeKeys.has(candidateKey(candidate)));
+  return [...alternatives, ...legacy];
 }
 
 export function installOrchestratorAiFallbackPatch(service = intelligentOrchestrator) {
@@ -29,30 +54,27 @@ export function installOrchestratorAiFallbackPatch(service = intelligentOrchestr
     const joined = (messages || []).map((message) => String(message?.content || '')).join(' ');
     const selection = await service.selectModel(userId, taskType, joined, options);
 
-    const forced = options.model ? candidateFromModel(modelById(options.model)) : null;
+    const requestedProvider = options.provider || options.providerId || null;
+    const forced = options.model
+      ? candidateFromModel(modelById(options.model, requestedProvider))
+      : null;
     if (options.model && !forced) {
-      const error = new Error(`Requested AI model is unavailable: ${options.model}`);
+      const requested = requestedProvider ? `${requestedProvider}/${options.model}` : options.model;
+      const error = new Error(`Requested AI model is unavailable: ${requested}`);
       error.code = 'ai_model_unavailable';
       error.statusCode = 503;
       throw error;
     }
 
-    const primary = forced || candidateFromModel(modelById(selection.modelId)) || {
+    const primary = forced || candidateFromModel(modelById(selection.modelId, selection.providerId)) || {
       modelId: selection.modelId,
       providerId: selection.providerId,
       modelName: selection.modelName,
     };
 
-    const requestedFallbackIds = Array.isArray(options.fallbackChain) && options.fallbackChain.length
-      ? options.fallbackChain
-      : [
-          ...(selection.fallbackChain || []),
-          ...(selection.alternatives || []).map((item) => item.id),
-        ];
-
     const candidates = uniqueCandidates([
       primary,
-      ...requestedFallbackIds.map((modelId) => candidateFromModel(modelById(modelId))),
+      ...fallbackCandidates(selection, options),
     ]).slice(0, 5);
 
     if (!candidates.length) {
@@ -62,7 +84,13 @@ export function installOrchestratorAiFallbackPatch(service = intelligentOrchestr
       throw error;
     }
 
-    const { model: _ignoredModel, provider: _ignoredProvider, fallbackChain: _ignoredFallback, ...providerOptions } = options;
+    const {
+      model: _ignoredModel,
+      provider: _ignoredProvider,
+      providerId: _ignoredProviderId,
+      fallbackChain: _ignoredFallback,
+      ...providerOptions
+    } = options;
     let lastError = null;
 
     for (const candidate of candidates) {
@@ -75,23 +103,29 @@ export function installOrchestratorAiFallbackPatch(service = intelligentOrchestr
           fallbackChain: [],
         });
 
+        const usedFallback = candidateKey(candidate) !== candidateKey(primary);
         await service.logTaskHistory(userId, taskType, {
           modelId: candidate.modelId,
           providerId: candidate.providerId,
           status: 'success',
           duration: Date.now() - started,
           cost: aiModelRegistry.estimateCost(candidate.providerId, candidate.modelId, 1000, 1000),
-          metadata: { fallbackUsed: candidate.modelId !== primary.modelId },
+          metadata: { fallbackUsed: usedFallback },
         });
 
         return {
           ...result,
+          provider: result.provider || candidate.providerId,
+          model: result.model || candidate.modelId,
           orchestration: {
             selectedModel: candidate.modelId,
             provider: candidate.providerId,
             requestedPrimaryModel: primary.modelId,
-            fallbackUsed: candidate.modelId !== primary.modelId,
-            attemptedModels: candidates.slice(0, candidates.indexOf(candidate) + 1).map((item) => item.modelId),
+            requestedPrimaryProvider: primary.providerId,
+            fallbackUsed: usedFallback,
+            attemptedModels: candidates
+              .slice(0, candidates.indexOf(candidate) + 1)
+              .map((item) => ({ modelId: item.modelId, providerId: item.providerId })),
             alternatives: selection.alternatives || [],
             estimatedCost: aiModelRegistry.estimateCost(candidate.providerId, candidate.modelId, 1000, 1000),
           },
