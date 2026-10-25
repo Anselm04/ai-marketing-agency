@@ -65,7 +65,7 @@ async function providerJson(url, options, failureCode) {
     error.providerStatus = response.status;
     throw error;
   }
-  return body || {};
+  return body ?? {};
 }
 
 async function listMetaAdAccounts(userId) {
@@ -85,12 +85,40 @@ async function listMetaAdAccounts(userId) {
     providerAccountId: String(account.id || ''),
     accountId: String(account.account_id || '').trim() || null,
     name: String(account.name || account.id || 'Meta ad account'),
-    currency: account.currency || null,
+    currency: String(account.currency || '').toUpperCase() || null,
     timezone: account.timezone_name || null,
     status: account.account_status ?? null,
     businessId: account.business?.id || null,
     businessName: account.business?.name || null,
-  })).filter((account) => account.providerAccountId);
+  })).filter((account) => account.providerAccountId && account.currency);
+}
+
+async function googleCustomerDetail(config, tokens, customerId, resourceName) {
+  const url = `${config.baseUrl}/customers/${encodeURIComponent(customerId)}/googleAds:searchStream`;
+  const body = await providerJson(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${tokens.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: 'SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.time_zone, customer.status FROM customer LIMIT 1',
+    }),
+  }, 'google_ads_account_detail_failed');
+
+  const batches = Array.isArray(body) ? body : [body];
+  const result = batches.flatMap((batch) => Array.isArray(batch?.results) ? batch.results : [])[0];
+  const customer = result?.customer || {};
+  return {
+    id: customerId,
+    providerAccountId: customerId,
+    accountId: customerId,
+    name: String(customer.descriptiveName || `Google Ads ${customerId}`),
+    resourceName: customer.resourceName || resourceName,
+    currency: String(customer.currencyCode || '').toUpperCase() || null,
+    timezone: customer.timeZone || null,
+    status: customer.status || 'accessible',
+  };
 }
 
 async function listGoogleAdAccounts(userId) {
@@ -100,20 +128,22 @@ async function listGoogleAdAccounts(userId) {
     headers: { Authorization: `Bearer ${tokens.accessToken}` },
   }, 'google_ads_account_discovery_failed');
 
-  const resourceNames = Array.isArray(body.resourceNames) ? body.resourceNames : [];
-  return resourceNames.map((resourceName) => {
-    const customerId = String(resourceName).replace(/^customers\//, '');
-    return {
-      id: customerId,
-      providerAccountId: customerId,
-      accountId: customerId,
-      name: `Google Ads ${customerId}`,
-      resourceName,
-      currency: null,
-      timezone: null,
-      status: 'accessible',
-    };
-  }).filter((account) => account.providerAccountId);
+  const resourceNames = Array.isArray(body.resourceNames) ? body.resourceNames.slice(0, 100) : [];
+  const accounts = [];
+  for (const resourceName of resourceNames) {
+    const customerId = String(resourceName).replace(/^customers\//, '').replace(/-/g, '');
+    if (!/^\d{10}$/.test(customerId)) continue;
+    try {
+      const account = await googleCustomerDetail(config, tokens, customerId, resourceName);
+      if (account.currency) accounts.push(account);
+    } catch (error) {
+      // An accessible manager/customer reference may still reject direct detail queries.
+      // Omit it rather than presenting an unverified currency/account as launchable.
+      if (error.code === 'google_ads_account_detail_failed') continue;
+      throw error;
+    }
+  }
+  return accounts;
 }
 
 export async function listManagedPaidAdAccounts(userId, provider) {
@@ -132,6 +162,13 @@ export async function requireManagedPaidAdAccount(userId, provider, providerAcco
     throw providerError(
       'The selected advertising account is not accessible through the connected provider account.',
       'paid_ads_provider_account_not_accessible',
+      409,
+    );
+  }
+  if (!account.currency) {
+    throw providerError(
+      'The advertising provider did not return the account currency, so a strict spend cap cannot be enforced safely.',
+      'paid_ads_provider_currency_required',
       409,
     );
   }
