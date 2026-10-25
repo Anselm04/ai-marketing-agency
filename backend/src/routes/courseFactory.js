@@ -6,6 +6,7 @@ import courseFactoryService, {
 } from '../services/courseFactoryService.js';
 import mediaClipperService from '../services/mediaClipperService.js';
 import courseVisualAnalysisService from '../services/courseVisualAnalysisService.js';
+import { courseRightsError } from '../services/courseRightsService.js';
 import {
   abortMultipartUpload,
   completeMultipartUpload,
@@ -345,6 +346,10 @@ router.post('/projects/:id/generate-package', async (req, res) => {
 router.post('/projects/:id/approve', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
+
+  const rightsError = courseRightsError(project.rightsManifest);
+  if (rightsError) return res.status(409).json(rightsError);
+
   if (!project.coursePackage && !project.curriculum) return res.status(409).json({ error: 'Generate a curriculum or course package before approval.' });
 
   const approval = {
