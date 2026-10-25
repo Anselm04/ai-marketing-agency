@@ -3,16 +3,26 @@ import { emailTransportConfigured } from '../services/emailService.js';
 import { costControlStatus } from '../services/costControlStatus.js';
 import { logger } from './logger.js';
 
+function publicAiStatus(status = {}) {
+  return {
+    configured: status.openaiConfigured === true,
+    provider: status.provider || null,
+    model: status.model || null,
+    status: status.openaiConfigured === true ? 'configured' : 'not_configured',
+  };
+}
+
 export async function systemHealth(store, production = process.env.NODE_ENV === 'production') {
   const database = store.isPostgres?.() ? 'postgres' : 'local';
-  const ai = openaiStatus();
+  const rawAi = openaiStatus();
+  const ai = publicAiStatus(rawAi);
   const billing = {
     stripeApiConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
     stripeWebhookVerificationConfigured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
   };
   const readiness = {
     database: false,
-    aiConfigured: ai.openaiConfigured,
+    aiConfigured: ai.configured,
     emailConfigured: emailTransportConfigured(),
     billingConfigured: billing.stripeApiConfigured && billing.stripeWebhookVerificationConfigured,
   };
@@ -33,7 +43,7 @@ export async function systemHealth(store, production = process.env.NODE_ENV === 
     database: readiness.database ? database : 'unavailable',
     persistence: store.getPersistenceInfo?.() || { mode: database === 'postgres' ? 'supabase-postgres' : 'local-json' },
     readiness,
-    openai: ai,
+    ai,
     billing,
     costControls: costControlStatus(),
   };
@@ -71,3 +81,5 @@ export function mountHealthRoutes(app, store) {
     });
   }
 }
+
+export { publicAiStatus };
