@@ -19,7 +19,6 @@ import {
   consumeOAuthSession,
   revokeTokens,
   getUserConnectors,
-  healthCheckConnector,
   getAllHealthStatus,
   registerWebhook,
   getWebhooks,
@@ -29,6 +28,10 @@ import {
   customerConnectorCapability,
   executeCustomerConnectorRequest,
 } from '../services/safeConnectorExecutionService.js';
+import {
+  checkUserConnectorHealth,
+  getUserConnectorHealth,
+} from '../services/connectorUserHealthService.js';
 import { logger } from '../utils/logger.js';
 import { videoPlatformCatalog } from '../services/videoPlatformCatalog.js';
 
@@ -50,6 +53,19 @@ function callbackUrl(connector) {
 
 function canUseServerCredential(user) {
   return Boolean(user?.isOwner || user?.role === 'admin');
+}
+
+function tenantHealth(userId, connectorId, connected = false) {
+  const userHealth = getUserConnectorHealth(userId, connectorId);
+  if (userHealth.status !== 'unknown') return userHealth;
+  if (connected) {
+    return {
+      ...userHealth,
+      status: 'connected_unverified',
+      detail: 'Customer OAuth token exists; provider probe has not run yet.',
+    };
+  }
+  return getAllHealthStatus()[connectorId] || userHealth;
 }
 
 function buildAuthorizationUrl(connector, state) {
@@ -116,10 +132,11 @@ router.get('/', authenticate, async (req, res) => {
   const connectors = getAllConnectors().map((c) => {
     const definition = getConnectorById(c.id);
     const capability = customerConnectorCapability(definition);
+    const isConnected = connectedIds.has(c.id);
     return {
       ...c,
-      connected: connectedIds.has(c.id),
-      health: getAllHealthStatus()[c.id] || { status: 'unknown' },
+      connected: isConnected,
+      health: tenantHealth(userId, c.id, isConnected),
       ...capability,
       serverCredentialExecutable: capability.serverCredentialManaged && canUseServerCredential(req.user),
     };
@@ -143,6 +160,7 @@ router.get('/video-platforms', authenticate, async (req, res) => {
       authType: connector?.auth?.type || 'none',
       connected: Boolean(tokens),
       configured,
+      health: connector ? tenantHealth(userId, connector.id, Boolean(tokens)) : { status: 'unavailable' },
       connectable: Boolean(
         connector
         && connector.auth?.type === 'oauth2'
@@ -176,22 +194,26 @@ router.get('/category/:category', authenticate, async (req, res) => {
   res.json({
     success: true,
     category,
-    connectors: connectors.map((c) => ({
-      id: c.id,
-      name: c.name,
-      icon: c.icon,
-      description: c.description,
-      connected: connectedIds.has(c.id),
-      health: getAllHealthStatus()[c.id] || { status: 'unknown' },
-      ...customerConnectorCapability(c),
-    })),
+    connectors: connectors.map((c) => {
+      const isConnected = connectedIds.has(c.id);
+      return {
+        id: c.id,
+        name: c.name,
+        icon: c.icon,
+        description: c.description,
+        connected: isConnected,
+        health: tenantHealth(userId, c.id, isConnected),
+        ...customerConnectorCapability(c),
+      };
+    }),
   });
 });
 
-router.get('/:id', authenticate, (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   const connector = getConnectorById(req.params.id);
   if (!connector) return res.status(404).json({ error: 'Connector not found' });
   const capability = customerConnectorCapability(connector);
+  const tokens = connector.auth?.type === 'oauth2' ? await getTokens(req.user?.id, connector.id) : null;
 
   res.json({
     success: true,
@@ -207,7 +229,7 @@ router.get('/:id', authenticate, (req, res) => {
         scopes: connector.auth?.scopes || [],
       },
       operations: connector.operations.map((op) => ({ id: op.id, name: op.name, method: op.method, rateLimit: op.rateLimit })),
-      health: getAllHealthStatus()[connector.id] || { status: 'unknown' },
+      health: tenantHealth(req.user?.id, connector.id, Boolean(tokens)),
       ...capability,
       serverCredentialExecutable: capability.serverCredentialManaged && canUseServerCredential(req.user),
     },
@@ -277,6 +299,10 @@ router.post('/:id/:operation', authenticate, async (req, res) => {
   const op = connector.operations.find((o) => o.id === operation);
   if (!op) return res.status(404).json({ error: 'Operation not found' });
 
+  const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+  const { urlParams = {}, providerBody, ...inlineProviderBody } = requestBody;
+  const body = providerBody && typeof providerBody === 'object' ? providerBody : inlineProviderBody;
+
   try {
     const result = await executeCustomerConnectorRequest({
       userId: req.user?.id,
@@ -284,7 +310,11 @@ router.post('/:id/:operation', authenticate, async (req, res) => {
       definition: connector,
       operation,
       allowServerCredential: canUseServerCredential(req.user),
-      payload: { body: req.body, params: req.query, urlParams: req.params },
+      payload: {
+        body,
+        params: req.query,
+        urlParams,
+      },
     });
     return res.json({ success: true, result });
   } catch (err) {
@@ -296,8 +326,13 @@ router.post('/:id/:operation', authenticate, async (req, res) => {
 router.get('/:id/health', authenticate, async (req, res) => {
   const connector = getConnectorById(req.params.id);
   if (!connector) return res.status(404).json({ error: 'Connector not found' });
-  const health = await healthCheckConnector(connector.id, connector);
-  return res.json({ success: true, health });
+  const health = await checkUserConnectorHealth(req.user?.id || req.userId, connector);
+  return res.json({
+    success: ['up', 'degraded', 'connected_unverified'].includes(health.status),
+    connectorId: connector.id,
+    health,
+    scope: 'customer-connection',
+  });
 });
 
 router.get('/health/all', authenticate, requireAdmin, (_req, res) => {
