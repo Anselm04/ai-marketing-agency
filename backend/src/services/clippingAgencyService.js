@@ -11,7 +11,7 @@ function clamp(value, min, max) {
 
 function safeJson(value) {
   if (!value || typeof value !== 'string') return null;
-  const fenced = value.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
+  const fenced = value.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1] : value;
   const start = candidate.indexOf('{');
   const end = candidate.lastIndexOf('}');
@@ -38,7 +38,7 @@ function fallbackClips({ transcript, brief, platforms, maxClips, sourceDurationS
   return Array.from({ length: count }, (_, index) => {
     const start = Math.floor((duration / count) * index);
     const end = Math.min(duration, start + 35);
-    const seed = sentences[index % Math.max(sentences.length, 1)] || brief || 'High-value campaign moment';
+    const seed = sentences[index % Math.max(sentences.length, 1)] || brief || 'Source-backed campaign moment';
     return {
       id: `clip-${index + 1}`,
       title: `Clip ${index + 1}: ${seed.slice(0, 52)}`,
@@ -48,9 +48,9 @@ function fallbackClips({ transcript, brief, platforms, maxClips, sourceDurationS
       durationSeconds: Math.max(8, end - start),
       platforms,
       caption: seed.slice(0, 220),
-      hashtags: ['#shorts', '#marketing', '#content'],
-      qualityScore: 70 - index,
-      status: 'planned',
+      hashtags: [],
+      qualityScore: null,
+      status: 'development_fallback_only',
       mediaUrl: null,
       scheduledAt: null,
       publishResults: [],
@@ -90,6 +90,13 @@ function verifiedPerformanceRows(performance = []) {
   ));
 }
 
+function clippingError(message, code = 'clipping_ai_generation_failed') {
+  const error = new Error(message);
+  error.code = code;
+  error.statusCode = 503;
+  return error;
+}
+
 class ClippingAgencyService {
   validateRightsManifest(manifest = {}) {
     const errors = [];
@@ -111,7 +118,11 @@ class ClippingAgencyService {
   async generateClipPlan(input = {}) {
     const platforms = normalizePlatforms(input.platforms);
     const maxClips = clamp(Number(input.maxClips) || 6, 1, 12);
-    const contextText = String(input.transcript || input.brief || '').slice(0, 18000);
+    const contextText = String(input.transcript || input.brief || '').trim().slice(0, 18000);
+    if (!contextText) {
+      throw clippingError('Clip planning requires a transcript or creator-provided source notes. Generic clip plans are not substituted.', 'clipping_source_evidence_required');
+    }
+
     const prompt = [
       'Design a short-form clipping campaign from the supplied source material.',
       'Return JSON only with a top-level "clips" array.',
@@ -125,19 +136,29 @@ class ClippingAgencyService {
       `Transcript/source notes: ${contextText}`,
     ].join('\n');
 
-    const ai = await generateAgentResponse('video', prompt, {
-      userId: input.owner || input.ownerId,
-      campaignName: input.name,
-      targetAudience: input.targetAudience,
-      brandVoice: input.brandVoice,
-    });
+    let ai;
+    try {
+      ai = await generateAgentResponse('video', prompt, {
+        userId: input.owner || input.ownerId,
+        campaignName: input.name,
+        targetAudience: input.targetAudience,
+        brandVoice: input.brandVoice,
+      });
+    } catch (error) {
+      throw clippingError(`Clip planning failed: ${error.message || 'AI provider error'}`);
+    }
+    if (ai?.fallback === true) {
+      throw clippingError('Clip planning is unavailable because the configured AI provider did not complete the request. No generic clip plan was substituted.');
+    }
+
     const parsed = safeJson(ai?.content);
     const rawClips = Array.isArray(parsed?.clips) ? parsed.clips.slice(0, maxClips) : null;
-    const clips = rawClips?.length
-      ? rawClips.map((clip, index) => normalizeClip(clip, index, platforms, input.sourceDurationSeconds))
-      : fallbackClips({ ...input, platforms, maxClips });
+    if (!rawClips?.length) {
+      throw clippingError('The AI provider returned an invalid or empty clip plan. No generic clip plan was substituted.');
+    }
 
-    return { generatedAt: new Date().toISOString(), aiFallback: ai?.fallback === true || !rawClips?.length, platforms, clips };
+    const clips = rawClips.map((clip, index) => normalizeClip(clip, index, platforms, input.sourceDurationSeconds));
+    return { generatedAt: new Date().toISOString(), aiFallback: false, platforms, clips };
   }
 
   scheduleClips(clips = [], options = {}) {
@@ -208,9 +229,19 @@ class ClippingAgencyService {
       { userId: campaign.owner || campaign.ownerId, campaign: { name: campaign.name, platforms: campaign.platforms }, summary, performance: verified.slice(-25) },
     );
 
-    return { status: 'verified_evidence', summary, recommendations: ai?.content || null, generatedAt: new Date().toISOString() };
+    if (ai?.fallback === true || !String(ai?.content || '').trim()) {
+      return {
+        status: 'verified_evidence_ai_unavailable',
+        summary,
+        recommendations: null,
+        generatedAt: new Date().toISOString(),
+        reason: 'Verified analytics are available, but the AI optimizer did not return a real recommendation.',
+      };
+    }
+
+    return { status: 'verified_evidence', summary, recommendations: ai.content, generatedAt: new Date().toISOString() };
   }
 }
 
-export { MIN_VERIFIED_OBSERVATIONS, MIN_VERIFIED_VIEWS, verifiedPerformanceRows };
+export { fallbackClips, MIN_VERIFIED_OBSERVATIONS, MIN_VERIFIED_VIEWS, verifiedPerformanceRows };
 export default new ClippingAgencyService();
