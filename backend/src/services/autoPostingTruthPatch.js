@@ -64,4 +64,6 @@ export function installAutoPostingTruthPatch(service = autoPostingService) {
   return service;
 }
 
+installAutoPostingTruthPatch(autoPostingService);
+
 export default installAutoPostingTruthPatch;
