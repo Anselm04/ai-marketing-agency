@@ -47,6 +47,25 @@ describe('Course Factory media production', () => {
     expect(plan.lessons[0].segments).toHaveLength(2);
   });
 
+  test('accepts a completed private source object without exposing a public URL', () => {
+    const plan = buildLessonRenderPlan({
+      id: 'course-private',
+      upload: { status: 'complete', key: 'course-factory/u/p/source.mov', privateBucket: true },
+      sourceDurationSeconds: 600,
+      approval: { status: 'approved' },
+      coursePackage: {
+        modules: [{
+          id: 'm1',
+          title: 'Private source',
+          lessons: [{ id: 'l1', title: 'Lesson', sourceSegments: [{ startSeconds: 0, endSeconds: 60 }] }],
+        }],
+      },
+    });
+
+    expect(plan.sourceRef).toEqual({ kind: 'private_object', key: 'course-factory/u/p/source.mov' });
+    expect(plan.sourceUrl).toBeUndefined();
+  });
+
   test('partitions the source across lessons when AI has no trustworthy timestamps yet', () => {
     const plan = buildLessonRenderPlan({
       id: 'course-partition',
