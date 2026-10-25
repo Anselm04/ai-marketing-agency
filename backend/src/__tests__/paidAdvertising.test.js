@@ -27,6 +27,16 @@ async function registerEntitledUser(label) {
   return { user, token: res.body.token };
 }
 
+async function configureBudgetForAdapterGate(budget) {
+  return store.updateContent(budget.id, {
+    enabled: true,
+    providerAccountId: 'test-provider-account',
+    providerAccount: { providerAccountId: 'test-provider-account', name: 'Test provider account' },
+    campaignConfig: { type: 'test-validated-campaign' },
+    status: 'service_fee_required',
+  });
+}
+
 describe('Paid advertising budget guardrails', () => {
   test('splits an all-in budget into disclosed TrillionAI fee and external media cap', () => {
     const breakdown = calculateBudgetBreakdown(10_000, 500);
@@ -42,7 +52,7 @@ describe('Paid advertising budget guardrails', () => {
     const create = await request(app)
       .post('/api/paid-ads')
       .set('Authorization', `Bearer ${first.token}`)
-      .send({ provider: 'meta', totalBudgetCents: 20_000, enabled: true });
+      .send({ provider: 'meta', totalBudgetCents: 20_000, enabled: false });
 
     expect(create.status).toBe(201);
     expect(create.body.ownerId).toBe(first.user.id);
@@ -61,14 +71,26 @@ describe('Paid advertising budget guardrails', () => {
     expect(secondList.body.budgets.some((item) => item.id === create.body.id)).toBe(false);
   });
 
+  test('API cannot enable ads without a verified account and campaign configuration', async () => {
+    const account = await registerEntitledUser('configuration-gate');
+    const create = await request(app)
+      .post('/api/paid-ads')
+      .set('Authorization', `Bearer ${account.token}`)
+      .send({ provider: 'meta', totalBudgetCents: 20_000, enabled: true });
+
+    expect(create.status).toBe(400);
+    expect(create.body.code).toBe('paid_ads_campaign_configuration_required');
+  });
+
   test('live activation stays blocked until a reviewed hard-stop provider adapter is available', async () => {
     const account = await registerEntitledUser('adapter');
-    const budget = await createPaidAdBudget({
+    const draft = await createPaidAdBudget({
       userId: account.user.id,
       provider: 'google',
       totalBudgetCents: 50_000,
-      enabled: true,
+      enabled: false,
     });
+    const budget = await configureBudgetForAdapterGate(draft);
     await markServiceFeePaid({
       userId: account.user.id,
       budgetId: budget.id,
@@ -89,7 +111,7 @@ describe('Paid advertising budget guardrails', () => {
       userId: account.user.id,
       provider: 'meta',
       totalBudgetCents: 10_000,
-      enabled: true,
+      enabled: false,
     });
 
     const stopped = await recordProviderSpend({
@@ -109,13 +131,16 @@ describe('Paid advertising budget guardrails', () => {
 
   test('user can disable paid advertising immediately', async () => {
     const account = await registerEntitledUser('toggle');
-    const create = await request(app)
-      .post('/api/paid-ads')
-      .set('Authorization', `Bearer ${account.token}`)
-      .send({ provider: 'meta', totalBudgetCents: 15_000, enabled: true });
+    const draft = await createPaidAdBudget({
+      userId: account.user.id,
+      provider: 'meta',
+      totalBudgetCents: 15_000,
+      enabled: false,
+    });
+    await store.updateContent(draft.id, { enabled: true, status: 'ready' });
 
     const off = await request(app)
-      .patch('/api/paid-ads/' + create.body.id)
+      .patch('/api/paid-ads/' + draft.id)
       .set('Authorization', `Bearer ${account.token}`)
       .send({ enabled: false });
 
@@ -125,4 +150,3 @@ describe('Paid advertising budget guardrails', () => {
     expect(off.body.hardStopReason).toBe('user_disabled');
   });
 });
-
