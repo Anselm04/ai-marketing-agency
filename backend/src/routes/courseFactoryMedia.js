@@ -2,6 +2,7 @@ import express from 'express';
 import store from '../utils/store.js';
 import courseMediaProductionService from '../services/courseMediaProductionService.js';
 import courseFactoryMediaQueueService from '../services/courseFactoryMediaQueueService.js';
+import { courseRightsError } from '../services/courseRightsService.js';
 
 const router = express.Router();
 
@@ -21,6 +22,10 @@ async function getOwnedProject(req, res) {
 router.post('/projects/:id/render-lessons', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
+
+  const rightsError = courseRightsError(project.rightsManifest);
+  if (rightsError) return res.status(409).json(rightsError);
+
   if (project.approval?.status !== 'approved') {
     return res.status(409).json({ error: 'Course must be approved before lesson video rendering.' });
   }
