@@ -1,4 +1,5 @@
 import express from 'express';
+import { asyncRoute } from '../utils/asyncRoute.js';
 import { authenticate } from '../middleware/auth.js';
 import videoStudio from '../services/videoStudio.js';
 
@@ -6,34 +7,35 @@ const router = express.Router();
 
 router.use(authenticate);
 
-router.post('/script', async (req, res) => {
+router.post('/script', asyncRoute(async (req, res) => {
   const { videoType, topic, duration, platform } = req.body;
   const result = await videoStudio.generateScript(videoType, topic, duration, platform);
   res.json(result);
-});
+}));
 
-router.post('/storyboard', async (req, res) => {
+router.post('/storyboard', asyncRoute(async (req, res) => {
   const { script, style } = req.body;
   const result = await videoStudio.generateStoryboard(script, style);
   res.json(result);
-});
+}));
 
-router.post('/thumbnails', async (req, res) => {
+router.post('/thumbnails', asyncRoute(async (req, res) => {
   const { topic, brandColors } = req.body;
   const result = await videoStudio.suggestThumbnails(topic, brandColors);
   res.json(result);
-});
+}));
 
-router.post('/hashtags', async (req, res) => {
+router.post('/hashtags', asyncRoute(async (req, res) => {
   const { topic, platform } = req.body;
   const result = await videoStudio.suggestHashtags(topic, platform);
   res.json(result);
-});
+}));
 
-router.post('/ad', async (req, res) => {
+router.post('/ad', asyncRoute(async (req, res) => {
   const { product, audience, duration } = req.body;
   const result = await videoStudio.generateVideoAd(product, audience, duration);
   res.json(result);
-});
+}));
 
 export default router;
+
