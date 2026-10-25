@@ -1,6 +1,7 @@
 import store from '../utils/store.js';
 import { allConnectors } from './connectors/index.js';
-import { getHealthStatus, getTokens } from './appConnector.js';
+import { getTokens } from './appConnector.js';
+import { getUserConnectorHealth } from './connectorUserHealthService.js';
 import { intelligentOrchestrator } from './intelligentOrchestrator.js';
 
 const PROFILE_KIND = 'orchestrator_user_profile';
@@ -27,11 +28,19 @@ async function connectedConnectorsForUser(userId) {
   for (const connector of allConnectors) {
     const tokens = await getTokens(userId, connector.id);
     if (!tokens?.accessToken) continue;
+    const observedHealth = getUserConnectorHealth(userId, connector.id);
+    const health = observedHealth.status === 'unknown'
+      ? {
+          ...observedHealth,
+          status: 'connected_unverified',
+          detail: 'Customer OAuth token exists; provider probe has not run yet.',
+        }
+      : observedHealth;
     connected.push({
       id: connector.id,
       name: connector.name,
       category: connector.category,
-      health: getHealthStatus(connector.id),
+      health,
     });
   }
   return connected;
@@ -73,8 +82,6 @@ export function installOrchestratorPersistencePatch(service = intelligentOrchest
       ...sanitizeProfile(record.profile),
       connectedConnectors: await connectedConnectorsForUser(userId),
     };
-    // Keep the runtime map only as a non-authoritative accelerator for legacy
-    // internal code; persistence remains the source of truth.
     service.userProfiles?.set(userId, profile);
     return profile;
   };
@@ -99,8 +106,6 @@ export function installOrchestratorPersistencePatch(service = intelligentOrchest
       createdAt: timestamp,
     });
 
-    // Bound durable history to the same 1000-record contract used by the old
-    // in-memory implementation.
     const owned = (await store.getContentByOwner(userId))
       .filter((item) => item.kind === HISTORY_KIND)
       .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
