@@ -12,6 +12,7 @@ import {
   paidAdvertisingLimits,
   updatePaidAdBudget,
 } from '../services/paidAdvertisingService.js';
+import { listManagedPaidAdAccounts } from '../services/managedPaidAdsProviderService.js';
 
 const router = express.Router();
 
@@ -29,18 +30,36 @@ router.get('/', async (req, res) => {
   });
 });
 
+router.get('/providers/:provider/accounts', async (req, res) => {
+  try {
+    const accounts = await listManagedPaidAdAccounts(req.user.id, req.params.provider);
+    return res.json({
+      provider: String(req.params.provider || '').toLowerCase(),
+      connected: true,
+      accounts,
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 502).json({
+      error: error.message || 'Unable to load advertising accounts.',
+      code: error.code || 'paid_ads_account_discovery_failed',
+    });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const budget = await createPaidAdBudget({
       userId: req.user.id,
       portfolioProductId: req.body?.portfolioProductId || null,
       provider: req.body?.provider,
+      providerAccountId: req.body?.providerAccountId || null,
+      campaignConfig: req.body?.campaignConfig || null,
       totalBudgetCents: req.body?.totalBudgetCents,
       enabled: req.body?.enabled,
     });
     res.status(201).json(budget);
   } catch (error) {
-    res.status(400).json({ error: error.message || 'Unable to create paid advertising budget.' });
+    res.status(400).json({ error: error.message || 'Unable to create paid advertising budget.', code: error.code || null });
   }
 });
 
@@ -49,11 +68,13 @@ router.patch('/:id', async (req, res) => {
     const budget = await updatePaidAdBudget(req.user.id, req.params.id, {
       enabled: req.body?.enabled,
       totalBudgetCents: req.body?.totalBudgetCents,
+      providerAccountId: req.body?.providerAccountId,
+      campaignConfig: req.body?.campaignConfig,
     });
     if (!budget) return res.status(404).json({ error: 'Paid advertising budget not found.' });
     return res.json(budget);
   } catch (error) {
-    return res.status(400).json({ error: error.message || 'Unable to update paid advertising budget.' });
+    return res.status(400).json({ error: error.message || 'Unable to update paid advertising budget.', code: error.code || null });
   }
 });
 
@@ -68,6 +89,14 @@ router.post('/:id/service-fee-checkout', async (req, res) => {
     return res.status(409).json({
       error: 'The management fee cannot be charged until this provider has an approved managed-billing adapter with verified hard-stop enforcement.',
       code: checkoutPolicy.code,
+      budget,
+    });
+  }
+
+  if (!budget.providerAccountId || !budget.campaignConfig) {
+    return res.status(409).json({
+      error: 'Select a real advertising account and complete the campaign configuration before checkout.',
+      code: 'paid_ads_campaign_configuration_required',
       budget,
     });
   }
@@ -121,6 +150,13 @@ router.post('/:id/activate', async (req, res) => {
   const result = await activatePaidAdBudget(req.user.id, req.params.id);
   if (result.error === 'not_found') return res.status(404).json({ error: 'Paid advertising budget not found.' });
   if (result.error === 'disabled') return res.status(400).json({ error: 'Paid advertising is disabled.' });
+  if (result.error === 'campaign_configuration_required') {
+    return res.status(409).json({
+      error: 'Select a real advertising account and complete the campaign configuration before activation.',
+      code: 'paid_ads_campaign_configuration_required',
+      budget: result.budget,
+    });
+  }
   if (result.error === 'service_fee_required') {
     return res.status(402).json({
       error: 'The TrillionAI service fee must be paid before paid advertising can be activated.',
