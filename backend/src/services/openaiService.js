@@ -37,20 +37,21 @@ export function openaiStatus() {
   };
 }
 
-function fallbackFromError(err, agentType, task) {
+function fallbackFromError(err) {
   const status = err?.status || err?.response?.status;
   const missing = !!resolveLlmClient().missingKey || status === 401;
   return {
     fallback: true,
     missingKey: missing ? (resolveLlmClient().missingKey || 'OPENAI_API_KEY') : null,
     openaiConfigured: !missing,
-    error: err?.message || 'openai-unavailable',
-    content: `[AI offline${missing ? ': missing OPENAI_API_KEY' : ''}] ${agentType} would: ${task}`,
+    error: 'ai_provider_unavailable',
+    errorCode: 'ai_provider_unavailable',
+    content: null,
   };
 }
 
 export async function generateAgentResponse(agentType, task, context = {}) {
-  if (resolveLlmClient().missingKey) return fallbackFromError({ status: 401, message: resolveLlmClient().missingKey }, agentType, task);
+  if (resolveLlmClient().missingKey) return fallbackFromError({ status: 401 });
 
   const systemPrompts = {
     'chief-strategy': 'You are a Chief Strategy Officer. You create high-level marketing strategies, budget allocations, and campaign priorities. Be concise and actionable.',
@@ -76,22 +77,32 @@ export async function generateAgentResponse(agentType, task, context = {}) {
 
   let reservation = null;
   try {
-    reservation = await reserveAiRequest(userId, messages, 800);
+    reservation = await reserveAiRequest(userId, messages, 800, { provider: DEFAULT_PROVIDER });
     const response = await openai.chat.completions.create({ model: DEFAULT_MODEL, messages, temperature: 0.7, max_tokens: 800 });
     await settleAiRequest({ reservation, userId, operation: 'agent-response', result: response, provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL });
     reservation = null;
-    return { fallback: false, content: response.choices[0].message.content, tokens: response.usage };
+    const content = String(response.choices?.[0]?.message?.content || '').trim();
+    if (!content) {
+      return { ...fallbackFromError({}), error: 'empty_ai_response', errorCode: 'empty_ai_response' };
+    }
+    return { fallback: false, content, tokens: response.usage };
   } catch (err) {
     if (reservation) await cancelAiRequest(reservation).catch(() => {});
     if (err?.code === 'plan_quota_exceeded' || err?.status === 402) throw err;
     console.error('OpenAI error:', err.message);
-    return fallbackFromError(err, agentType, task);
+    return fallbackFromError(err);
   }
 }
 
 export async function generateCampaignStrategy(product, budget, platforms, targetAudience) {
   if (resolveLlmClient().missingKey) {
-    return { fallback: true, missingKey: resolveLlmClient().missingKey, strategy: 'AI offline (OPENAI_API_KEY missing). Templates still generate.' };
+    return {
+      fallback: true,
+      missingKey: resolveLlmClient().missingKey,
+      error: 'ai_provider_unavailable',
+      errorCode: 'ai_provider_unavailable',
+      strategy: null,
+    };
   }
   const prompt = `Create a marketing campaign strategy for:\nProduct: ${product}\nBudget: $${budget}\nPlatforms: ${platforms.join(', ')}\nTarget Audience: ${targetAudience}\n\nReturn a structured JSON with:\n- campaignName\n- phases (array with name, duration, tactics)\n- budgetAllocation (object with platform percentages)\n- kpis (array of key metrics)\n- contentIdeas (array of 5 ideas)\n- risks (array of 3 risks and mitigations)`;
   const messages = [
@@ -101,22 +112,34 @@ export async function generateCampaignStrategy(product, budget, platforms, targe
   const userId = getCurrentUserId();
   let reservation = null;
   try {
-    reservation = await reserveAiRequest(userId, messages, 4096);
+    reservation = await reserveAiRequest(userId, messages, 4096, { provider: DEFAULT_PROVIDER });
     const response = await openai.chat.completions.create({ model: DEFAULT_MODEL, messages, response_format: { type: 'json_object' }, temperature: 0.7 });
     await settleAiRequest({ reservation, userId, operation: 'campaign-strategy', result: response, provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL });
     reservation = null;
-    return { fallback: false, strategy: JSON.parse(response.choices[0].message.content), tokens: response.usage };
+    const raw = String(response.choices?.[0]?.message?.content || '').trim();
+    if (!raw) {
+      return { fallback: true, error: 'empty_ai_response', errorCode: 'empty_ai_response', strategy: null };
+    }
+    return { fallback: false, strategy: JSON.parse(raw), tokens: response.usage };
   } catch (err) {
     if (reservation) await cancelAiRequest(reservation).catch(() => {});
     if (err?.code === 'plan_quota_exceeded' || err?.status === 402) throw err;
     console.error('OpenAI strategy error:', err.message);
     const missing = err?.status === 401 || err?.response?.status === 401;
-    return { fallback: true, missingKey: missing ? (resolveLlmClient().missingKey || 'OPENAI_API_KEY') : null, strategy: { error: err.message } };
+    return {
+      fallback: true,
+      missingKey: missing ? (resolveLlmClient().missingKey || 'OPENAI_API_KEY') : null,
+      error: 'ai_provider_unavailable',
+      errorCode: 'ai_provider_unavailable',
+      strategy: null,
+    };
   }
 }
 
 export async function generateLegalDocument(type, businessName, jurisdiction) {
-  if (resolveLlmClient().missingKey) return { fallback: true, document: `[AI offline] ${type} template for ${businessName}.` };
+  if (resolveLlmClient().missingKey) {
+    return { fallback: true, error: 'ai_provider_unavailable', errorCode: 'ai_provider_unavailable', document: null };
+  }
   const prompts = {
     terms: `Generate a Terms & Conditions document for ${businessName}. Include: acceptance, user conduct, intellectual property, limitation of liability, governing law (${jurisdiction}), and termination.`,
     privacy: `Generate a Privacy Policy for ${businessName}. Include: data collection, use, cookies, third parties, user rights, contact info. Comply with GDPR and CCPA where applicable.`,
@@ -132,15 +155,19 @@ export async function generateLegalDocument(type, businessName, jurisdiction) {
   const userId = getCurrentUserId();
   let reservation = null;
   try {
-    reservation = await reserveAiRequest(userId, messages, 2000);
+    reservation = await reserveAiRequest(userId, messages, 2000, { provider: DEFAULT_PROVIDER });
     const response = await openai.chat.completions.create({ model: DEFAULT_MODEL, messages, temperature: 0.3, max_tokens: 2000 });
     await settleAiRequest({ reservation, userId, operation: 'legal-document', result: response, provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL });
     reservation = null;
-    return { fallback: false, document: response.choices[0].message.content, tokens: response.usage };
+    const document = String(response.choices?.[0]?.message?.content || '').trim();
+    if (!document) {
+      return { fallback: true, error: 'empty_ai_response', errorCode: 'empty_ai_response', document: null };
+    }
+    return { fallback: false, document, tokens: response.usage };
   } catch (err) {
     if (reservation) await cancelAiRequest(reservation).catch(() => {});
     if (err?.code === 'plan_quota_exceeded' || err?.status === 402) throw err;
     console.error('OpenAI legal error:', err.message);
-    return { fallback: true, document: `[AI error: ${err.message}] ${type} template for ${businessName}.` };
+    return { fallback: true, error: 'ai_provider_unavailable', errorCode: 'ai_provider_unavailable', document: null };
   }
 }
