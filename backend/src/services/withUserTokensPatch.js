@@ -1,8 +1,11 @@
 /**
- * Monkey-patch socialMediaService.default with withUserTokens() for per-request
- * OAuth user tokens. Import this once from social routes before publish.
+ * Adds per-request OAuth user-token overrides and enforces truthful publishing
+ * semantics for platforms that require a manual or unsupported workflow.
  */
 import socialMediaService from './socialMediaService.js';
+import { applyPublishingTruthPatch } from './publishingTruthPatch.js';
+
+applyPublishingTruthPatch(socialMediaService);
 
 if (typeof socialMediaService.withUserTokens !== 'function') {
   socialMediaService.withUserTokens = function withUserTokens(overrides = {}) {
@@ -11,6 +14,7 @@ if (typeof socialMediaService.withUserTokens !== 'function') {
     for (const [k, v] of Object.entries(overrides || {})) {
       if (v) clone.tokens[k] = v;
     }
+    applyPublishingTruthPatch(clone);
     return clone;
   };
 }
