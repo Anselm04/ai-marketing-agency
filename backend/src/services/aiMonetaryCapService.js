@@ -93,10 +93,13 @@ export async function settleMonthlyAiCostQuota({ monetary, userId, provider = nu
     quantity,
     provider,
     model,
-    costUsd: quantity,
+    // ai_tokens already stores the provider cost in cost_usd. This event uses
+    // quantity as the atomic quota metric so analytics cannot double-count cost_usd.
+    costUsd: null,
     metadata: {
       operation,
       estimatedCostUsd: monetary?.estimatedCostUsd ?? null,
+      actualCostUsd: Number.isFinite(actual) && actual >= 0 ? actual : null,
       settledFromEstimate: !(Number.isFinite(actual) && actual >= 0),
     },
   });
