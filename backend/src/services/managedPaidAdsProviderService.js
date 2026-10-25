@@ -93,22 +93,35 @@ async function listMetaAdAccounts(userId) {
   })).filter((account) => account.providerAccountId && account.currency);
 }
 
-async function googleCustomerDetail(config, tokens, customerId, resourceName) {
-  const url = `${config.baseUrl}/customers/${encodeURIComponent(customerId)}/googleAds:searchStream`;
-  const body = await providerJson(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${tokens.accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query: 'SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.time_zone, customer.status FROM customer LIMIT 1',
-    }),
-  }, 'google_ads_account_detail_failed');
+function googleHeaders(accessToken, loginCustomerId = null) {
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+  if (loginCustomerId) headers['login-customer-id'] = String(loginCustomerId).replace(/\D/g, '');
+  return headers;
+}
 
+async function googleSearch(config, tokens, customerId, query, failureCode, loginCustomerId = null) {
+  const body = await providerJson(`${config.baseUrl}/customers/${customerId}/googleAds:searchStream`, {
+    method: 'POST',
+    headers: googleHeaders(tokens.accessToken, loginCustomerId),
+    body: JSON.stringify({ query }),
+  }, failureCode);
   const batches = Array.isArray(body) ? body : [body];
-  const result = batches.flatMap((batch) => Array.isArray(batch?.results) ? batch.results : [])[0];
-  const customer = result?.customer || {};
+  return batches.flatMap((batch) => Array.isArray(batch?.results) ? batch.results : []);
+}
+
+async function googleCustomerDetail(config, tokens, customerId, resourceName, loginCustomerId = null) {
+  const rows = await googleSearch(
+    config,
+    tokens,
+    customerId,
+    'SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.time_zone, customer.status, customer.manager FROM customer LIMIT 1',
+    'google_ads_account_detail_failed',
+    loginCustomerId,
+  );
+  const customer = rows[0]?.customer || {};
   return {
     id: customerId,
     providerAccountId: customerId,
@@ -118,14 +131,54 @@ async function googleCustomerDetail(config, tokens, customerId, resourceName) {
     currency: String(customer.currencyCode || '').toUpperCase() || null,
     timezone: customer.timeZone || null,
     status: customer.status || 'accessible',
+    manager: customer.manager === true,
+    loginCustomerId: loginCustomerId || null,
   };
+}
+
+async function googleManagerClients(config, tokens, managerCustomerId) {
+  const query = [
+    'SELECT customer_client.client_customer, customer_client.id, customer_client.level,',
+    'customer_client.manager, customer_client.descriptive_name, customer_client.currency_code,',
+    'customer_client.time_zone, customer_client.status, customer_client.hidden',
+    'FROM customer_client',
+    "WHERE customer_client.status = 'ENABLED'",
+  ].join(' ');
+  const rows = await googleSearch(
+    config,
+    tokens,
+    managerCustomerId,
+    query,
+    'google_ads_account_hierarchy_failed',
+    managerCustomerId,
+  );
+
+  return rows
+    .map((row) => row.customerClient || {})
+    .filter((client) => client.manager !== true && client.hidden !== true && Number(client.level) > 0)
+    .map((client) => {
+      const customerId = String(client.id || String(client.clientCustomer || '').replace(/^customers\//, '')).replace(/\D/g, '');
+      return {
+        id: customerId,
+        providerAccountId: customerId,
+        accountId: customerId,
+        name: String(client.descriptiveName || `Google Ads ${customerId}`),
+        resourceName: client.clientCustomer || `customers/${customerId}`,
+        currency: String(client.currencyCode || '').toUpperCase() || null,
+        timezone: client.timeZone || null,
+        status: client.status || 'ENABLED',
+        manager: false,
+        loginCustomerId: managerCustomerId,
+      };
+    })
+    .filter((account) => /^\d{10}$/.test(account.providerAccountId) && account.currency);
 }
 
 async function listGoogleAdAccounts(userId) {
   const { config, tokens } = await requireAccessToken(userId, 'google');
   const body = await providerJson(`${config.baseUrl}/customers:listAccessibleCustomers`, {
     method: 'GET',
-    headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    headers: googleHeaders(tokens.accessToken),
   }, 'google_ads_account_discovery_failed');
 
   const resourceNames = Array.isArray(body.resourceNames) ? body.resourceNames.slice(0, 100) : [];
@@ -134,16 +187,25 @@ async function listGoogleAdAccounts(userId) {
     const customerId = String(resourceName).replace(/^customers\//, '').replace(/-/g, '');
     if (!/^\d{10}$/.test(customerId)) continue;
     try {
-      const account = await googleCustomerDetail(config, tokens, customerId, resourceName);
-      if (account.currency) accounts.push(account);
+      const root = await googleCustomerDetail(config, tokens, customerId, resourceName);
+      if (root.manager) {
+        accounts.push(...await googleManagerClients(config, tokens, customerId));
+      } else if (root.currency) {
+        accounts.push(root);
+      }
     } catch (error) {
-      // An accessible manager/customer reference may still reject direct detail queries.
-      // Omit it rather than presenting an unverified currency/account as launchable.
-      if (error.code === 'google_ads_account_detail_failed') continue;
+      if (['google_ads_account_detail_failed', 'google_ads_account_hierarchy_failed'].includes(error.code)) continue;
       throw error;
     }
   }
-  return accounts;
+
+  const unique = new Map();
+  for (const account of accounts) {
+    const existing = unique.get(account.providerAccountId);
+    // Prefer a direct-access representation over manager-mediated access where both exist.
+    if (!existing || (existing.loginCustomerId && !account.loginCustomerId)) unique.set(account.providerAccountId, account);
+  }
+  return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function listManagedPaidAdAccounts(userId, provider) {
@@ -152,7 +214,7 @@ export async function listManagedPaidAdAccounts(userId, provider) {
 }
 
 export async function requireManagedPaidAdAccount(userId, provider, providerAccountId) {
-  const wanted = String(providerAccountId || '').trim();
+  const wanted = String(providerAccountId || '').trim().replace(/-/g, '');
   if (!wanted) {
     throw providerError('Select an advertising account.', 'paid_ads_provider_account_required', 400);
   }
