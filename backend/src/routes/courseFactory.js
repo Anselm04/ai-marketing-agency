@@ -61,6 +61,23 @@ function assertRights(project, res) {
   return true;
 }
 
+function hasCreatorEvidence(project = {}) {
+  const transcript = String(project.transcript || '').trim();
+  if (transcript.length > 0) return true;
+
+  const observations = project.visualAnalysis?.observations;
+  return Array.isArray(observations) && observations.some((item) => String(item?.observation || '').trim().length > 0);
+}
+
+function assertCreatorEvidence(project, res) {
+  if (hasCreatorEvidence(project)) return true;
+  res.status(409).json({
+    error: 'Course generation requires creator source evidence. Transcribe the source footage or complete visual analysis first.',
+    code: 'course_source_evidence_required',
+  });
+  return false;
+}
+
 async function resolveSourceUrl(project) {
   if (project.sourceUrl) return project.sourceUrl;
   if (project.upload?.status === 'complete' && project.upload?.key && project.upload?.privateBucket === true) {
@@ -304,6 +321,7 @@ router.post('/projects/:id/generate-curriculum', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
   if (!assertRights(project, res)) return;
+  if (!assertCreatorEvidence(project, res)) return;
 
   try {
     const curriculum = await courseFactoryService.generateCurriculum(project);
@@ -322,6 +340,7 @@ router.post('/projects/:id/generate-package', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
   if (!assertRights(project, res)) return;
+  if (!assertCreatorEvidence(project, res)) return;
 
   try {
     const coursePackage = await courseFactoryService.generatePackage(project);
@@ -363,5 +382,10 @@ router.post('/projects/:id/approve', async (req, res) => {
   return res.json(updated);
 });
 
-export { normalizeRightsManifest, validateRightsManifest, resolveSourceUrl };
+export {
+  normalizeRightsManifest,
+  validateRightsManifest,
+  hasCreatorEvidence,
+  resolveSourceUrl,
+};
 export default router;
