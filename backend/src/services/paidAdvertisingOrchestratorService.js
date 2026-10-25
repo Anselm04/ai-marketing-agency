@@ -1,0 +1,138 @@
+import store from '../utils/store.js';
+import {
+  activatePaidAdBudget,
+  getPaidAdBudget,
+  recordProviderSpend,
+  updatePaidAdBudget,
+} from './paidAdvertisingService.js';
+import {
+  launchManagedPaidAdCampaign,
+  pauseManagedPaidAdCampaign,
+  readManagedPaidAdSpend,
+} from './managedPaidAdsExecutionService.js';
+
+function orchestrationError(message, code, cause = null) {
+  const error = new Error(message);
+  error.code = code;
+  error.statusCode = 502;
+  if (cause) error.cause = cause;
+  return error;
+}
+
+export async function activateManagedPaidAdBudget(userId, budgetId) {
+  const armed = await activatePaidAdBudget(userId, budgetId);
+  if (armed.error) return armed;
+  const budget = armed.budget;
+
+  try {
+    const launch = await launchManagedPaidAdCampaign(userId, budget);
+    const updated = await store.updateContent(budget.id, {
+      providerCampaignId: launch.campaignId || null,
+      providerCampaignResourceName: launch.campaignResourceName || null,
+      providerBudgetResourceName: launch.budgetResourceName || null,
+      providerAdSetId: launch.adSetId || null,
+      providerAdGroupResourceName: launch.adGroupResourceName || null,
+      providerCreativeId: launch.creativeId || null,
+      providerAdId: launch.adId || null,
+      providerAdResourceName: launch.adResourceName || null,
+      status: 'active',
+      launchedAt: new Date().toISOString(),
+      providerLaunchError: null,
+      updatedAt: new Date().toISOString(),
+    });
+    return { budget: updated, launch };
+  } catch (error) {
+    const updated = await store.updateContent(budget.id, {
+      status: 'provider_launch_failed',
+      providerLaunchError: error.code || 'paid_ads_provider_launch_failed',
+      providerPartialResources: error.providerResources || null,
+      updatedAt: new Date().toISOString(),
+    });
+    throw orchestrationError(
+      'The provider did not complete campaign launch. No live-success state was recorded.',
+      error.code || 'paid_ads_provider_launch_failed',
+      error,
+    );
+  }
+}
+
+export async function disableManagedPaidAdBudget(userId, budgetId) {
+  const current = await getPaidAdBudget(userId, budgetId);
+  if (!current) return null;
+
+  if (current.providerCampaignId && current.status !== 'hard_stopped') {
+    try {
+      await pauseManagedPaidAdCampaign(userId, current);
+    } catch (error) {
+      await store.updateContent(current.id, {
+        status: 'provider_pause_failed',
+        hardStopReason: 'provider_pause_failed',
+        updatedAt: new Date().toISOString(),
+      });
+      throw orchestrationError(
+        'The provider did not confirm the campaign pause. The campaign is not being reported as disabled.',
+        error.code || 'paid_ads_provider_pause_failed',
+        error,
+      );
+    }
+  }
+
+  return updatePaidAdBudget(userId, budgetId, { enabled: false });
+}
+
+export async function reconcileManagedPaidAdBudget(userId, budgetId) {
+  const current = await getPaidAdBudget(userId, budgetId);
+  if (!current) return null;
+  if (!current.providerCampaignId) return current;
+
+  const providerSpend = await readManagedPaidAdSpend(userId, current);
+  const spendMinor = Math.max(0, Number(providerSpend.spendMinor) || 0);
+  const exhausted = spendMinor >= Number(current.mediaSpendCapCents || 0);
+
+  if (exhausted && current.status !== 'hard_stopped') {
+    try {
+      await pauseManagedPaidAdCampaign(userId, current);
+    } catch (error) {
+      await store.updateContent(current.id, {
+        status: 'provider_pause_failed',
+        hardStopReason: 'spend_limit_pause_failed',
+        reportedMediaSpendCents: spendMinor,
+        remainingMediaBudgetCents: 0,
+        updatedAt: new Date().toISOString(),
+      });
+      throw orchestrationError(
+        'Spend reached the configured limit but the provider did not confirm the campaign pause.',
+        'paid_ads_hard_stop_failed',
+        error,
+      );
+    }
+  }
+
+  return recordProviderSpend({
+    userId,
+    budgetId,
+    spendCents: spendMinor,
+    providerCampaignId: current.providerCampaignId,
+  });
+}
+
+export async function reconcileAllManagedPaidAdsForUser(userId) {
+  const { listPaidAdBudgets } = await import('./paidAdvertisingService.js');
+  const budgets = await listPaidAdBudgets(userId);
+  const results = [];
+  for (const budget of budgets.filter((item) => item.providerCampaignId && ['active', 'hard_stopped', 'provider_pause_failed'].includes(item.status))) {
+    try {
+      results.push(await reconcileManagedPaidAdBudget(userId, budget.id));
+    } catch (error) {
+      results.push({ id: budget.id, error: error.code || 'reconciliation_failed' });
+    }
+  }
+  return results;
+}
+
+export default {
+  activateManagedPaidAdBudget,
+  disableManagedPaidAdBudget,
+  reconcileManagedPaidAdBudget,
+  reconcileAllManagedPaidAdsForUser,
+};
