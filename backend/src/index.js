@@ -62,6 +62,7 @@ import schedulerService from './services/schedulerService.js';
 import { installAnthropicStreaming } from './services/anthropicStreamingService.js';
 import { installBedrockProviderPatch } from './services/bedrockProviderPatch.js';
 import { installAzureOpenAIProviderPatch } from './services/azureProviderPatch.js';
+import { installOrchestratorPersistencePatch } from './services/orchestratorPersistencePatch.js';
 import { mountHealthRoutes } from './utils/systemHealth.js';
 import { hydrateStripeWebhookSecret } from './services/runtimeSecretService.js';
 import './services/withUserTokensPatch.js';
@@ -76,6 +77,7 @@ import { auditLog } from './middleware/auditLog.js';
 installAnthropicStreaming();
 installBedrockProviderPatch();
 installAzureOpenAIProviderPatch();
+installOrchestratorPersistencePatch();
 
 if (process.env.NODE_ENV === 'production' && store.isPostgres?.() !== true) {
   throw new Error(
