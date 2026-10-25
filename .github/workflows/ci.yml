@@ -66,8 +66,8 @@ jobs:
         run: npm test --workspace=frontend
       - name: Frontend build
         run: npm run build --workspace=frontend
-      - name: Production dependency audit
-        run: npm audit --omit=dev --audit-level=moderate
+      - name: Dependency audit (production and development)
+        run: npm audit --audit-level=moderate
       - name: Upload frontend build
         uses: actions/upload-artifact@v4
         with:

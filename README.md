@@ -16,7 +16,7 @@ Public-facing documentation should describe only current, necessary operational 
 
 ### Requirements
 
-- Node.js 20 or later
+- Node.js 22.12 or later in the 22.x line, 24.x, or 26 and later
 - npm
 
 Additional services may be required depending on the environment.
@@ -24,7 +24,7 @@ Additional services may be required depending on the environment.
 ### Install
 
 ```bash
-npm install
+npm ci
 ```
 
 ### Development
@@ -91,3 +91,4 @@ Third-party software remains governed by its respective licences.
 TrillionAI Marketing is developed by **TrillionAI Tech**.
 
 All proprietary product strategy, internal architecture, future plans, commercial direction, and non-public implementation details are confidential unless explicitly approved for disclosure.
+
