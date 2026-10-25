@@ -9,6 +9,16 @@ import { openaiStatus } from '../services/openaiService.js';
 
 const router = express.Router();
 
+function publicAiStatus() {
+  const status = openaiStatus();
+  return {
+    configured: status.openaiConfigured === true,
+    provider: status.provider || null,
+    model: status.model || null,
+    status: status.openaiConfigured === true ? 'configured' : 'not_configured',
+  };
+}
+
 function briefFrom(body = {}) {
   const business = String(body.business || body.description || body.brief || '').trim();
   return {
@@ -44,6 +54,14 @@ function managedAdsMigration(res) {
   });
 }
 
+function safeRouteFailure(res, error, fallback, code) {
+  const status = Number(error?.status || error?.statusCode);
+  if (Number.isInteger(status) && status >= 400 && status < 500) {
+    return res.status(status).json({ error: error.message || fallback, code: error.code || code });
+  }
+  return res.status(500).json({ error: fallback, code });
+}
+
 router.get('/', async (req, res) => {
   try {
     await loadUser(req);
@@ -55,12 +73,12 @@ router.get('/', async (req, res) => {
       message: 'Paid-ad execution moved to the managed advertising workflow. This legacy route no longer reports locally recorded launches as live campaigns.',
     });
   } catch (err) {
-    return res.status(err.status || 500).json({ error: err.message || 'Failed' });
+    return safeRouteFailure(res, err, 'Advertising workspace could not be loaded.', 'ads_workspace_failed');
   }
 });
 
 router.get('/ai-status', (_req, res) => {
-  res.json(openaiStatus());
+  res.json(publicAiStatus());
 });
 
 // These legacy endpoints previously maintained a separate local/in-memory spend
@@ -78,9 +96,16 @@ router.post('/generate', async (req, res) => {
     const { uid } = await loadUser(req);
     const brief = briefFrom(req.body || {});
     const pack = generateDirectResponsePack(brief);
-    return res.json({ pack, ownerId: uid, disclaimer: 'Template/AI pack for your brief only. Not published.' });
+    return res.json({
+      pack,
+      ownerId: uid,
+      generationMode: 'deterministic_template',
+      aiGenerated: false,
+      published: false,
+      disclaimer: 'This is a deterministic starter template generated from your brief. It is not claimed as AI-generated or published content.',
+    });
   } catch (err) {
-    return res.status(err.status || 500).json({ error: err.message || 'Failed' });
+    return safeRouteFailure(res, err, 'The starter copy pack could not be generated.', 'ads_template_generation_failed');
   }
 });
 
@@ -106,14 +131,22 @@ router.post('/generate-campaign', async (req, res) => {
         ownerId: uid,
         videoId,
       });
-      video = { videoId, filename: rendered.filename, size: rendered.size, durationSec: rendered.durationSec };
-    } catch (verr) {
-      video = { error: verr.message || 'video render unavailable' };
+      video = { videoId, filename: rendered.filename, size: rendered.size, durationSec: rendered.durationSec, rendered: true };
+    } catch {
+      video = { rendered: false, reason: 'video_render_unavailable' };
     }
-    return res.json({ ...bundle, video, disclaimer: 'Campaign artifacts are private to your account. Nothing is published automatically.' });
+    return res.json({
+      ...bundle,
+      video,
+      generationMode: 'deterministic_template',
+      aiGenerated: false,
+      published: false,
+      disclaimer: 'This campaign starter bundle is deterministic template output from your brief. It is not claimed as AI-generated or live-published campaign work.',
+    });
   } catch (err) {
-    return res.status(err.status || 500).json({ error: err.message || 'Failed' });
+    return safeRouteFailure(res, err, 'The campaign starter bundle could not be generated.', 'ads_template_campaign_failed');
   }
 });
 
+export { publicAiStatus };
 export default router;
