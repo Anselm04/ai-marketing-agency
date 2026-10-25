@@ -1,4 +1,11 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  UploadPartCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import dotenv from 'dotenv';
 
@@ -60,6 +67,57 @@ export async function getSignedDownloadUrl(key, expiresIn = 3600) {
 export async function getPrivateSignedDownloadUrl(key, expiresIn = 3600) {
   if (!isS3Configured()) throw new Error('S3 not configured');
   return getSignedUrl(s3Client, new GetObjectCommand({ Bucket: PRIVATE_BUCKET, Key: key }), { expiresIn });
+}
+
+export async function createMultipartUpload(key, contentType = 'application/octet-stream') {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  const result = await s3Client.send(new CreateMultipartUploadCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ContentType: contentType,
+  }));
+  if (!result.UploadId) throw new Error('Storage provider did not return a multipart upload ID');
+  return { uploadId: result.UploadId, key };
+}
+
+export async function getMultipartPartUploadUrl({ key, uploadId, partNumber, expiresIn = 3600 }) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  const normalizedPart = Number(partNumber);
+  if (!Number.isInteger(normalizedPart) || normalizedPart < 1 || normalizedPart > 10000) {
+    throw new Error('Multipart part number must be between 1 and 10000');
+  }
+  return getSignedUrl(s3Client, new UploadPartCommand({
+    Bucket: BUCKET,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: normalizedPart,
+  }), { expiresIn });
+}
+
+export async function completeMultipartUpload({ key, uploadId, parts }) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  const result = await s3Client.send(new CompleteMultipartUploadCommand({
+    Bucket: BUCKET,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: { Parts: parts },
+  }));
+  return {
+    key,
+    url: getUploadUrl(key),
+    etag: result.ETag || null,
+    location: result.Location || null,
+  };
+}
+
+export async function abortMultipartUpload({ key, uploadId }) {
+  if (!isS3Configured()) throw new Error('S3 not configured');
+  await s3Client.send(new AbortMultipartUploadCommand({
+    Bucket: BUCKET,
+    Key: key,
+    UploadId: uploadId,
+  }));
+  return { aborted: true, key };
 }
 
 export function getUploadUrl(key) {
