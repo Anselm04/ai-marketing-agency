@@ -17,9 +17,12 @@ describe('paid advertising service-fee checkout safety', () => {
     });
   });
 
-  test('allows checkout only for an explicitly approved provider', () => {
-    process.env.PAID_AD_LIVE_PROVIDER_ALLOWLIST = 'meta';
-    expect(paidAdServiceFeeCheckoutPolicy('meta')).toEqual({ allowed: true, code: null });
+  test('does not let an environment allowlist pretend an unimplemented provider adapter is ready', () => {
+    process.env.PAID_AD_LIVE_PROVIDER_ALLOWLIST = 'meta,google';
+    expect(paidAdServiceFeeCheckoutPolicy('meta')).toEqual({
+      allowed: false,
+      code: 'paid_ads_provider_adapter_required',
+    });
     expect(paidAdServiceFeeCheckoutPolicy('google')).toEqual({
       allowed: false,
       code: 'paid_ads_provider_adapter_required',
