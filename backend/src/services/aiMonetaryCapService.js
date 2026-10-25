@@ -17,8 +17,9 @@ function providerRates(prefix) {
   const normalized = String(prefix || '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
   const input = positiveNumber(process.env[`${normalized}_INPUT_USD_PER_1M`]);
   const output = positiveNumber(process.env[`${normalized}_OUTPUT_USD_PER_1M`]);
-  if (input == null && output == null) return null;
-  return { provider: normalized.toLowerCase(), input: input || 0, output: output || 0 };
+  // Monetary enforcement must not guess a missing side of provider pricing.
+  if (input == null || output == null) return null;
+  return { provider: normalized.toLowerCase(), input, output };
 }
 
 export function configuredAiPricing(provider = null) {
@@ -55,7 +56,7 @@ export async function reserveMonthlyAiCostQuota({ userId, messages = [], maxOutp
 
   const estimatedCostUsd = estimateAiRequestCostUsd(messages, maxOutputTokens, provider);
   if (estimatedCostUsd == null) {
-    const error = new Error('AI monetary spend protection is configured, but provider pricing is missing. The AI request is blocked until pricing is configured.');
+    const error = new Error('AI monetary spend protection is configured, but complete input/output provider pricing is missing. The AI request is blocked until pricing is configured.');
     error.status = 503;
     error.statusCode = 503;
     error.code = 'ai_cost_pricing_not_configured';
