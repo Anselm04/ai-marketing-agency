@@ -1,4 +1,5 @@
 import store from '../utils/store.js';
+import { isManagedPaidAdsAdapterImplemented } from './managedPaidAdsAdapters.js';
 
 const KIND = 'paid_ad_budget';
 const DEFAULT_FEE_BPS = 500; // 5%
@@ -70,6 +71,7 @@ export async function createPaidAdBudget({
     enabled: Boolean(enabled),
     strictHardStop: true,
     status: enabled ? 'service_fee_required' : 'disabled',
+    completedPosts: 0,
     reportedMediaSpendCents: 0,
     remainingMediaBudgetCents: breakdown.mediaSpendCapCents,
     ...breakdown,
@@ -145,11 +147,14 @@ export async function markServiceFeePaid({ userId, budgetId, sessionId }) {
 }
 
 export function providerManagedBillingAvailable(provider) {
+  const normalized = String(provider || '').toLowerCase();
+  if (!isManagedPaidAdsAdapterImplemented(normalized)) return false;
+
   const allow = String(process.env.PAID_AD_LIVE_PROVIDER_ALLOWLIST || '')
     .split(',')
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
-  return allow.includes(String(provider || '').toLowerCase());
+  return allow.includes(normalized);
 }
 
 export function paidAdServiceFeeCheckoutPolicy(provider) {
@@ -171,9 +176,6 @@ export async function activatePaidAdBudget(userId, budgetId) {
   if (!current.serviceFeePaidAt) return { error: 'service_fee_required', budget: current };
   if (current.remainingMediaBudgetCents <= 0) return { error: 'budget_exhausted', budget: current };
 
-  // We refuse to launch live paid media unless a provider adapter has been explicitly
-  // approved for managed billing + hard-stop control. This prevents fake green lights
-  // and prevents the app from pretending it can guarantee a cap it cannot enforce.
   if (!providerManagedBillingAvailable(current.provider)) {
     return { error: 'provider_adapter_required', budget: current };
   }
