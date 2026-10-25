@@ -22,6 +22,7 @@ const getTokens = jest.fn(async () => null);
 const getUserConnectorHealth = jest.fn(() => ({ status: 'unknown', lastChecked: null }));
 const installOrchestratorConnectorHealthPatch = jest.fn((service) => service);
 const installOrchestratorAiFallbackPatch = jest.fn((service) => service);
+const sharedClassification = { category: 'marketing', complexity: 'medium', urgency: 'medium' };
 
 jest.unstable_mockModule('../../utils/store.js', () => ({
   default: { createContent, getContentByOwner, updateContent, deleteContent },
@@ -37,6 +38,12 @@ jest.unstable_mockModule('../connectors/index.js', () => ({
 const fakeService = {
   userProfiles: new Map(),
   taskHistory: new Map(),
+  classifyTask(_taskType, content = '') {
+    if (String(content).length > 10000) sharedClassification.complexity = 'high';
+    else if (String(content).length > 3000) sharedClassification.complexity = 'medium';
+    else sharedClassification.complexity = 'low';
+    return sharedClassification;
+  },
   async buildUserProfile(userId, data) {
     const profile = { userId, ...data, connectedConnectors: [], lastUpdated: Date.now() };
     this.userProfiles.set(userId, profile);
@@ -56,6 +63,7 @@ beforeEach(() => {
   records.splice(0, records.length);
   fakeService.userProfiles.clear();
   fakeService.taskHistory.clear();
+  sharedClassification.complexity = 'medium';
   getTokens.mockReset();
   getTokens.mockResolvedValue(null);
   getUserConnectorHealth.mockReset();
@@ -72,12 +80,23 @@ describe('orchestrator durable persistence', () => {
     expect(installOrchestratorAiFallbackPatch).toHaveBeenCalledWith(fakeService);
   });
 
+  test('returns a usable default profile on first use even before profile setup', async () => {
+    getTokens.mockResolvedValueOnce({ accessToken: 'user-token' });
+    const profile = await fakeService.getUserProfile('new-user');
+    expect(profile).toMatchObject({
+      userId: 'new-user',
+      industry: 'general',
+      persisted: false,
+      connectedConnectors: [expect.objectContaining({ id: 'connector-a' })],
+    });
+  });
+
   test('persists and restores a customer profile from durable storage', async () => {
     await fakeService.buildUserProfile('user-a', { industry: 'agency', goals: ['growth'] });
     fakeService.userProfiles.clear();
 
     const profile = await fakeService.getUserProfile('user-a');
-    expect(profile).toMatchObject({ userId: 'user-a', industry: 'agency', goals: ['growth'] });
+    expect(profile).toMatchObject({ userId: 'user-a', industry: 'agency', goals: ['growth'], persisted: true });
     expect(records.some((item) => item.kind === 'orchestrator_user_profile')).toBe(true);
   });
 
@@ -99,6 +118,15 @@ describe('orchestrator durable persistence', () => {
     getUserConnectorHealth.mockReturnValueOnce({ status: 'authorization_failed', lastChecked: Date.now() });
     const profile = await fakeService.getUserProfile('user-a');
     expect(profile.connectedConnectors[0].health.status).toBe('authorization_failed');
+  });
+
+  test('returns a fresh classification per request instead of leaking complexity between customers', () => {
+    const long = fakeService.classifyTask('campaign-strategy', 'x'.repeat(12000));
+    const short = fakeService.classifyTask('campaign-strategy', 'short');
+    expect(long).toMatchObject({ complexity: 'high' });
+    expect(short).toMatchObject({ complexity: 'low' });
+    expect(long).not.toBe(short);
+    expect(long.complexity).toBe('high');
   });
 
   test('writes task history durably and reads only that owners history', async () => {
