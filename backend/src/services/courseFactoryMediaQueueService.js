@@ -1,8 +1,18 @@
 import store from '../utils/store.js';
 import { addJob, registerWorker } from '../utils/queue.js';
 import courseMediaProductionService from './courseMediaProductionService.js';
+import { getPrivateSignedDownloadUrl } from './uploadService.js';
 
 const QUEUE_NAME = 'course-factory-media';
+const SOURCE_SIGNED_URL_SECONDS = Number(process.env.COURSE_FACTORY_SOURCE_SIGNED_URL_SECONDS) || 21600;
+
+async function sourceForWorker(project) {
+  if (project.sourceUrl) return project.sourceUrl;
+  if (project.upload?.status === 'complete' && project.upload?.key && project.upload?.privateBucket === true) {
+    return getPrivateSignedDownloadUrl(project.upload.key, SOURCE_SIGNED_URL_SECONDS);
+  }
+  throw new Error('Course Factory source media is unavailable');
+}
 
 async function processRenderJob(job) {
   const { projectId, ownerId, lessonPlan } = job.data || {};
@@ -11,7 +21,12 @@ async function processRenderJob(job) {
   if ((project.owner || project.ownerId) !== ownerId) throw new Error('Course Factory project ownership mismatch');
   if (project.approval?.status !== 'approved') throw new Error('Course must remain approved while lesson rendering runs');
 
-  const rendered = await courseMediaProductionService.renderLesson({ project, lessonPlan, ownerId });
+  const sourceUrl = await sourceForWorker(project);
+  const rendered = await courseMediaProductionService.renderLesson({
+    project: { ...project, sourceUrl },
+    lessonPlan,
+    ownerId,
+  });
   const fresh = await store.getCampaignById(projectId);
   const current = Array.isArray(fresh?.mediaProduction?.renderedLessons)
     ? fresh.mediaProduction.renderedLessons
