@@ -35,6 +35,7 @@ import SocialVideoPublisher from './pages/SocialVideoPublisher'
 import MediaLibrary from './pages/MediaLibrary'
 import AutoPosting from './pages/AutoPosting'
 import ClippingAgency from './pages/ClippingAgency'
+import CourseFactory from './pages/CourseFactory'
 import PaidAdvertising from './pages/PaidAdvertising'
 import { SkeletonCard, SkeletonMetric, SkeletonList } from './components/SkeletonCard'
 
@@ -87,6 +88,7 @@ function AppRoutes() {
         <Route path="media-library" element={<MediaLibrary />} />
         <Route path="auto-posting" element={<AutoPosting />} />
         <Route path="clipping" element={<ClippingAgency />} />
+        <Route path="course-factory" element={<CourseFactory />} />
         <Route path="paid-ads" element={<PaidAdvertising />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

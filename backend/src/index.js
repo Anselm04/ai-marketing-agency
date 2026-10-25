@@ -42,6 +42,8 @@ import realtimeRoutes from './routes/realtime.js';
 import affiliateRoutes from './routes/affiliate.js';
 import appforgeIntegrationRoutes from './routes/appforgeIntegration.js';
 import clippingRoutes from './routes/clipping.js';
+import courseFactoryRoutes from './routes/courseFactory.js';
+import courseFactoryMediaRoutes from './routes/courseFactoryMedia.js';
 import socialVideoRoutes from './routes/socialVideo.js';
 import mediaLibraryRoutes from './routes/mediaLibrary.js';
 import autoPostingRoutes from './routes/autoPosting.js';
@@ -197,6 +199,8 @@ app.use('/api/search', searchRoutes);
 app.use('/api/realtime', realtimeRoutes);
 app.use('/api/affiliate', affiliateRoutes);
 app.use('/api/clipping', clippingRoutes);
+app.use('/api/course-factory', courseFactoryRoutes);
+app.use('/api/course-factory', courseFactoryMediaRoutes);
 app.use('/api/social-video', socialVideoRoutes);
 app.use('/api/media-library', mediaLibraryRoutes);
 app.use('/api/auto-posting', autoPostingRoutes);
@@ -250,4 +254,3 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
-
