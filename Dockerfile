@@ -1,14 +1,17 @@
 # Multi-stage production build for TrillionAI Marketing
 # docker-compose uses `backend` and `nginx` targets.
 # Fly uses `production`: one Node process serves API + built SPA.
-# npm install (not ci) because this repo has no package-lock files.
+# All stages install the committed root workspace lockfile used by CI.
 
 # --- Backend Stage ---
 FROM node:22-alpine AS backend
 RUN apk add --no-cache ffmpeg font-dejavu
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --omit=dev --workspace=backend --no-audit --no-fund
 WORKDIR /app/backend
-COPY backend/package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
 COPY backend/src ./src
 COPY backend/data ./data
 EXPOSE 3001
@@ -19,9 +22,12 @@ CMD ["node", "src/index.js"]
 
 # --- Frontend Build Stage ---
 FROM node:22-alpine AS frontend-build
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --workspace=frontend --no-audit --no-fund
 WORKDIR /app/frontend
-COPY frontend/package.json ./
-RUN npm install --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
@@ -36,9 +42,12 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # --- Combined Fly production: API + static frontend ---
 FROM node:22-alpine AS production
 RUN apk add --no-cache wget ffmpeg font-dejavu
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --omit=dev --workspace=backend --no-audit --no-fund
 WORKDIR /app/backend
-COPY backend/package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
 COPY backend/src ./src
 COPY backend/data ./data
 COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
@@ -49,3 +58,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1
 CMD ["node", "src/index.js"]
+

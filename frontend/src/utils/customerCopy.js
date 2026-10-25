@@ -8,7 +8,7 @@ export function friendlyPublishMessage(data) {
   if (!data) return 'Could not publish right now.'
   if (data.published) return data.message || 'Published live to the platform.'
   if (data.queued || data.status === 'queued' || /queue/i.test(data.message || '')) {
-    return data.message || 'Saved to your publish queue. It will go live once this account has a valid connection — we will not fake a live post.'
+    return `${data.message || 'Not published.'} This queue is manual: connect your account if needed, then choose Publish now when ready.`
   }
   if (data.fallback || data.blocked) {
     return data.message || 'Not published live — connect the platform first, or copy the post and paste it yourself.'
@@ -29,3 +29,4 @@ export function socialBadgeFor(oauthRow, plat) {
   if (plat?.setup) return { text: 'Marked for setup — add a token to publish', color: 'var(--text-dim)' }
   return { text: 'Not connected yet', color: 'var(--text-dim)' }
 }
+

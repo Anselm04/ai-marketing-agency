@@ -65,6 +65,8 @@ export function honestResult(r) {
     platform: r?.platform,
     published,
     queued: !published,
+    queueMode: published ? null : 'manual',
+    automaticPublishing: false,
     success: published,
     fallback: !published,
     blocked: !!r?.blocked,
@@ -75,3 +77,4 @@ export function honestResult(r) {
       : (r?.error || r?.message || 'Not published. No connector token. Copy or queue this post instead.'),
   };
 }
+

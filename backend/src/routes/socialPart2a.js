@@ -1,6 +1,6 @@
 import store from '../utils/store.js';
 import { userIdOf } from '../utils/scope.js';
-import { generatePlatformCopy, MAJOR_SOCIALS, buildSchedule } from '../services/marketingEngine.js';
+import { generatePlatformCopy, MAJOR_SOCIALS } from '../services/marketingEngine.js';
 import { ORGANIC_PLATFORMS, ORGANIC_NETWORKS, canonicalPlatform, networkOf } from '../services/spendGuard.js';
 import { encryptUtf8 } from '../utils/owner.js';
 import {
@@ -53,7 +53,7 @@ router.delete('/connect/:platform', async (req, res) => {
 router.get('/posts', async (req, res) => {
   const posts = (await store.getSocialPostsByOwner(userIdOf(req)))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json(posts);
+  res.json(posts.map((post) => ({ ...post, queueMode: 'manual', automaticPublishing: false })));
 });
 
 router.post('/generate', async (req, res) => {
@@ -76,7 +76,6 @@ router.post('/generate', async (req, res) => {
     tone: req.body?.tone || 'professional',
     platforms: wanted,
   });
-  const schedule = buildSchedule(wanted);
   const posts = [];
   const bodies = [];
   for (const spec of wanted) {
@@ -92,7 +91,9 @@ router.post('/generate', async (req, res) => {
       contentType: contentType || 'native_post',
       status: 'draft',
       published: false,
-      scheduledAt: schedule.find((s) => s.platform === spec.id)?.scheduledAt || null,
+      scheduledAt: null,
+      queueMode: 'manual',
+      automaticPublishing: false,
     }));
   }
   const uniqueBodies = new Set(bodies).size;
@@ -102,7 +103,7 @@ router.post('/generate', async (req, res) => {
     posts,
     uniqueBodies,
     platforms: wanted.length,
-    disclaimer: 'Drafts in your workspace. Platform-specific — not an identical blast. Not posted until a connector token exists.',
+    disclaimer: 'Drafts in your workspace. Platform-specific — not an identical blast. Posts do not publish automatically. Connect your account, then choose Publish now.',
   });
 });
 

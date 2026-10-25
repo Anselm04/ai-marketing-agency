@@ -5,7 +5,7 @@
  */
 
 import { Server } from 'socket.io';
-import jwt from 'jsonwebtoken';
+import store from './store.js';
 import { logger } from './logger.js';
 
 let io = null;
@@ -39,7 +39,7 @@ export function initializeWebSocket(httpServer) {
       if (!token) {
         return next(new Error('Authentication required'));
       }
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = await store.verifyToken(token);
       socket.userId = decoded.userId;
       socket.orgId = decoded.organizationId || 'personal';
       socket.role = decoded.role || 'user';
@@ -207,3 +207,4 @@ export default {
   broadcastSystemAlert,
   closeWebSocket,
 };
+

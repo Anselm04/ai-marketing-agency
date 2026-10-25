@@ -1,7 +1,7 @@
 # TrillionAI Marketing on Fly.io (Sydney).
 # Secrets stay out of git. JWT_SECRET is required for login/register.
-# Durable persistence: mounts mkt_data → /data with DATA_DIR=/data.
-# Volume exists: mkt_data (1GB, syd). Or set DATABASE_URL for Postgres.
+# Production account data requires DATABASE_URL for PostgreSQL.
+# The mkt_data volume preserves uploaded media under /data/uploads.
 
 app = "trillionai-marketing"
 primary_region = "syd"
@@ -27,7 +27,7 @@ primary_region = "syd"
     grace_period = "30s"
     interval = "30s"
     method = "GET"
-    path = "/health"
+    path = "/ready"
     protocol = "http"
     timeout = "5s"
 
@@ -50,3 +50,4 @@ primary_region = "syd"
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
+

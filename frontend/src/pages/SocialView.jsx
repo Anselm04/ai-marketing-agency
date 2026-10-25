@@ -79,14 +79,21 @@ export default function SocialView({
       {msg && <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{msg}</p>}
 
       <div className="space-y-3">
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          Posts in this manual queue do not publish automatically. Connect your account, then choose Publish now for each post when ready.
+        </p>
         {posts.map((p) => (
           <article key={p.id} className="rounded-lg p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-widest" style={{ color: 'var(--cyan)' }}>
-              <span>{p.platformName || p.platform} · {p.contentType || 'native'} · {p.status || 'draft'} · {p.published ? 'live' : 'not published'}</span>
+              <span>{p.platformName || p.platform} · {p.contentType || 'native'} · {p.status === 'queued' ? 'manual queue' : p.status || 'draft'} · {p.published ? 'live' : 'not published'}</span>
               <div className="flex gap-3">
                 <button type="button" onClick={() => copyText(p.body, p.id)} style={{ color: 'var(--gold)' }}>{copied === p.id ? 'Copied' : 'Copy'}</button>
-                <button type="button" onClick={() => queue(p.id)} style={{ color: 'var(--gold)' }}>Queue</button>
-                <button type="button" onClick={() => publishOne(p.id)} style={{ color: 'var(--gold)' }} className="inline-flex items-center gap-1"><Send size={12} /> Publish if token</button>
+                {!p.published && !['published', 'publishing'].includes(p.status) && (
+                  <button type="button" onClick={() => queue(p.id)} style={{ color: 'var(--gold)' }}>Save to manual queue</button>
+                )}
+                {!p.published && p.status !== 'published' && (
+                  <button type="button" disabled={p.status === 'publishing'} onClick={() => publishOne(p.id)} style={{ color: 'var(--gold)' }} className="inline-flex items-center gap-1 disabled:opacity-50"><Send size={12} /> {p.status === 'publishing' ? 'Publishing…' : 'Publish now'}</button>
+                )}
               </div>
             </div>
             <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>{p.body}</p>
@@ -94,7 +101,7 @@ export default function SocialView({
         ))}
         {!posts.length && (
           <p className="text-sm rounded-lg p-4" style={{ color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
-            No drafts yet — describe your product above and generate native posts. Nothing is published until you connect a platform or copy-paste yourself.
+            No drafts yet — describe your product above and generate native posts. Connect a platform and choose Publish now for each post, or copy and paste it yourself.
           </p>
         )}
       </div>
@@ -102,3 +109,4 @@ export default function SocialView({
   )
 
 }
+

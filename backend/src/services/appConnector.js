@@ -18,6 +18,7 @@ import { logger, logConnectorRequest } from '../utils/logger.js';
 import { cache } from '../utils/cache.js';
 import { recordConnectorRequest } from '../utils/metrics.js';
 import store from '../utils/store.js';
+import { connectorRetryCount, isTransientConnectorFailure } from './connectorRetryPolicy.js';
 
 const TOKEN_PREFIX = 'connector_tokens';
 const OAUTH_SESSION_PREFIX = 'connector_oauth_session';
@@ -312,16 +313,6 @@ export async function connectorRequest(userId, connectorId, definition, operatio
     url = `${definition.baseUrl}${url}`;
   }
 
-  // Check cache for GET requests
-  if (op.method === 'GET' && op.cacheable) {
-    const cacheKey = `connector:${connectorId}:${operation}:${JSON.stringify(payload.params || {})}`;
-    const cached = await cache.get(cacheKey, 'connector');
-    if (cached) {
-      logConnectorRequest(connectorId, operation, Date.now() - start, 'cache_hit');
-      return cached;
-    }
-  }
-
   // Build request config
   const config = {
     method: op.method || 'GET',
@@ -351,9 +342,25 @@ export async function connectorRequest(userId, connectorId, definition, operatio
     config.data = payload.body || payload.params || {};
   }
 
+  // Cache only an authenticated customer's exact effective request. Hash the
+  // identity so provider tokens and private parameters never appear in keys.
+  // A new namespace deliberately ignores the old cross-customer shared cache.
+  const responseCacheKey = userId && op.method === 'GET' && op.cacheable
+    ? `response:v2:${crypto.createHash('sha256').update(JSON.stringify([
+      userId, connectorId, operation, config.url, config.params, config.headers,
+    ])).digest('hex')}`
+    : null;
+  if (responseCacheKey) {
+    const cached = await cache.get(responseCacheKey, 'connector');
+    if (cached !== null) {
+      logConnectorRequest(connectorId, operation, Date.now() - start, 'cache_hit');
+      return cached;
+    }
+  }
+
   // Execute request with retry
   let lastError = null;
-  const retries = op.retries || 1;
+  const retries = connectorRetryCount(op);
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await axios(config);
@@ -362,15 +369,14 @@ export async function connectorRequest(userId, connectorId, definition, operatio
       recordConnectorRequest(connectorId, operation, duration, 'success');
 
       // Cache GET responses
-      if (op.method === 'GET' && op.cacheable) {
-        const cacheKey = `connector:${connectorId}:${operation}:${JSON.stringify(payload.params || {})}`;
-        await cache.set(cacheKey, response.data, op.cacheTtl || 300, 'connector');
+      if (responseCacheKey) {
+        await cache.set(responseCacheKey, response.data, op.cacheTtl || 300, 'connector');
       }
 
       return response.data;
     } catch (err) {
       lastError = err;
-      if (attempt < retries && (err.response?.status >= 500 || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT')) {
+      if (attempt < retries && isTransientConnectorFailure(err)) {
         await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
         continue;
       }
@@ -581,3 +587,4 @@ export default {
   getUserConnectors,
   initializeHealthChecks,
 };
+

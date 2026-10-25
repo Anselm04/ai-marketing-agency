@@ -63,6 +63,10 @@ describe('organic OAuth and publish readiness', () => {
     );
   });
 
+  test('unpublished results identify the manual queue', () => {
+    expect(honestResult({ success: false, platform: 'x' })).toMatchObject({ published: false, queued: true, queueMode: 'manual', automaticPublishing: false });
+  });
+
   test('a TikTok publish id counts as a real post', () => {
     const row = honestResult({ success: true, platform: 'tiktok', publishId: 'pub_123' });
     expect(row.published).toBe(true);
@@ -82,3 +86,4 @@ describe('organic OAuth and publish readiness', () => {
     expect(expiryMs(null)).toBeNull();
   });
 });
+

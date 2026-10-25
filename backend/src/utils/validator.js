@@ -186,8 +186,8 @@ export const updateProfileSchema = z.object({
 });
 
 export const updateIntegrationsSchema = z.object({
-  integrations: z.record(z.boolean()).optional(),
-  apiKeys: z.record(z.string().max(500)).optional(),
+  integrations: z.record(z.string(), z.boolean()).optional(),
+  apiKeys: z.record(z.string(), z.string().max(500)).optional(),
 }).strict();
 
 // ------------------------------------------------------------------
@@ -231,7 +231,7 @@ export const aiModelPreferenceSchema = z.object({
 export const connectorConfigSchema = z.object({
   connectorId: z.string().min(1).max(100),
   enabled: z.boolean(),
-  settings: z.record(z.any()).optional(),
+  settings: z.record(z.string(), z.any()).optional(),
 });
 
 // ------------------------------------------------------------------
@@ -257,7 +257,7 @@ export function validateBody(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
-      const errors = result.error.errors.map((e) => ({
+      const errors = result.error.issues.map((e) => ({
         path: e.path.join('.'),
         message: e.message,
       }));
@@ -279,7 +279,7 @@ export function validateQuery(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.query);
     if (!result.success) {
-      const errors = result.error.errors.map((e) => ({
+      const errors = result.error.issues.map((e) => ({
         path: e.path.join('.'),
         message: e.message,
       }));
@@ -301,7 +301,7 @@ export function validateParams(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.params);
     if (!result.success) {
-      const errors = result.error.errors.map((e) => ({
+      const errors = result.error.issues.map((e) => ({
         path: e.path.join('.'),
         message: e.message,
       }));
@@ -322,7 +322,7 @@ export function validateParams(schema) {
 export function validateRequest(data, schema) {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const errors = result.error.errors.map((e) => ({
+    const errors = result.error.issues.map((e) => ({
       path: e.path.join('.'),
       message: e.message,
     }));
@@ -362,3 +362,4 @@ export default {
   connectorConfigSchema,
   exportSchema,
 };
+

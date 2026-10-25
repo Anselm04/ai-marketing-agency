@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Globe, Languages, ArrowRight, Copy, Check } from 'lucide-react'
 import api from '../services/api'
+import { studioError, generationUnavailable, hasGeneratedText } from '../utils/studioErrors'
 
 export default function Translation() {
   const [text, setText] = useState('')
@@ -11,6 +12,7 @@ export default function Translation() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [languages, setLanguages] = useState([])
+  const [error, setError] = useState(null)
 
   const supportedLanguages = [
     'English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Dutch',
@@ -21,6 +23,7 @@ export default function Translation() {
   const handleTranslate = async () => {
     if (!text.trim()) return
     setLoading(true)
+    setError(null)
     setResult(null)
     setMultiResults([])
     try {
@@ -29,9 +32,13 @@ export default function Translation() {
         targetLanguage,
         sourceLanguage,
       })
+      if (!hasGeneratedText(res.data, 'translated')) {
+        setError(generationUnavailable())
+        return
+      }
       setResult(res.data)
     } catch (err) {
-      console.error('Translation failed:', err)
+      setError(studioError(err))
     } finally {
       setLoading(false)
     }
@@ -40,6 +47,7 @@ export default function Translation() {
   const handleMultiTranslate = async () => {
     if (!text.trim() || languages.length === 0) return
     setLoading(true)
+    setError(null)
     setResult(null)
     setMultiResults([])
     try {
@@ -47,9 +55,13 @@ export default function Translation() {
         content: text,
         languages,
       })
+      if (!Array.isArray(res.data) || !res.data.length || res.data.some(item => !item || typeof item.language !== 'string')) {
+        setError(generationUnavailable())
+        return
+      }
       setMultiResults(res.data)
     } catch (err) {
-      console.error('Multi translation failed:', err)
+      setError(studioError(err))
     } finally {
       setLoading(false)
     }
@@ -77,6 +89,12 @@ export default function Translation() {
         </div>
       </div>
 
+      {error && (
+        <div role="alert" className="text-sm text-red-600 space-y-2">
+          <p>{error.message}</p>
+          {error.billing && <a href="/dashboard/billing" className="underline">Review Billing</a>}
+        </div>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -151,7 +169,7 @@ export default function Translation() {
           {result && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-900">{targetLanguage} Translation</h3>
+                <h3 className="font-semibold text-gray-900">{result.language || targetLanguage} Translation</h3>
                 <button
                   onClick={() => copyText(result.translated)}
                   className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
@@ -163,9 +181,7 @@ export default function Translation() {
               <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-800 whitespace-pre-wrap">
                 {result.translated}
               </div>
-              {result.fallback && (
-                <p className="text-xs text-amber-600 mt-2">AI translation unavailable. Using placeholder translation.</p>
-              )}
+
             </div>
           )}
 
@@ -177,14 +193,19 @@ export default function Translation() {
                   <div key={i} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-blue-600">{r.language}</span>
-                      <button
+                      {hasGeneratedText(r, 'translated') && <button
                         onClick={() => copyText(r.translated)}
                         className="text-xs text-gray-400 hover:text-gray-600"
                       >
                         <Copy size={12} />
-                      </button>
+                      </button>}
                     </div>
-                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{r.translated}</p>
+                    {hasGeneratedText(r, 'translated')
+                      ? <p className="text-sm text-gray-800 whitespace-pre-wrap">{r.translated}</p>
+                      : <div role="alert" className="text-sm text-red-600 space-y-1">
+                          <p>{r.language}: {studioError({ response: { status: r.status || 503, data: { code: r.errorCode } } }).message}</p>
+                          {r.status === 402 && <a href="/dashboard/billing" className="underline">Review Billing</a>}
+                        </div>}
                   </div>
                 ))}
               </div>
@@ -201,3 +222,4 @@ export default function Translation() {
     </div>
   )
 }
+

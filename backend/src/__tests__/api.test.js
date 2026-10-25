@@ -10,6 +10,7 @@ beforeAll(async () => {
   const timestamp = Date.now();
   testUser = {
     email: `test${timestamp}@example.com`,
+    acceptedTerms: true,
     password: 'TestPass123!',
     firstName: 'Test',
     lastName: 'User',
@@ -57,6 +58,7 @@ describe('Auth API', () => {
       .post('/api/auth/register')
       .send({
         email: `newuser${Date.now()}@example.com`,
+        acceptedTerms: true,
         password: 'SecurePass123!',
         firstName: 'New',
         lastName: 'User',
@@ -275,16 +277,15 @@ describe('Export API', () => {
 // Team API Tests
 
 describe('Team API', () => {
-  test('GET /api/team/org - returns organization', async () => {
+  test('GET /api/team/org - blocks unavailable collaboration', async () => {
     const res = await request(app)
       .get('/api/team/org')
       .set('Authorization', `Bearer ${authToken}`);
-    expect(res.status).toBe(200);
-    expect(res.body.id).toBeDefined();
-    expect(res.body.members).toBeDefined();
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('team_collaboration_unavailable');
   });
 
-  test('POST /api/team/invites - creates invite', async () => {
+  test('POST /api/team/invites - blocks unavailable collaboration', async () => {
     const res = await request(app)
       .post('/api/team/invites')
       .set('Authorization', `Bearer ${authToken}`)
@@ -292,8 +293,8 @@ describe('Team API', () => {
         email: 'invited@example.com',
         role: 'member',
       });
-    expect(res.status).toBe(200);
-    expect(res.body.invite).toBeDefined();
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('team_collaboration_unavailable');
   });
 });
 
@@ -373,4 +374,5 @@ describe('Orchestrator', () => {
     expect(res.status).toBe(401);
   });
 });
+
 

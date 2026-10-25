@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { Video, Clapperboard, Image, Hash, Play, Wand2 } from 'lucide-react'
 import api from '../services/api'
+import { studioError, generationUnavailable, hasGeneratedText } from '../utils/studioErrors'
 
 export default function VideoStudio() {
   const [tab, setTab] = useState('script')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
   const [form, setForm] = useState({ videoType: 'short-form', topic: '', duration: 30, platform: 'TikTok', product: '', audience: '', script: '', style: 'modern', brandColors: '' })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
+    setResult(null)
     try {
       let res
       if (tab === 'script') res = await api.post('/video/script', { videoType: form.videoType, topic: form.topic, duration: form.duration, platform: form.platform })
@@ -18,9 +22,13 @@ export default function VideoStudio() {
       else if (tab === 'thumbnails') res = await api.post('/video/thumbnails', { topic: form.topic, brandColors: form.brandColors })
       else if (tab === 'hashtags') res = await api.post('/video/hashtags', { topic: form.topic, platform: form.platform })
       else if (tab === 'ad') res = await api.post('/video/ad', { product: form.product, audience: form.audience, duration: form.duration })
+      if (!hasGeneratedText(res.data, 'content') && !hasGeneratedText(res.data, 'document')) {
+        setError(generationUnavailable())
+        return
+      }
       setResult(res.data)
     } catch (err) {
-      console.error(err)
+      setError(studioError(err))
     } finally {
       setLoading(false)
     }
@@ -45,7 +53,8 @@ export default function VideoStudio() {
         {tabs.map(t => (
           <button
             key={t.id}
-            onClick={() => { setTab(t.id); setResult(null) }}
+            disabled={loading}
+            onClick={() => { setTab(t.id); setResult(null); setError(null) }}
             className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
               tab === t.id ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
             }`}
@@ -163,13 +172,20 @@ export default function VideoStudio() {
           </button>
         </form>
 
+        {error && (
+          <div role="alert" className="mt-4 text-sm text-red-600 space-y-2">
+            <p>{error.message}</p>
+            {error.billing && <a href="/dashboard/billing" className="underline">Review Billing</a>}
+          </div>
+        )}
         {result && (
           <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
             <h3 className="font-semibold text-gray-900 mb-2">Result</h3>
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-3 rounded border border-gray-100">{result.content || result.document || JSON.stringify(result, null, 2)}</pre>
+            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-3 rounded border border-gray-100">{hasGeneratedText(result, 'content') ? result.content : result.document}</pre>
           </div>
         )}
       </div>
     </div>
   )
 }
+

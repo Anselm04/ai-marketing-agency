@@ -148,7 +148,7 @@ export default function SocialInner() {
   const queue = async (id) => {
     try {
       const res = await api.post('/social/queue', { id })
-      setMsg(res.data?.message || 'Added to your queue. Nothing goes live until a platform is connected.')
+      setMsg(res.data?.message || 'Saved to your manual queue. Connect your account, then choose Publish now when ready.')
     } catch (err) {
       setMsg(err.response?.data?.error || 'Could not queue that post.')
     }
@@ -194,3 +194,4 @@ export default function SocialInner() {
     />
   )
 }
+

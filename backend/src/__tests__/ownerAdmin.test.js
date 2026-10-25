@@ -1,35 +1,29 @@
 import request from 'supertest';
 import app from '../index.js';
+import store from '../utils/store.js';
 
 describe('Owner admin and account controls', () => {
   let ownerToken;
   let regularToken;
 
   beforeAll(async () => {
-    const owner = await request(app)
-      .post('/api/auth/register')
-      .send({
-        email: 'anselm.perkins@gmail.com',
-        password: 'OwnerSecurePass123!',
-        firstName: 'Owner',
-        lastName: 'Account',
-      });
-    if (owner.status === 201) {
-      ownerToken = owner.body.token;
-    } else {
-      const login = await request(app)
-        .post('/api/auth/login')
-        .send({
-          email: 'anselm.perkins@gmail.com',
-          password: 'OwnerSecurePass123!',
-        });
-      ownerToken = login.body.token;
-    }
+    // The operator provisions privileged identities; public signup must never grant ownership.
+    await store.createUser({
+      email: 'anselm.perkins@gmail.com',
+      password: 'OwnerSecurePass123!',
+      profile: { firstName: 'Owner', lastName: 'Account' },
+    });
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'anselm.perkins@gmail.com', password: 'OwnerSecurePass123!' });
+    expect(login.status).toBe(200);
+    ownerToken = login.body.token;
 
     const regular = await request(app)
       .post('/api/auth/register')
       .send({
         email: 'regular-owner-test-' + Date.now() + '@example.com',
+        acceptedTerms: true,
         password: 'RegularSecurePass123!',
         firstName: 'Regular',
         lastName: 'User',
@@ -174,3 +168,4 @@ describe('Owner admin and account controls', () => {
     expect(second.status).toBe(400);
   });
 });
+
