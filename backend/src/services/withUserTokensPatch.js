@@ -5,8 +5,10 @@
  */
 import socialMediaService from './socialMediaService.js';
 import { applyPublishingTruthPatch } from './publishingTruthPatch.js';
+import { installMetaSocialPublishingPatch } from './metaSocialPublishingPatch.js';
 import './autoPostingTruthPatch.js';
 
+installMetaSocialPublishingPatch(socialMediaService);
 applyPublishingTruthPatch(socialMediaService);
 
 if (typeof socialMediaService.withUserTokens !== 'function') {
@@ -16,6 +18,7 @@ if (typeof socialMediaService.withUserTokens !== 'function') {
     for (const [k, v] of Object.entries(overrides || {})) {
       if (v) clone.tokens[k] = v;
     }
+    installMetaSocialPublishingPatch(clone);
     applyPublishingTruthPatch(clone);
     return clone;
   };
