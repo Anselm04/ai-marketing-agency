@@ -29,13 +29,22 @@ router.get('/providers', authenticate, (req, res) => {
 
 router.get('/:modelId', authenticate, (req, res) => {
   const { modelId } = req.params;
-  const info = aiModelRegistry.getModelInfo(modelId);
-  if (!info) return res.status(404).json({ error: 'Model not found' });
-  const providerId = Object.keys(aiModelRegistry.getAllProviders().find((p) => p.models.find((m) => m.id === modelId))?.id || {});
+  const model = aiModelRegistry.getAllModels().find((candidate) => candidate.id === modelId);
+  if (!model) return res.status(404).json({ error: 'Model not found' });
+
   res.json({ success: true, model: {
-    id: modelId, name: info.name, quality: info.quality, speed: info.speed, cost: info.cost,
-    context: info.context, vision: info.vision, inputPrice: info.inputPrice, outputPrice: info.outputPrice,
-    available: aiModelRegistry.isProviderAvailable(providerId),
+    id: model.id,
+    name: model.name,
+    provider: model.providerName,
+    providerId: model.providerId,
+    quality: model.quality,
+    speed: model.speed,
+    cost: model.cost,
+    context: model.context,
+    vision: model.vision,
+    inputPrice: model.inputPrice,
+    outputPrice: model.outputPrice,
+    available: aiModelRegistry.isProviderAvailable(model.providerId),
   } });
 });
 
@@ -86,7 +95,7 @@ router.post('/chat', authenticate, async (req, res, next) => {
     if (reservation) await cancelAiRequest(reservation).catch(() => {});
     if (err?.code === 'plan_quota_exceeded' || err?.status === 402) return next(err);
     logger.error('Chat completion failed', { error: err.message, providerId, modelId });
-    res.status(500).json({ error: 'Chat completion failed', detail: err.message });
+    res.status(500).json({ error: 'Chat completion failed' });
   }
 });
 
