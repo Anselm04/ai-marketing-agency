@@ -19,15 +19,15 @@ const deleteContent = jest.fn(async (id) => {
   return true;
 });
 const getTokens = jest.fn(async () => null);
-const getHealthStatus = jest.fn(() => ({ status: 'unknown' }));
+const getUserConnectorHealth = jest.fn(() => ({ status: 'unknown', lastChecked: null }));
+const installOrchestratorConnectorHealthPatch = jest.fn((service) => service);
 
 jest.unstable_mockModule('../../utils/store.js', () => ({
   default: { createContent, getContentByOwner, updateContent, deleteContent },
 }));
-jest.unstable_mockModule('../appConnector.js', () => ({
-  getTokens,
-  getHealthStatus,
-}));
+jest.unstable_mockModule('../appConnector.js', () => ({ getTokens }));
+jest.unstable_mockModule('../connectorUserHealthService.js', () => ({ getUserConnectorHealth }));
+jest.unstable_mockModule('../orchestratorConnectorHealthPatch.js', () => ({ installOrchestratorConnectorHealthPatch }));
 jest.unstable_mockModule('../connectors/index.js', () => ({
   allConnectors: [{ id: 'connector-a', name: 'Connector A', category: 'crm' }],
 }));
@@ -54,10 +54,21 @@ beforeEach(() => {
   records.splice(0, records.length);
   fakeService.userProfiles.clear();
   fakeService.taskHistory.clear();
-  jest.clearAllMocks();
+  getTokens.mockReset();
+  getTokens.mockResolvedValue(null);
+  getUserConnectorHealth.mockReset();
+  getUserConnectorHealth.mockReturnValue({ status: 'unknown', lastChecked: null });
+  createContent.mockClear();
+  getContentByOwner.mockClear();
+  updateContent.mockClear();
+  deleteContent.mockClear();
 });
 
 describe('orchestrator durable persistence', () => {
+  test('installs the tenant-safe connector patch on the orchestrator', () => {
+    expect(installOrchestratorConnectorHealthPatch).toHaveBeenCalledWith(fakeService);
+  });
+
   test('persists and restores a customer profile from durable storage', async () => {
     await fakeService.buildUserProfile('user-a', { industry: 'agency', goals: ['growth'] });
     fakeService.userProfiles.clear();
@@ -71,7 +82,20 @@ describe('orchestrator durable persistence', () => {
     await fakeService.buildUserProfile('user-a', { industry: 'agency' });
     getTokens.mockResolvedValueOnce({ accessToken: 'user-token' });
     const profile = await fakeService.getUserProfile('user-a');
-    expect(profile.connectedConnectors).toEqual([expect.objectContaining({ id: 'connector-a' })]);
+    expect(profile.connectedConnectors).toEqual([
+      expect.objectContaining({
+        id: 'connector-a',
+        health: expect.objectContaining({ status: 'connected_unverified' }),
+      }),
+    ]);
+  });
+
+  test('preserves an explicit tenant authorization failure instead of treating the connector as healthy', async () => {
+    await fakeService.buildUserProfile('user-a', { industry: 'agency' });
+    getTokens.mockResolvedValueOnce({ accessToken: 'user-token' });
+    getUserConnectorHealth.mockReturnValueOnce({ status: 'authorization_failed', lastChecked: Date.now() });
+    const profile = await fakeService.getUserProfile('user-a');
+    expect(profile.connectedConnectors[0].health.status).toBe('authorization_failed');
   });
 
   test('writes task history durably and reads only that owners history', async () => {
