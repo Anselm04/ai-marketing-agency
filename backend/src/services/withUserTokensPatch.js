@@ -6,10 +6,11 @@
 import socialMediaService from './socialMediaService.js';
 import { applyPublishingTruthPatch } from './publishingTruthPatch.js';
 import { installMetaSocialPublishingPatch } from './metaSocialPublishingPatch.js';
-import './autoPostingTruthPatch.js';
+import { installAutoPostingTruthPatch } from './autoPostingTruthPatch.js';
 
 installMetaSocialPublishingPatch(socialMediaService);
 applyPublishingTruthPatch(socialMediaService);
+installAutoPostingTruthPatch();
 
 if (typeof socialMediaService.withUserTokens !== 'function') {
   socialMediaService.withUserTokens = function withUserTokens(overrides = {}) {
