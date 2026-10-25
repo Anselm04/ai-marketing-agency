@@ -9,7 +9,7 @@
  * - Task-to-connector matching (active connections, health, rate limits)
  * - Dynamic recommendation engine (suggest new connectors based on patterns)
  * - Cost optimization (route to cheapest model meeting quality threshold)
- * - Fallback chains (model fails -> next best; connector fails -> queue for retry)
+ * - Fallback chains (model fails -> next best; transient read failures -> bounded fallback; writes require manual recovery)
  * - Learning from user feedback and outcomes over time
  */
 
@@ -23,7 +23,7 @@ import {
 } from './appConnector.js';
 import { logger } from '../utils/logger.js';
 import { cache } from '../utils/cache.js';
-import { addJob, QueueNames } from '../utils/queue.js';
+import { isConnectorRead, isTransientConnectorFailure } from './connectorRetryPolicy.js';
 import { sendNotification } from '../utils/websocket.js';
 
 // ------------------------------------------------------------------
@@ -456,51 +456,50 @@ export class IntelligentOrchestrator {
       throw error;
     }
 
-    const selected = connectors.selected[0];
-    const connector = getConnectorById(selected.id);
-
-    try {
-      const result = await connectorRequest(userId, selected.id, connector, operation, payload);
-
+    const candidates = [...new Map(connectors.selected.map((item) => [item.id, item])).values()];
+    let lastError;
+    for (const selected of candidates) {
+      const connector = getConnectorById(selected.id);
+      const operationInfo = connector?.operations.find((item) => item.id === operation);
+      if (!operationInfo) {
+        const error = new Error('Selected connector does not support this operation');
+        error.code = 'CONNECTOR_OPERATION_MISSING';
+        error.statusCode = 400;
+        throw error;
+      }
+      // A fallback must itself be read-only, even if another connector uses the same operation name.
+      if (lastError && !isConnectorRead(operationInfo)) continue;
+      let result;
+      try {
+        result = await connectorRequest(userId, selected.id, connector, operation, payload);
+      } catch (error) {
+        lastError = error;
+        logger.error(`Connector task failed for user ${userId}: ${selected.id}/${operation}`, { error: error.message });
+        await this.logTaskHistory(userId, `${taskType}:${operation}`, {
+          connectorId: selected.id, status: 'error', error: error.message,
+        }).catch(() => {});
+        if (!isConnectorRead(operationInfo) || !isTransientConnectorFailure(error)) break;
+        continue;
+      }
+      // History failure must not turn a successful provider write into a replay.
       await this.logTaskHistory(userId, `${taskType}:${operation}`, {
-        connectorId: selected.id,
-        status: 'success',
-      });
-
+        connectorId: selected.id, status: 'success',
+      }).catch((error) => logger.warn('Could not record connector task history', { error: error.message }));
       return {
         ...result,
         orchestration: {
           selectedConnector: selected.id,
           connectorName: selected.name,
           health: selected.health,
+          backgroundRetryAvailable: false,
         },
       };
-    } catch (err) {
-      logger.error(`Connector task failed for user ${userId}: ${selected.id}/${operation}`, { error: err.message });
-
-      await this.logTaskHistory(userId, `${taskType}:${operation}`, {
-        connectorId: selected.id,
-        status: 'error',
-        error: err.message,
-      });
-
-      // If there are other connectors, try the next one
-      if (connectors.selected.length > 1) {
-        const nextConnector = connectors.selected[1];
-        logger.info(`Trying fallback connector: ${nextConnector.id}`);
-        return this.executeConnectorTask(userId, taskType, operation, payload);
-      }
-
-      // Queue for retry if all connectors failed
-      await addJob(QueueNames.CONNECTOR_SYNC, `${taskType}:${operation}`, {
-        userId,
-        connectorId: selected.id,
-        operation,
-        payload,
-      });
-
-      throw err;
     }
+    // No processor owns CONNECTOR_SYNC jobs. Never retain an opaque payload in
+    // a dead queue or automatically replay an externally visible write.
+    lastError.retryQueued = false;
+    lastError.backgroundRetryAvailable = false;
+    throw lastError;
   }
 
   /**
@@ -532,8 +531,8 @@ export class IntelligentOrchestrator {
           const result = await this.executeConnectorTask(userId, taskType, op.operation, op.payload);
           results.connectors.push({ operation: op.operation, success: true, result });
         } catch (err) {
-          results.errors.push({ type: 'connector', operation: op.operation, error: err.message });
-          results.connectors.push({ operation: op.operation, success: false, error: err.message });
+          results.errors.push({ type: 'connector', operation: op.operation, error: err.message, retryQueued: false, backgroundRetryAvailable: false });
+          results.connectors.push({ operation: op.operation, success: false, error: err.message, retryQueued: false, backgroundRetryAvailable: false });
         }
       });
 

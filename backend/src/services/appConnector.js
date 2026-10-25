@@ -18,6 +18,7 @@ import { logger, logConnectorRequest } from '../utils/logger.js';
 import { cache } from '../utils/cache.js';
 import { recordConnectorRequest } from '../utils/metrics.js';
 import store from '../utils/store.js';
+import { connectorRetryCount, isTransientConnectorFailure } from './connectorRetryPolicy.js';
 
 const TOKEN_PREFIX = 'connector_tokens';
 const OAUTH_SESSION_PREFIX = 'connector_oauth_session';
@@ -359,7 +360,7 @@ export async function connectorRequest(userId, connectorId, definition, operatio
 
   // Execute request with retry
   let lastError = null;
-  const retries = op.retries || 1;
+  const retries = connectorRetryCount(op);
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await axios(config);
@@ -375,7 +376,7 @@ export async function connectorRequest(userId, connectorId, definition, operatio
       return response.data;
     } catch (err) {
       lastError = err;
-      if (attempt < retries && (err.response?.status >= 500 || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT')) {
+      if (attempt < retries && isTransientConnectorFailure(err)) {
         await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
         continue;
       }
