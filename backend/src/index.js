@@ -58,6 +58,7 @@ import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
 import paidAdvertisingSchedulerService from './services/paidAdvertisingSchedulerService.js';
+import schedulerService from './services/schedulerService.js';
 import { installAnthropicStreaming } from './services/anthropicStreamingService.js';
 import { installBedrockProviderPatch } from './services/bedrockProviderPatch.js';
 import { installAzureOpenAIProviderPatch } from './services/azureProviderPatch.js';
@@ -241,6 +242,9 @@ if (process.env.NODE_ENV !== 'test') {
     clippingSchedulerService.start();
     autoPostingService.start();
     paidAdvertisingSchedulerService.start();
+    schedulerService.start().catch((error) => {
+      logger.error('Durable scheduler failed to start', { error: error.message });
+    });
     logger.info(`Server running on port ${PORT}`, {
       environment: process.env.NODE_ENV,
       frontendDist: fs.existsSync(frontendDist) ? frontendDist : 'none',
@@ -254,6 +258,7 @@ const shutdown = async () => {
     clippingSchedulerService.stop();
     autoPostingService.stop();
     paidAdvertisingSchedulerService.stop();
+    schedulerService.stop();
     await store.disconnectDB();
   } finally {
     if (httpServer.listening) {
