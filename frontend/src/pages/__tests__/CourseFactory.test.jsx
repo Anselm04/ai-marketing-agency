@@ -61,5 +61,28 @@ describe('Course Factory', () => {
     expect(screen.getByText(/approval pending/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: /approve course/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /generate professional package/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /course bundle/i })).toBeNull()
+  })
+
+  test('shows real download controls only after creator approval', async () => {
+    api.get.mockResolvedValue({
+      data: [{
+        id: 'course-approved',
+        name: 'Approved Course',
+        status: 'approved',
+        sourceUrl: 'https://cdn.example/video.mp4',
+        approval: { humanApprovalRequired: true, status: 'approved' },
+        coursePackage: { modules: [{ id: 'm1', title: 'Foundation', lessons: [] }] },
+        exportManifest: { directSkoolPublishing: false },
+      }],
+    })
+
+    render(<MemoryRouter><CourseFactory /></MemoryRouter>)
+
+    expect(await screen.findByText('Approved Course')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /course bundle/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /printable manual/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /skool package/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /marketing kit/i })).toBeTruthy()
   })
 })
