@@ -6,29 +6,56 @@ const router = express.Router();
 
 router.use(authenticate);
 
-router.get('/jobs', requireAdmin, (req, res) => {
-  res.json(schedulerService.listJobs());
+router.get('/jobs', requireAdmin, async (req, res) => {
+  try {
+    return res.json(await schedulerService.listJobs(req.user.id));
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message, code: error.code || null });
+  }
 });
 
-router.post('/jobs', requireAdmin, (req, res) => {
-  const { id, cronExpression, agentId, task, context } = req.body;
-  const result = schedulerService.scheduleJob(id, cronExpression, agentId, task, context || {});
-  res.json(result);
+router.post('/jobs', requireAdmin, async (req, res) => {
+  try {
+    const { id, cronExpression, agentId, task, context } = req.body || {};
+    const result = await schedulerService.scheduleJob({
+      ownerId: req.user.id,
+      id,
+      cronExpression,
+      agentId,
+      task,
+      context: context || {},
+    });
+    return res.status(201).json(result);
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ error: error.message, code: error.code || null });
+  }
 });
 
-router.delete('/jobs/:id', requireAdmin, (req, res) => {
-  const result = schedulerService.cancelJob(req.params.id);
-  res.json(result);
+router.delete('/jobs/:id', requireAdmin, async (req, res) => {
+  try {
+    const result = await schedulerService.cancelJob(req.user.id, req.params.id);
+    return res.status(result.cancelled ? 200 : 404).json(result);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message, code: error.code || null });
+  }
 });
 
-router.post('/run-hourly', requireAdmin, async (req, res) => {
-  await schedulerService.runHourlyTasks();
-  res.json({ success: true });
+router.post('/run-hourly', requireAdmin, async (_req, res) => {
+  try {
+    await schedulerService.runHourlyTasks();
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(error.statusCode || 409).json({ error: error.message, code: error.code || null, success: false });
+  }
 });
 
-router.post('/run-daily', requireAdmin, async (req, res) => {
-  await schedulerService.runDailyTasks();
-  res.json({ success: true });
+router.post('/run-daily', requireAdmin, async (_req, res) => {
+  try {
+    await schedulerService.runDailyTasks();
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(error.statusCode || 409).json({ error: error.message, code: error.code || null, success: false });
+  }
 });
 
 export default router;
