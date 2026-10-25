@@ -38,6 +38,9 @@ export default function AIModels() {
   const [error, setError] = useState(null)
   const [selectedProvider, setSelectedProvider] = useState('all')
   const [sortBy, setSortBy] = useState('quality')
+  const [recommending, setRecommending] = useState(false)
+  const [recommendation, setRecommendation] = useState('')
+  const [recommendationError, setRecommendationError] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -52,6 +55,23 @@ export default function AIModels() {
       .catch(err => setError(err.response?.data?.error || 'Failed to load AI models'))
       .finally(() => setLoading(false))
   }, [])
+
+  const recommendForContent = async () => {
+    setRecommending(true)
+    setRecommendation('')
+    setRecommendationError('')
+    try {
+      const response = await api.post('/orchestrator/select-model', { taskType: 'content-generation', content: '' })
+      const name = response.data?.selection?.modelName
+      if (typeof name !== 'string' || !name.trim()) throw new Error('Invalid recommendation')
+      setRecommendation(name)
+    } catch (error) {
+      const message = error.response?.data?.error
+      setRecommendationError(typeof message === 'string' ? message : 'Could not recommend a model. Try again.')
+    } finally {
+      setRecommending(false)
+    }
+  }
 
   const filtered = models
     .filter(m => selectedProvider === 'all' || m.providerId === selectedProvider)
@@ -83,7 +103,17 @@ export default function AIModels() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">AI Models</h2>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">Browse and select the best model for each task</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">Browse available models. Recommendations are suggestions and do not change your content tools.</p>
+      </div>
+
+      <div className="space-y-3">
+        <button type="button" onClick={recommendForContent} disabled={recommending || !models.some(model => model.available)}
+          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          {recommending ? 'Finding a recommendation…' : 'Recommend for content'}
+        </button>
+        {!models.some(model => model.available) && <p className="text-sm text-gray-500 dark:text-gray-400">No models are available for a recommendation.</p>}
+        {recommendation && <p role="status" className="text-sm text-gray-700 dark:text-gray-200">Recommended for content: <strong>{recommendation}</strong>. This suggestion does not change the model used by your content tools.</p>}
+        {recommendationError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{recommendationError}</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -167,18 +197,6 @@ export default function AIModels() {
 
               <div className="flex items-center gap-2">
                 <button
-                  className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!model.available}
-                  onClick={() => {
-                    // TODO: wire to orchestrator select-model
-                    api.post('/orchestrator/select-model', { taskType: 'content-generation', content: '' })
-                      .then(res => alert(`Selected: ${res.data.selection.modelName} (score: ${res.data.selection.score})`))
-                      .catch(() => alert('Model selection failed'))
-                  }}
-                >
-                  {model.available ? 'Select for Task' : 'Unavailable'}
-                </button>
-                <button
                   className="px-3 py-2 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                   onClick={() => {
                     api.post('/ai-models/estimate', { providerId: model.providerId, modelId: model.id, inputTokens: 1000, outputTokens: 1000 })
@@ -196,3 +214,4 @@ export default function AIModels() {
     </div>
   )
 }
+
