@@ -32,6 +32,15 @@ function normalizeEvents(events) {
   return values;
 }
 
+function normalizeSecret(secret) {
+  if (secret == null || secret === '') return null;
+  const value = String(secret);
+  if (value.length < 16 || value.length > 512) {
+    throw webhookError('Webhook signing secret must be between 16 and 512 characters.', 'connector_webhook_secret_invalid');
+  }
+  return value;
+}
+
 export function publicConnectorWebhook(record) {
   if (!record) return null;
   const { secretCipher, ...safe } = record;
@@ -40,11 +49,14 @@ export function publicConnectorWebhook(record) {
     secretConfigured: Boolean(secretCipher),
     localRegistration: true,
     providerRegistered: false,
+    deliveryImplemented: false,
+    deliveryStatus: 'registry_only',
   };
 }
 
 export async function createConnectorWebhookRegistration({ ownerId, connectorId, url, events, secret = null }) {
   if (!ownerId || !connectorId) throw webhookError('Owner and connector are required.', 'connector_webhook_owner_required');
+  const normalizedSecret = normalizeSecret(secret);
   const now = new Date().toISOString();
   const record = await store.createContent({
     kind: KIND,
@@ -53,8 +65,9 @@ export async function createConnectorWebhookRegistration({ ownerId, connectorId,
     connectorId: String(connectorId),
     url: normalizeUrl(url),
     events: normalizeEvents(events),
-    secretCipher: secret ? encryptUtf8(String(secret), `connector-webhook:${ownerId}:${connectorId}`) : null,
+    secretCipher: normalizedSecret ? encryptUtf8(normalizedSecret, `connector-webhook:${ownerId}:${connectorId}`) : null,
     providerRegistered: false,
+    deliveryImplemented: false,
     registrationScope: 'local_callback_registry',
     createdAt: now,
     updatedAt: now,
