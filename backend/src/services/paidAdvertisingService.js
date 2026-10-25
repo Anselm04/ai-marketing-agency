@@ -1,11 +1,12 @@
 import store from '../utils/store.js';
 import { isManagedPaidAdsAdapterImplemented } from './managedPaidAdsAdapters.js';
 import { requireManagedPaidAdAccount } from './managedPaidAdsProviderService.js';
+import { currencyExponent, majorToMinor, minorToMajor } from './currencyService.js';
 
 const KIND = 'paid_ad_budget';
 const DEFAULT_FEE_BPS = 500; // 5%
-const MIN_TOTAL_CENTS = 1000; // $10 all-in budget
-const MAX_TOTAL_CENTS = 10_000_000; // $100,000 safety ceiling
+const MIN_TOTAL_MAJOR = 10;
+const MAX_TOTAL_MAJOR = 100_000;
 const SUPPORTED_PROVIDERS = new Set(['meta', 'google']);
 
 function serviceError(message, code) {
@@ -40,6 +41,22 @@ function stringList(value, maxItems, maxLength) {
     .slice(0, maxItems);
 }
 
+function normalizeIsoDateTime(value, label) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) {
+    throw serviceError(`${label} is required and must be a valid date/time.`, 'paid_ads_schedule_required');
+  }
+  return date.toISOString();
+}
+
+function normalizeDate(value, label) {
+  const text = safeText(value, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(new Date(`${text}T00:00:00Z`).getTime())) {
+    throw serviceError(`${label} is required in YYYY-MM-DD format.`, 'paid_ads_schedule_required');
+  }
+  return text;
+}
+
 export function normalizePaidAdCampaignConfig(provider, input) {
   if (!input || typeof input !== 'object') return null;
   const normalizedProvider = String(provider || '').trim().toLowerCase();
@@ -52,17 +69,25 @@ export function normalizePaidAdCampaignConfig(provider, input) {
     const primaryText = safeText(input.primaryText, 2200);
     const headline = safeText(input.headline, 255);
     const countries = stringList(input.countries, 25, 2).map((country) => country.toUpperCase());
+    const imageUrl = requiredHttpsUrl(input.imageUrl);
+    const startTime = normalizeIsoDateTime(input.startTime, 'Meta campaign start');
+    const endTime = normalizeIsoDateTime(input.endTime, 'Meta campaign end');
+    if (new Date(endTime) <= new Date(startTime)) throw serviceError('Meta campaign end must be after its start.', 'paid_ads_schedule_invalid');
     if (!pageId) throw serviceError('A Meta Page ID is required for managed Meta ads.', 'paid_ads_meta_page_required');
     if (!primaryText) throw serviceError('Primary ad text is required for managed Meta ads.', 'paid_ads_meta_primary_text_required');
     if (!headline) throw serviceError('An ad headline is required for managed Meta ads.', 'paid_ads_meta_headline_required');
     if (!countries.length || countries.some((country) => !/^[A-Z]{2}$/.test(country))) {
       throw serviceError('At least one two-letter target country code is required for managed Meta ads.', 'paid_ads_meta_targeting_required');
     }
+    if (input.specialAdCategoriesDeclared !== true || !Array.isArray(input.specialAdCategories)) {
+      throw serviceError('Meta special-ad-category status must be explicitly declared.', 'paid_ads_meta_special_category_declaration_required');
+    }
     return {
       type: 'meta_traffic',
       name,
       objective: 'OUTCOME_TRAFFIC',
       destinationUrl,
+      imageUrl,
       pageId,
       instagramActorId: safeText(input.instagramActorId, 120) || null,
       primaryText,
@@ -70,8 +95,10 @@ export function normalizePaidAdCampaignConfig(provider, input) {
       description: safeText(input.description, 500) || null,
       callToAction: safeText(input.callToAction, 80) || 'LEARN_MORE',
       countries,
-      startTime: input.startTime ? new Date(input.startTime).toISOString() : null,
-      endTime: input.endTime ? new Date(input.endTime).toISOString() : null,
+      specialAdCategoriesDeclared: true,
+      specialAdCategories: stringList(input.specialAdCategories, 12, 100).map((item) => item.toUpperCase()),
+      startTime,
+      endTime,
     };
   }
 
@@ -79,6 +106,10 @@ export function normalizePaidAdCampaignConfig(provider, input) {
     const headlines = stringList(input.headlines, 15, 30);
     const descriptions = stringList(input.descriptions, 4, 90);
     const keywords = stringList(input.keywords, 100, 80);
+    const countryCode = safeText(input.countryCode, 2).toUpperCase();
+    const startDate = normalizeDate(input.startDate, 'Google campaign start date');
+    const endDate = normalizeDate(input.endDate, 'Google campaign end date');
+    if (endDate <= startDate) throw serviceError('Google campaign end date must be after its start date.', 'paid_ads_schedule_invalid');
     if (headlines.length < 3) {
       throw serviceError('Google Search ads require at least three headlines.', 'paid_ads_google_headlines_required');
     }
@@ -88,6 +119,13 @@ export function normalizePaidAdCampaignConfig(provider, input) {
     if (!keywords.length) {
       throw serviceError('Google Search ads require at least one keyword.', 'paid_ads_google_keywords_required');
     }
+    if (!/^[A-Z]{2}$/.test(countryCode)) {
+      throw serviceError('Google Search ads require a two-letter target country code.', 'paid_ads_google_country_required');
+    }
+    const euPoliticalAdvertising = safeText(input.euPoliticalAdvertising, 80);
+    if (!['CONTAINS_EU_POLITICAL_ADVERTISING', 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING'].includes(euPoliticalAdvertising)) {
+      throw serviceError('Google EU political-advertising status must be explicitly declared.', 'paid_ads_google_political_declaration_required');
+    }
     return {
       type: 'google_search',
       name,
@@ -96,9 +134,10 @@ export function normalizePaidAdCampaignConfig(provider, input) {
       descriptions,
       keywords,
       languageCode: safeText(input.languageCode, 16) || 'en',
-      countryCode: safeText(input.countryCode, 2).toUpperCase() || null,
-      startDate: safeText(input.startDate, 10) || null,
-      endDate: safeText(input.endDate, 10) || null,
+      countryCode,
+      euPoliticalAdvertising,
+      startDate,
+      endDate,
     };
   }
 
@@ -106,7 +145,13 @@ export function normalizePaidAdCampaignConfig(provider, input) {
 }
 
 function campaignConfigurationReady(budget) {
-  return Boolean(budget?.providerAccountId && budget?.providerAccount && budget?.campaignConfig);
+  return Boolean(
+    budget?.providerAccountId
+    && budget?.providerAccount
+    && budget?.providerAccount?.currency
+    && budget?.currency
+    && budget?.campaignConfig,
+  );
 }
 
 function clampFeeBps(value) {
@@ -119,14 +164,20 @@ export function getPlatformFeeBps() {
   return clampFeeBps(process.env.PAID_AD_PLATFORM_FEE_BPS ?? DEFAULT_FEE_BPS);
 }
 
-export function calculateBudgetBreakdown(totalBudgetCents, feeBps = getPlatformFeeBps()) {
+// Legacy field names use "Cents" for backward compatibility. Values are now
+// currency minor units, whose precision is determined by the real provider account currency.
+export function calculateBudgetBreakdown(totalBudgetCents, feeBps = getPlatformFeeBps(), currency = 'USD') {
   const total = Number(totalBudgetCents);
-  if (!Number.isInteger(total) || total < MIN_TOTAL_CENTS || total > MAX_TOTAL_CENTS) {
-    throw new Error('All-in paid advertising budget must be between $10 and $100,000.');
+  if (!Number.isInteger(total) || total < 0) throw new Error('Paid advertising budget must be a non-negative minor-unit integer.');
+  const code = String(currency || 'USD').toUpperCase();
+  const major = minorToMajor(total, code);
+  if (major < MIN_TOTAL_MAJOR || major > MAX_TOTAL_MAJOR) {
+    throw new Error(`All-in paid advertising budget must be between ${MIN_TOTAL_MAJOR} and ${MAX_TOTAL_MAJOR} ${code}.`);
   }
 
   const normalizedFeeBps = clampFeeBps(feeBps);
-  const serviceFeeCents = Math.max(50, Math.floor((total * normalizedFeeBps) / 10_000));
+  const minimumFeeMinor = Math.max(1, majorToMinor(0.5, code));
+  const serviceFeeCents = Math.max(minimumFeeMinor, Math.floor((total * normalizedFeeBps) / 10_000));
   const mediaSpendCapCents = total - serviceFeeCents;
   if (mediaSpendCapCents <= 0) throw new Error('Budget is too small after the service fee.');
 
@@ -135,6 +186,8 @@ export function calculateBudgetBreakdown(totalBudgetCents, feeBps = getPlatformF
     serviceFeeBps: normalizedFeeBps,
     serviceFeeCents,
     mediaSpendCapCents,
+    currency: code,
+    currencyExponent: currencyExponent(code),
   };
 }
 
@@ -163,11 +216,12 @@ export async function createPaidAdBudget({
   if (!SUPPORTED_PROVIDERS.has(normalizedProvider)) {
     throw serviceError('Paid advertising provider must be Meta or Google.', 'paid_ads_provider_invalid');
   }
-  const breakdown = calculateBudgetBreakdown(totalBudgetCents);
-  const normalizedCampaign = campaignConfig ? normalizePaidAdCampaignConfig(normalizedProvider, campaignConfig) : null;
   const account = providerAccountId
     ? await requireManagedPaidAdAccount(userId, normalizedProvider, providerAccountId)
     : null;
+  const currency = account?.currency || 'USD';
+  const breakdown = calculateBudgetBreakdown(totalBudgetCents, getPlatformFeeBps(), currency);
+  const normalizedCampaign = campaignConfig ? normalizePaidAdCampaignConfig(normalizedProvider, campaignConfig) : null;
 
   if (enabled && (!account || !normalizedCampaign)) {
     throw serviceError(
@@ -196,9 +250,12 @@ export async function createPaidAdBudget({
     serviceFeePaidAt: null,
     stripeFeeSessionId: null,
     providerCampaignId: null,
+    providerCampaignResourceName: null,
+    providerBudgetResourceName: null,
     providerAdSetId: null,
     providerAdGroupId: null,
     providerCreativeId: null,
+    providerAdId: null,
     pausedAt: null,
     hardStopReason: null,
     createdAt: now,
@@ -217,8 +274,13 @@ export async function updatePaidAdBudget(userId, budgetId, updates = {}) {
   if (updates.providerAccountId !== undefined) {
     const accountId = String(updates.providerAccountId || '').trim();
     const account = accountId ? await requireManagedPaidAdAccount(userId, current.provider, accountId) : null;
+    if (account && current.currency && account.currency !== current.currency && updates.totalBudgetCents == null) {
+      throw serviceError('Changing to an advertising account with a different currency requires entering the budget again.', 'paid_ads_currency_budget_reentry_required');
+    }
     patch.providerAccountId = account?.providerAccountId || null;
     patch.providerAccount = account || null;
+    patch.currency = account?.currency || current.currency || 'USD';
+    patch.currencyExponent = account?.currency ? currencyExponent(account.currency) : current.currencyExponent;
   }
   if (updates.campaignConfig !== undefined) {
     patch.campaignConfig = updates.campaignConfig
@@ -254,7 +316,8 @@ export async function updatePaidAdBudget(userId, budgetId, updates = {}) {
     if (current.reportedMediaSpendCents > 0) {
       throw new Error('Spend limit cannot be changed after paid media spending begins. Create a new budget instead.');
     }
-    const breakdown = calculateBudgetBreakdown(updates.totalBudgetCents);
+    const targetCurrency = future.providerAccount?.currency || future.currency || 'USD';
+    const breakdown = calculateBudgetBreakdown(updates.totalBudgetCents, getPlatformFeeBps(), targetCurrency);
     Object.assign(patch, breakdown, {
       remainingMediaBudgetCents: breakdown.mediaSpendCapCents,
       serviceFeePaidAt: null,
@@ -340,10 +403,10 @@ export async function recordProviderSpend({ userId, budgetId, spendCents, provid
 
   const cappedSpend = Math.min(reported, current.mediaSpendCapCents);
   const remaining = Math.max(0, current.mediaSpendCapCents - cappedSpend);
-  const exhausted = remaining === 0;
+  const exhausted = reported >= current.mediaSpendCapCents;
   return store.updateContent(current.id, {
     providerCampaignId: providerCampaignId || current.providerCampaignId || null,
-    reportedMediaSpendCents: cappedSpend,
+    reportedMediaSpendCents: reported,
     remainingMediaBudgetCents: remaining,
     status: exhausted ? 'hard_stopped' : 'active',
     pausedAt: exhausted ? new Date().toISOString() : null,
@@ -353,7 +416,10 @@ export async function recordProviderSpend({ userId, budgetId, spendCents, provid
 }
 
 export const paidAdvertisingLimits = {
-  minTotalCents: MIN_TOTAL_CENTS,
-  maxTotalCents: MAX_TOTAL_CENTS,
+  minTotalMajor: MIN_TOTAL_MAJOR,
+  maxTotalMajor: MAX_TOTAL_MAJOR,
+  // Legacy USD minor-unit fields retained for older clients.
+  minTotalCents: majorToMinor(MIN_TOTAL_MAJOR, 'USD'),
+  maxTotalCents: majorToMinor(MAX_TOTAL_MAJOR, 'USD'),
   providers: [...SUPPORTED_PROVIDERS],
 };
