@@ -18,6 +18,16 @@ function legalGenerationError(message, code = 'legal_generation_unavailable', st
   return Object.assign(new Error(message), { code, status, statusCode: status });
 }
 
+function requireRealLegalDraft(result) {
+  const document = String(result?.document || '').trim();
+  if (!result || result.fallback === true || !document) {
+    throw legalGenerationError(
+      'The AI provider did not generate a complete legal document. Nothing was saved.',
+    );
+  }
+  return document;
+}
+
 router.get('/templates', (_req, res) => {
   res.json([...LEGAL_TYPES.entries()].map(([id, item]) => ({
     id,
@@ -61,12 +71,7 @@ router.post('/generate', async (req, res, next) => {
 
   try {
     const result = await generateLegalDocument(type, businessName, jurisdiction);
-    const document = String(result?.document || '').trim();
-    if (!result || result.fallback === true || !document) {
-      throw legalGenerationError(
-        'The AI provider did not generate a complete legal document. Nothing was saved.',
-      );
-    }
+    const document = requireRealLegalDraft(result);
 
     const doc = await store.createLegalDoc({
       type,
@@ -106,5 +111,5 @@ router.post('/generate', async (req, res, next) => {
   }
 });
 
-export { LEGAL_TYPES, legalGenerationError };
+export { LEGAL_TYPES, legalGenerationError, requireRealLegalDraft };
 export default router;
