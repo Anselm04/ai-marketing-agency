@@ -57,6 +57,7 @@ import { getMarketingEntitlement } from './services/marketingEntitlementService.
 import clippingSchedulerService from './services/clippingSchedulerService.js';
 import paidAdvertisingSchedulerService from './services/paidAdvertisingSchedulerService.js';
 import { installAnthropicStreaming } from './services/anthropicStreamingService.js';
+import { installBedrockProviderPatch } from './services/bedrockProviderPatch.js';
 import { mountHealthRoutes } from './utils/systemHealth.js';
 import { hydrateStripeWebhookSecret } from './services/runtimeSecretService.js';
 import './services/withUserTokensPatch.js';
@@ -69,6 +70,7 @@ import { sanitizeBody } from './middleware/sanitize.js';
 import { auditLog } from './middleware/auditLog.js';
 
 installAnthropicStreaming();
+installBedrockProviderPatch();
 
 if (process.env.NODE_ENV === 'production' && store.isPostgres?.() !== true) {
   throw new Error(
