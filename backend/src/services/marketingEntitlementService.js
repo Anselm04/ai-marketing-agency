@@ -18,9 +18,10 @@ function activeSubscription(subscription, now = Date.now()) {
 }
 
 function entitlementRank(subscription = {}) {
-  const unlimited = subscription.unlimited === true || subscription.lifetimeAccess === true;
   return {
-    unlimited: unlimited ? 1 : 0,
+    // Lifetime access controls expiry; it does not remove the plan's usage limits.
+    // Only grants explicitly marked unlimited outrank finite plan entitlements.
+    unlimited: subscription.unlimited === true ? 1 : 0,
     plan: PLAN_RANK[subscription.plan] || 0,
     stripe: subscription.source === 'stripe' ? 1 : 0,
     updated: new Date(subscription.updatedAt || subscription.createdAt || 0).getTime() || 0,
