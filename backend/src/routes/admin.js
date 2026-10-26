@@ -3,6 +3,7 @@ import store from '../utils/store.js';
 import { CATALOG, findItem } from '../config/stripeCatalog.js';
 import { requireOwner, mintGodCode, hashGodCode, encryptGodCode } from '../utils/owner.js';
 import { redeemGodCodeForUser } from '../services/godCodeService.js';
+import { strongestSubscription } from '../services/marketingEntitlementService.js';
 
 const router = express.Router();
 router.use(requireOwner);
@@ -64,16 +65,21 @@ async function analyticsPayload() {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 50)
     .map((u) => {
-      const sub = subscriptions.find((s) => s.userId === u.id || s.user === u.id);
+      const userSubscriptions = subscriptions.filter((s) => s.userId === u.id || s.user === u.id);
+      const effective = strongestSubscription(userSubscriptions);
+      const godGrant = userSubscriptions
+        .filter((s) => s.source === 'god-code' && s.godGrant)
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0] || null;
       return {
         id: u.id,
         email: u.email,
         name: [u.profile?.firstName, u.profile?.lastName].filter(Boolean).join(' ') || null,
         createdAt: u.createdAt,
-        plan: sub?.plan || u.plan || 'none',
-        status: sub?.status || 'none',
-        credits: u.credits || 0,
-        godGrant: sub?.godGrant || u.godGrant || null,
+        plan: effective?.plan || 'none',
+        status: effective?.status || 'none',
+        entitlementSource: effective?.source || null,
+        credits: Number(u.profile?.credits ?? u.credits ?? 0),
+        godGrant: godGrant?.godGrant || u.profile?.godGrant || u.godGrant || null,
       };
     });
   return {
