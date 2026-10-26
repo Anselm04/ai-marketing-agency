@@ -12,6 +12,10 @@ function resolveGrantItem(found) {
   return findItem({ id: sku }) || findItem({ lookup_key: found.lookup_key });
 }
 
+function existingGodCodeSubscription(subscriptions = []) {
+  return subscriptions.find((entry) => entry.source === 'god-code') || null;
+}
+
 export async function redeemGodCodeForUser(userId, rawCode) {
   const raw = String(rawCode || '').trim();
   if (!raw) throw new Error(REDEEM_FAIL);
@@ -45,9 +49,10 @@ export async function redeemGodCodeForUser(userId, rawCode) {
   if (!consumed) throw new Error(REDEEM_FAIL);
 
   const kind = item.interval ? 'plan' : 'credits';
-  let subscription = (await store.getSubscriptions()).find(
-    (entry) => entry.user === userId || entry.userId === userId,
-  );
+  const subscriptions = typeof store.getSubscriptionsByUser === 'function'
+    ? await store.getSubscriptionsByUser(userId)
+    : (await store.getSubscriptions()).filter((entry) => entry.user === userId || entry.userId === userId);
+  let subscription = existingGodCodeSubscription(subscriptions);
   const creditAdd = kind === 'credits' ? (item.credits || 0) : 0;
   let nextCredits = Number((await store.findUserById(userId))?.profile?.credits || 0);
 
@@ -115,4 +120,4 @@ export async function normalizeSubscriptionAccess(subscription) {
   return subscription;
 }
 
-export { REDEEM_FAIL };
+export { REDEEM_FAIL, existingGodCodeSubscription };
