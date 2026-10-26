@@ -1,7 +1,12 @@
 import express from 'express';
 import store from '../utils/store.js';
 import { uploadMemory } from '../middleware/upload.js';
-import { isS3Configured, uploadPrivateToS3, getPrivateSignedDownloadUrl } from '../services/uploadService.js';
+import {
+  deleteStoredObject,
+  getPrivateSignedDownloadUrl,
+  isS3Configured,
+  uploadPrivateToS3,
+} from '../services/uploadService.js';
 import mediaComposerService from '../services/mediaComposerService.js';
 
 const router = express.Router();
@@ -116,17 +121,26 @@ router.post('/compose', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
-  const owner = ownerId(req);
-  const asset = (await store.getContentByOwner(owner)).find(
-    (item) => String(item.id) === String(req.params.id)
-      && item.owner === owner
-      && ['media_asset', 'generated_video'].includes(item.kind),
-  );
-  if (!asset) return res.status(404).json({ error: 'Media asset not found' });
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const owner = ownerId(req);
+    const asset = (await store.getContentByOwner(owner)).find(
+      (item) => String(item.id) === String(req.params.id)
+        && item.owner === owner
+        && ['media_asset', 'generated_video'].includes(item.kind),
+    );
+    if (!asset) return res.status(404).json({ error: 'Media asset not found' });
 
-  await store.deleteContent(asset.id);
-  res.json({ success: true });
+    if (asset.storageKey) {
+      await deleteStoredObject(asset.storageKey, {
+        privateBucket: asset.storageVisibility === 'private',
+      });
+    }
+    await store.deleteContent(asset.id);
+    return res.json({ success: true, storageObjectDeleted: Boolean(asset.storageKey) });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 export default router;
