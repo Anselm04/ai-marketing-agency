@@ -35,7 +35,7 @@ describe('customer data lifecycle completeness', () => {
     expect(exported.usage.completionTokens).toBe(25);
   });
 
-  test('collects completed objects and active multipart uploads without duplicate deletion', () => {
+  test('collects top-level and nested objects plus active multipart uploads without duplicates', () => {
     const references = collectCustomerStorageReferences({
       campaigns: [
         {
@@ -44,6 +44,15 @@ describe('customer data lifecycle completeness', () => {
             key: 'course/customer/source.mp4',
             privateBucket: true,
           },
+          clipPlan: {
+            clips: [
+              { storageKey: 'clipping/customer/campaign/clip-1.mp4' },
+              { storageKey: 'clipping/customer/campaign/clip-1.mp4' },
+            ],
+          },
+          renderedLessons: [
+            { storageKey: 'courses/customer/lesson-1.mp4' },
+          ],
         },
         {
           upload: {
@@ -71,10 +80,12 @@ describe('customer data lifecycle completeness', () => {
 
     expect(references.objects).toEqual(expect.arrayContaining([
       { key: 'course/customer/source.mp4', privateBucket: true },
+      { key: 'clipping/customer/campaign/clip-1.mp4', privateBucket: false },
+      { key: 'courses/customer/lesson-1.mp4', privateBucket: false },
       { key: 'media-library/customer/photo.jpg', privateBucket: true },
       { key: 'media-library/customer/generated/video.mp4', privateBucket: false },
     ]));
-    expect(references.objects).toHaveLength(3);
+    expect(references.objects).toHaveLength(5);
     expect(references.multipartUploads).toEqual([
       {
         key: 'course/customer/in-progress.mp4',
