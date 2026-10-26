@@ -8,6 +8,10 @@ import mediaClipperService from '../services/mediaClipperService.js';
 import courseVisualAnalysisService from '../services/courseVisualAnalysisService.js';
 import { courseRightsError } from '../services/courseRightsService.js';
 import {
+  courseFactoryStorageStatus,
+  withCourseFactoryStorageReservation,
+} from '../services/courseFactoryStorageQuotaService.js';
+import {
   abortMultipartUpload,
   completeMultipartUpload,
   createMultipartUpload,
@@ -23,6 +27,21 @@ const SOURCE_SIGNED_URL_SECONDS = Number(process.env.COURSE_FACTORY_SOURCE_SIGNE
 
 function ownerId(req) {
   return req.user?.id || req.userId;
+}
+
+function routeError(res, error, fallback, defaultStatus = 502) {
+  const statusCandidate = Number(error?.statusCode || error?.status);
+  const code = String(error?.code || 'course_factory_operation_failed');
+  const safeClientError = code.startsWith('course_')
+    && Number.isInteger(statusCandidate)
+    && statusCandidate >= 400
+    && statusCandidate < 500;
+  const safeServerCode = code.startsWith('course_') && statusCandidate >= 500;
+  const status = safeClientError ? statusCandidate : defaultStatus;
+  return res.status(status).json({
+    error: safeClientError ? (error?.message || fallback) : fallback,
+    ...(safeClientError || safeServerCode ? { code } : { code: 'course_factory_operation_failed' }),
+  });
 }
 
 function normalizeRightsManifest(input = {}) {
@@ -95,6 +114,15 @@ async function getOwnedProject(req, res) {
   return project;
 }
 
+router.get('/storage-status', async (req, res) => {
+  try {
+    const status = await courseFactoryStorageStatus(ownerId(req));
+    return res.json(status);
+  } catch (error) {
+    return routeError(res, error, 'Course Factory storage status is temporarily unavailable.', 503);
+  }
+});
+
 router.get('/projects', async (req, res) => {
   const projects = (await store.getCampaignsByOwner(ownerId(req)))
     .filter((campaign) => campaign.kind === 'ai-course-factory')
@@ -155,7 +183,12 @@ router.get('/projects/:id', async (req, res) => {
 router.post('/projects/:id/uploads/multipart', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
-  if (!isS3Configured()) return res.status(503).json({ error: 'Durable S3-compatible storage is required for long-form Course Factory uploads.' });
+  if (!isS3Configured()) {
+    return res.status(503).json({
+      error: 'Durable Course Factory storage is temporarily unavailable.',
+      code: 'course_factory_storage_unavailable',
+    });
+  }
 
   const filename = String(req.body?.filename || '').trim();
   const contentType = String(req.body?.contentType || 'video/mp4').trim();
@@ -163,32 +196,59 @@ router.post('/projects/:id/uploads/multipart', async (req, res) => {
   if (!filename) return res.status(400).json({ error: 'filename is required' });
   if (size <= 0 || size > MAX_SOURCE_BYTES) return res.status(400).json({ error: `Video size must be between 1 byte and ${MAX_SOURCE_BYTES} bytes.` });
   if (!contentType.startsWith('video/')) return res.status(400).json({ error: 'Course Factory source upload must be a video file.' });
+  if (project.upload?.status === 'uploading') {
+    return res.status(409).json({
+      error: 'This project already has an active source upload. Abort it before starting another.',
+      code: 'course_factory_upload_already_active',
+    });
+  }
+  if (project.upload?.status === 'complete') {
+    return res.status(409).json({
+      error: 'This project already has a completed source upload. Create a new Course Factory project for replacement source footage.',
+      code: 'course_factory_source_already_complete',
+    });
+  }
 
   try {
-    const key = buildCourseProjectKey(ownerId(req), project.id, filename);
-    const session = await createMultipartUpload(key, contentType, { privateBucket: true });
-    const upload = {
-      ...session,
-      filename,
-      contentType,
-      size,
-      partSize: DEFAULT_PART_SIZE,
-      status: 'uploading',
-      startedAt: new Date().toISOString(),
-    };
-    const updated = await store.updateCampaign(project.id, { upload, status: 'uploading' });
-    return res.status(201).json({
-      project: updated,
-      upload: {
-        uploadId: session.uploadId,
-        key,
-        privateBucket: true,
-        partSize: DEFAULT_PART_SIZE,
-        maxParts: 10000,
+    return await withCourseFactoryStorageReservation({
+      userId: ownerId(req),
+      requestedBytes: size,
+      task: async (storage) => {
+        const key = buildCourseProjectKey(ownerId(req), project.id, filename);
+        const session = await createMultipartUpload(key, contentType, { privateBucket: true });
+        const upload = {
+          ...session,
+          filename,
+          contentType,
+          size,
+          partSize: DEFAULT_PART_SIZE,
+          status: 'uploading',
+          startedAt: new Date().toISOString(),
+        };
+        const updated = await store.updateCampaign(project.id, { upload, status: 'uploading' });
+        return res.status(201).json({
+          project: updated,
+          storage: {
+            plan: storage.plan,
+            limitBytes: storage.limitBytes,
+            usedBytesBeforeUpload: storage.usedBytes,
+            reservedBytes: size,
+            remainingBytesAfterReservation: storage.limitBytes === Infinity
+              ? Infinity
+              : Math.max(0, storage.limitBytes - storage.usedBytes - size),
+          },
+          upload: {
+            uploadId: session.uploadId,
+            key,
+            privateBucket: true,
+            partSize: DEFAULT_PART_SIZE,
+            maxParts: 10000,
+          },
+        });
       },
     });
   } catch (error) {
-    return res.status(422).json({ error: error.message });
+    return routeError(res, error, 'Unable to start the Course Factory source upload.');
   }
 });
 
@@ -209,14 +269,16 @@ router.post('/projects/:id/uploads/multipart/part', async (req, res) => {
     });
     return res.json({ partNumber, url });
   } catch (error) {
-    return res.status(422).json({ error: error.message });
+    return routeError(res, error, 'Unable to prepare this upload part.', 422);
   }
 });
 
 router.post('/projects/:id/uploads/multipart/complete', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
-  if (!project.upload?.uploadId || !project.upload?.key) return res.status(409).json({ error: 'No multipart upload exists for this project.' });
+  if (!project.upload?.uploadId || !project.upload?.key || project.upload.status !== 'uploading') {
+    return res.status(409).json({ error: 'No active multipart upload exists for this project.' });
+  }
   try {
     const parts = validateMultipartParts(req.body?.parts);
     const completed = await completeMultipartUpload({
@@ -240,14 +302,16 @@ router.post('/projects/:id/uploads/multipart/complete', async (req, res) => {
     });
     return res.json(updated);
   } catch (error) {
-    return res.status(422).json({ error: error.message });
+    return routeError(res, error, 'The storage provider did not complete the Course Factory upload.', 502);
   }
 });
 
 router.post('/projects/:id/uploads/multipart/abort', async (req, res) => {
   const project = await getOwnedProject(req, res);
   if (!project) return;
-  if (!project.upload?.uploadId || !project.upload?.key) return res.status(409).json({ error: 'No multipart upload exists for this project.' });
+  if (!project.upload?.uploadId || !project.upload?.key || project.upload.status !== 'uploading') {
+    return res.status(409).json({ error: 'No active multipart upload exists for this project.' });
+  }
   try {
     await abortMultipartUpload({
       key: project.upload.key,
@@ -260,7 +324,7 @@ router.post('/projects/:id/uploads/multipart/abort', async (req, res) => {
     });
     return res.json(updated);
   } catch (error) {
-    return res.status(422).json({ error: error.message });
+    return routeError(res, error, 'The storage provider did not confirm the upload abort.', 502);
   }
 });
 
@@ -286,7 +350,7 @@ router.post('/projects/:id/transcribe', async (req, res) => {
     });
     return res.json(updated);
   } catch (error) {
-    return res.status(422).json({ error: error.message });
+    return routeError(res, error, 'Course transcription could not be completed.', 502);
   }
 });
 
@@ -313,7 +377,7 @@ router.post('/projects/:id/analyse-visuals', async (req, res) => {
     });
     return res.json(updated);
   } catch (error) {
-    return res.status(422).json({ error: error.message });
+    return routeError(res, error, 'Course visual analysis could not be completed.', 502);
   }
 });
 
@@ -332,7 +396,7 @@ router.post('/projects/:id/generate-curriculum', async (req, res) => {
     });
     return res.json(updated);
   } catch (error) {
-    return res.status(422).json({ error: error.message });
+    return routeError(res, error, 'Course curriculum generation could not be completed.', 502);
   }
 });
 
@@ -358,7 +422,7 @@ router.post('/projects/:id/generate-package', async (req, res) => {
     });
     return res.json(updated);
   } catch (error) {
-    return res.status(422).json({ error: error.message });
+    return routeError(res, error, 'Professional course package generation could not be completed.', 502);
   }
 });
 
@@ -387,5 +451,6 @@ export {
   validateRightsManifest,
   hasCreatorEvidence,
   resolveSourceUrl,
+  routeError as courseFactoryRouteError,
 };
 export default router;
