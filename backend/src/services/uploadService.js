@@ -2,6 +2,7 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -62,6 +63,23 @@ export async function uploadPrivateToS3(key, body, contentType) {
     ContentType: contentType,
   }));
   return { key };
+}
+
+export async function deleteStoredObject(key, { privateBucket = false } = {}) {
+  const normalizedKey = String(key || '').trim();
+  if (!normalizedKey) return { deleted: false, key: null, privateBucket: Boolean(privateBucket) };
+  if (!isS3Configured()) {
+    const error = new Error('S3-compatible storage is unavailable, so the stored object was not deleted.');
+    error.code = 'object_storage_unavailable';
+    error.statusCode = 503;
+    error.status = 503;
+    throw error;
+  }
+  await s3Client.send(new DeleteObjectCommand({
+    Bucket: selectBucket(privateBucket),
+    Key: normalizedKey,
+  }));
+  return { deleted: true, key: normalizedKey, privateBucket: Boolean(privateBucket) };
 }
 
 export async function getSignedDownloadUrl(key, expiresIn = 3600) {
