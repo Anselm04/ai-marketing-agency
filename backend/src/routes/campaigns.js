@@ -1,6 +1,6 @@
 import express from 'express';
 import store from '../utils/store.js';
-import { assertCampaignQuota } from '../services/planQuotaService.js';
+import { createCampaignWithinPlan } from '../services/campaignCreationService.js';
 import { markManualPerformanceInput } from '../services/analyticsProvenanceService.js';
 
 const router = express.Router();
@@ -21,9 +21,8 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    await assertCampaignQuota(req.user.id, 1);
     const safeInput = sanitizeCampaignInput(req.body);
-    const campaign = await store.createCampaign({
+    const campaign = await createCampaignWithinPlan({
       ...safeInput,
       performanceProvenance: markManualPerformanceInput({}, safeInput),
       status: 'draft',
@@ -37,13 +36,13 @@ router.post('/', async (req, res, next) => {
 
 router.get('/:id', async (req, res) => {
   const campaign = await store.getCampaignById(req.params.id);
-  if (!campaign || campaign.owner !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+  if (!campaign || (campaign.owner || campaign.ownerId) !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
   res.json(campaign);
 });
 
 router.patch('/:id', async (req, res) => {
   const campaign = await store.getCampaignById(req.params.id);
-  if (!campaign || campaign.owner !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+  if (!campaign || (campaign.owner || campaign.ownerId) !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
   const safeInput = sanitizeCampaignInput(req.body);
   const updated = await store.updateCampaign(campaign.id, {
     ...safeInput,
@@ -54,7 +53,7 @@ router.patch('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   const campaign = await store.getCampaignById(req.params.id);
-  if (!campaign || campaign.owner !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+  if (!campaign || (campaign.owner || campaign.ownerId) !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
   await store.deleteCampaign(campaign.id);
   res.json({ success: true });
 });
