@@ -19,9 +19,6 @@ function existingGodCodeSubscription(subscriptions = []) {
 
 async function restoreConsumedGodCode(found, consumed, userId) {
   if (!consumed?.id || !found?.hash) return false;
-  // Restore only the code that this redemption attempt consumed. The store-level
-  // update is keyed by the consumed code id, while the ownership fields make the
-  // intended rollback explicit for audit/debugging.
   if (consumed.redeemedByUserId !== userId && consumed.usedByUserId !== userId) return false;
   const restored = await store.updateGodCode(consumed.id, {
     encryptedCode: found.encryptedCode || null,
@@ -117,9 +114,6 @@ export async function redeemGodCodeForUser(userId, rawCode) {
     throw new Error(REDEEM_FAIL);
   }
 
-  // The subscription/credit record is the access source of truth. Profile fields
-  // are convenience metadata only; a metadata write must not turn a successful
-  // paid/access grant into a failed redemption or make the one-time code reusable.
   try {
     const user = await store.findUserById(userId);
     await store.updateUser(userId, {
@@ -127,7 +121,6 @@ export async function redeemGodCodeForUser(userId, rawCode) {
         ...(user?.profile || {}),
         godGrant: item.id,
         godRedeemedAt: now,
-        ...(kind === 'plan' ? { plan: item.id } : {}),
         ...(kind === 'credits' ? { credits: nextCredits } : {}),
       },
     });
