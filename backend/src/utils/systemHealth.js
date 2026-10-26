@@ -1,6 +1,9 @@
 import { openaiStatus } from '../services/openaiService.js';
 import { emailTransportConfigured } from '../services/emailService.js';
 import { costControlStatus } from '../services/costControlStatus.js';
+import { courseFactoryStorageQuotaConfigStatus } from '../services/courseFactoryStorageQuotaService.js';
+import { isS3Configured } from '../services/uploadService.js';
+import { checkQueueReadiness } from './queue.js';
 import { logger } from './logger.js';
 
 function publicAiStatus(status = {}) {
@@ -20,11 +23,29 @@ export async function systemHealth(store, production = process.env.NODE_ENV === 
     stripeApiConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
     stripeWebhookVerificationConfigured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
   };
+  const costControls = costControlStatus();
+  const queue = await checkQueueReadiness();
+  const storageQuota = courseFactoryStorageQuotaConfigStatus();
+  const infrastructure = {
+    durableQueueConfigured: queue.configured === true,
+    durableQueueReachable: queue.reachable === true,
+    durableQueue: queue.durable === true,
+    objectStorageConfigured: isS3Configured(),
+    courseFactoryStorageQuotaConfigured: storageQuota.configured === true,
+    courseFactoryStorageQuotaConfiguredPlans: storageQuota.configuredPlans,
+    courseFactoryStorageQuotaMissingPlans: storageQuota.missingPlans,
+  };
   const readiness = {
     database: false,
     aiConfigured: ai.configured,
     emailConfigured: emailTransportConfigured(),
     billingConfigured: billing.stripeApiConfigured && billing.stripeWebhookVerificationConfigured,
+    durableQueueConfigured: infrastructure.durableQueueConfigured,
+    durableQueueReachable: infrastructure.durableQueueReachable,
+    objectStorageConfigured: infrastructure.objectStorageConfigured,
+    courseFactoryStorageQuotaConfigured: infrastructure.courseFactoryStorageQuotaConfigured,
+    aiMonetaryCapConfigured: costControls.ai.monetarySpendCapConfigured === true,
+    aiPricingConfigured: costControls.ai.monetaryPricingConfigured === true,
   };
   try {
     await store.connectDB();
@@ -33,9 +54,21 @@ export async function systemHealth(store, production = process.env.NODE_ENV === 
   } catch (error) {
     logger.error('Database readiness check failed', { error: error.message });
   }
-  const ready = readiness.database && (!production || (
-    database === 'postgres' && readiness.aiConfigured && readiness.emailConfigured && readiness.billingConfigured
-  ));
+
+  const productionDependenciesReady = (
+    database === 'postgres'
+    && readiness.aiConfigured
+    && readiness.emailConfigured
+    && readiness.billingConfigured
+    && readiness.durableQueueConfigured
+    && readiness.durableQueueReachable
+    && readiness.objectStorageConfigured
+    && readiness.courseFactoryStorageQuotaConfigured
+    && readiness.aiMonetaryCapConfigured
+    && readiness.aiPricingConfigured
+  );
+  const ready = readiness.database && (!production || productionDependenciesReady);
+
   return {
     status: ready ? 'ok' : 'degraded',
     service: 'trillionai-marketing',
@@ -43,9 +76,10 @@ export async function systemHealth(store, production = process.env.NODE_ENV === 
     database: readiness.database ? database : 'unavailable',
     persistence: store.getPersistenceInfo?.() || { mode: database === 'postgres' ? 'supabase-postgres' : 'local-json' },
     readiness,
+    infrastructure,
     ai,
     billing,
-    costControls: costControlStatus(),
+    costControls,
   };
 }
 
