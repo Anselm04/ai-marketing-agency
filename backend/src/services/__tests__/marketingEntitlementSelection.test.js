@@ -28,6 +28,15 @@ describe('marketing entitlement selection', () => {
     expect(selected).toMatchObject({ id: 'active', plan: 'growth' });
   });
 
+  test('for equal finite plans prefers Stripe and then the newest Stripe grant', () => {
+    const selected = strongestSubscription([
+      { id: 'god-code', source: 'god-code', status: 'active', plan: 'growth', updatedAt: '2026-10-20T00:00:00.000Z' },
+      { id: 'stripe-old', source: 'stripe', status: 'active', plan: 'growth', updatedAt: '2026-10-19T00:00:00.000Z' },
+      { id: 'stripe-new', source: 'stripe', status: 'active', plan: 'growth', updatedAt: '2026-10-21T00:00:00.000Z' },
+    ]);
+    expect(selected).toMatchObject({ id: 'stripe-new', source: 'stripe', plan: 'growth' });
+  });
+
   test('returns null when no grant is currently active', () => {
     expect(strongestSubscription([
       { source: 'stripe', status: 'past_due', plan: 'agency' },
