@@ -1,7 +1,10 @@
 # TrillionAI Marketing on Fly.io (Sydney).
-# Secrets stay out of git. JWT_SECRET is required for login/register.
-# Production account data requires DATABASE_URL for PostgreSQL.
-# The mkt_data volume preserves uploaded media under /data/uploads.
+# Secrets stay out of git. Production requires JWT_SECRET, DATABASE_URL,
+# REDIS_URL, Stripe API/webhook secrets, configured email transport,
+# S3-compatible object-storage credentials, AI provider credentials/rates,
+# and owner-approved AI + Course Factory storage cost limits.
+# The mkt_data volume remains for local working files; durable customer media
+# is stored through the S3-compatible storage service.
 
 app = "trillionai-marketing"
 primary_region = "syd"
@@ -37,7 +40,8 @@ primary_region = "syd"
   APP_URL = "https://trillionai-marketing.fly.dev"
   CORS_ORIGIN = "https://trillionai-marketing.fly.dev,https://trillionaitech.com"
   USE_MONGO = "false"
-  USE_REDIS_QUEUE = "false"
+  USE_REDIS_QUEUE = "true"
+  QUEUE_MEMORY_FALLBACK = "false"
   FRONTEND_DIST = "/app/frontend/dist"
   UPLOAD_DIR = "/data/uploads"
   DATA_DIR = "/data"
@@ -50,4 +54,3 @@ primary_region = "syd"
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
-

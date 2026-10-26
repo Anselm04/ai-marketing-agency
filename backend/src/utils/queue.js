@@ -66,6 +66,28 @@ function getRedisConnection() {
   }
 }
 
+export async function checkQueueReadiness() {
+  const configured = Boolean(USE_REDIS_QUEUE && REDIS_URL);
+  if (!configured) {
+    return { configured: false, reachable: false, durable: false };
+  }
+
+  try {
+    const redis = getRedisConnection();
+    if (!redis) return { configured: false, reachable: false, durable: false };
+    if (redis.status === 'wait') await redis.connect();
+    const pong = await redis.ping();
+    return {
+      configured: true,
+      reachable: pong === 'PONG',
+      durable: true,
+    };
+  } catch (error) {
+    logger.error('Durable queue readiness check failed', { code: error.code || 'redis_unavailable' });
+    return { configured: true, reachable: false, durable: true };
+  }
+}
+
 function memoryQueue(name) {
   if (!MEMORY_FALLBACK_ALLOWED) {
     throw queueUnavailable(`Durable queue '${name}' is unavailable. Production work was not queued in memory.`);
@@ -259,4 +281,4 @@ export const QueueNames = {
   CLEANUP: 'cleanup',
 };
 
-export default { getQueue, registerWorker, addJob, getQueueStatus, closeAllQueues, queueDurabilityStatus, QueueNames };
+export default { checkQueueReadiness, getQueue, registerWorker, addJob, getQueueStatus, closeAllQueues, queueDurabilityStatus, QueueNames };
