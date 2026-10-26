@@ -4,9 +4,35 @@ import { withEcosystemLock } from './ecosystemLock.js';
 
 const GIB = 1024 ** 3;
 const ACTIVE_UPLOAD_STATES = new Set(['uploading', 'complete']);
+const COMMERCIAL_PLANS = Object.freeze(['starter', 'growth', 'agency', 'enterprise']);
 
 function quotaError(message, code, statusCode = 409, extra = {}) {
   return Object.assign(new Error(message), { code, statusCode, status: statusCode, ...extra });
+}
+
+function validConfiguredGiB(value) {
+  if (value == null || String(value).trim() === '') return false;
+  const gib = Number(value);
+  return Number.isFinite(gib) && gib > 0;
+}
+
+export function courseFactoryStorageQuotaConfigStatus(plans = COMMERCIAL_PLANS) {
+  const defaultConfigured = validConfiguredGiB(process.env.COURSE_FACTORY_STORAGE_GIB_DEFAULT);
+  const configuredPlans = [];
+  const missingPlans = [];
+
+  for (const plan of plans) {
+    const planKey = `COURSE_FACTORY_STORAGE_GIB_${String(plan).toUpperCase()}`;
+    if (defaultConfigured || validConfiguredGiB(process.env[planKey])) configuredPlans.push(plan);
+    else missingPlans.push(plan);
+  }
+
+  return {
+    configured: missingPlans.length === 0,
+    defaultConfigured,
+    configuredPlans,
+    missingPlans,
+  };
 }
 
 function configuredLimitBytes(plan) {
@@ -87,6 +113,7 @@ export async function withCourseFactoryStorageReservation({ userId, requestedByt
 }
 
 export default {
+  courseFactoryStorageQuotaConfigStatus,
   courseFactoryStorageStatus,
   projectReservedUploadBytes,
   withCourseFactoryStorageReservation,
