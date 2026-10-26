@@ -78,15 +78,34 @@ function addStorageReference(map, key, privateBucket = false) {
   if (!map.has(id)) map.set(id, { key: normalizedKey, privateBucket: Boolean(privateBucket) });
 }
 
+function collectNestedStorageKeys(value, objects, inheritedPrivate = false, seen = new WeakSet()) {
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectNestedStorageKeys(item, objects, inheritedPrivate, seen);
+    return;
+  }
+
+  const privateBucket = inheritedPrivate
+    || value.privateBucket === true
+    || value.storageVisibility === 'private';
+  if (value.storageKey) addStorageReference(objects, value.storageKey, privateBucket);
+
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'upload') continue;
+    if (child && typeof child === 'object') collectNestedStorageKeys(child, objects, privateBucket, seen);
+  }
+}
+
 export function collectCustomerStorageReferences({ campaigns = [], content = [], videos = [] } = {}) {
   const objects = new Map();
   const multipartUploads = new Map();
   const records = [...campaigns, ...content, ...videos];
 
   for (const record of records) {
-    if (record?.storageKey) {
-      addStorageReference(objects, record.storageKey, record.storageVisibility === 'private');
-    }
+    collectNestedStorageKeys(record, objects);
 
     const upload = record?.upload;
     if (!upload?.key) continue;
