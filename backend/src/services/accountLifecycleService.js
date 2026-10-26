@@ -207,7 +207,13 @@ export async function deleteCustomerAccount({ userId, password }) {
     await client.query('begin');
     await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [`account-delete:${userId}`]);
 
-    await execDelete('invites', 'delete from marketing.invites where org_id in (select id from marketing.organizations where owner_id = $1)');
+    await execDelete(
+      'invites',
+      `delete from marketing.invites
+        where org_id in (select id from marketing.organizations where owner_id = $1)
+           or lower(email) = lower($2)`,
+      [userId, user.email],
+    );
 
     await client.query(
       `update marketing.organizations

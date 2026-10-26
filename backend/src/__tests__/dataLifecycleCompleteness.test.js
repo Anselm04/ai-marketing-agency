@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 import { collectCustomerStorageReferences } from '../services/accountLifecycleService.js';
-import { redactSecrets } from '../routes/export.js';
+import { personalInvites, personalOrganizationView, redactSecrets } from '../routes/export.js';
 
 describe('customer data lifecycle completeness', () => {
   test('redacts credentials recursively without removing ordinary usage counters', () => {
@@ -33,6 +33,37 @@ describe('customer data lifecycle completeness', () => {
     expect(exported.webhook.url).toBe('https://example.com/hook');
     expect(exported.usage.promptTokens).toBe(100);
     expect(exported.usage.completionTokens).toBe(25);
+  });
+
+  test('exports only the requesting customer membership from shared organization records', () => {
+    const organization = {
+      id: 'org-1',
+      name: 'Shared org',
+      ownerId: 'owner-user',
+      members: [
+        { userId: 'requesting-user', role: 'member', email: 'requesting@example.com' },
+        { userId: 'other-user', role: 'admin', email: 'other@example.com' },
+      ],
+    };
+
+    const exported = personalOrganizationView(organization, 'requesting-user');
+    expect(exported).not.toBeNull();
+    expect(exported.members).toEqual([
+      { userId: 'requesting-user', role: 'member', email: 'requesting@example.com' },
+    ]);
+    expect(JSON.stringify(exported)).not.toContain('other@example.com');
+    expect(exported.membershipExportScope).toBe('requesting_customer_only');
+  });
+
+  test('exports only invitations addressed to the requesting customer', () => {
+    const user = { id: 'user-1', email: 'Customer@Example.com' };
+    const invites = [
+      { id: 'mine-email', email: 'customer@example.com', orgId: 'org-1' },
+      { id: 'mine-id', userId: 'user-1', email: 'old@example.com', orgId: 'org-2' },
+      { id: 'other', email: 'other@example.com', orgId: 'org-1' },
+    ];
+
+    expect(personalInvites(invites, user).map((invite) => invite.id)).toEqual(['mine-email', 'mine-id']);
   });
 
   test('collects top-level and nested objects plus active multipart uploads without duplicates', () => {

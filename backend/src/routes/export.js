@@ -73,6 +73,28 @@ function organizationBelongsToUser(org, userId) {
     && org.members.some((member) => String(member?.userId ?? member?.id ?? '') === String(userId));
 }
 
+export function personalOrganizationView(org, userId) {
+  if (!organizationBelongsToUser(org, userId)) return null;
+  const members = Array.isArray(org?.members)
+    ? org.members.filter((member) => String(member?.userId ?? member?.id ?? '') === String(userId))
+    : [];
+  return {
+    ...org,
+    members,
+    membershipExportScope: 'requesting_customer_only',
+  };
+}
+
+export function personalInvites(invites = [], user = null) {
+  const email = String(user?.email || '').trim().toLowerCase();
+  const userId = String(user?.id || '').trim();
+  return invites.filter((invite) => {
+    const inviteEmail = String(invite?.email || '').trim().toLowerCase();
+    const inviteUserId = String(invite?.userId ?? invite?.user ?? '').trim();
+    return Boolean((email && inviteEmail === email) || (userId && inviteUserId === userId));
+  });
+}
+
 function userAnalytics(analytics, userId) {
   if (!analytics || typeof analytics !== 'object') return {};
   return Object.fromEntries(Object.entries(analytics).filter(([, value]) => belongsToUser(value, userId)));
@@ -171,19 +193,18 @@ router.get('/backup', async (req, res, next) => {
       usageSummary(owner),
     ]);
 
-    const customerOrganizations = (organizations || []).filter((org) => organizationBelongsToUser(org, owner));
-    const organizationIds = new Set(customerOrganizations.map((org) => String(org.id)));
-    const customerInvites = (invites || []).filter((invite) => (
-      organizationIds.has(String(invite.orgId ?? invite.organizationId ?? ''))
-      || (user?.email && String(invite.email || '').toLowerCase() === String(user.email).toLowerCase())
-    ));
+    const customerOrganizations = (organizations || [])
+      .map((org) => personalOrganizationView(org, owner))
+      .filter(Boolean);
+    const customerInvites = personalInvites(invites || [], user);
 
     const backup = {
       exportedAt: new Date().toISOString(),
-      version: '3.0',
+      version: '3.1',
       scope: 'authenticated-customer-only',
       credentialsIncluded: false,
-      note: 'Authentication secrets, OAuth tokens, API keys, passwords and signing secrets are intentionally excluded.',
+      thirdPartyMemberDataIncluded: false,
+      note: 'Authentication secrets, OAuth tokens, API keys, passwords, signing secrets and other members’ personal records are intentionally excluded.',
       data: redactSecrets({
         user: safeUser(user),
         preferences,
