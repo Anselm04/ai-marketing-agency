@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import pg from 'pg';
 import store from '../utils/store.js';
 import { cancelSubscription } from './stripeService.js';
+import { abortMultipartUpload, deleteStoredObject } from './uploadService.js';
 
 const { Pool } = pg;
 let pool = null;
@@ -70,6 +71,69 @@ function activeStripeSubscriptions(subscriptions = []) {
   ));
 }
 
+function addStorageReference(map, key, privateBucket = false) {
+  const normalizedKey = String(key || '').trim();
+  if (!normalizedKey) return;
+  const id = `${privateBucket ? 'private' : 'public'}:${normalizedKey}`;
+  if (!map.has(id)) map.set(id, { key: normalizedKey, privateBucket: Boolean(privateBucket) });
+}
+
+export function collectCustomerStorageReferences({ campaigns = [], content = [], videos = [] } = {}) {
+  const objects = new Map();
+  const multipartUploads = new Map();
+  const records = [...campaigns, ...content, ...videos];
+
+  for (const record of records) {
+    if (record?.storageKey) {
+      addStorageReference(objects, record.storageKey, record.storageVisibility === 'private');
+    }
+
+    const upload = record?.upload;
+    if (!upload?.key) continue;
+    const privateBucket = upload.privateBucket === true;
+    if (upload.status === 'uploading' && upload.uploadId) {
+      const id = `${privateBucket ? 'private' : 'public'}:${upload.key}:${upload.uploadId}`;
+      multipartUploads.set(id, {
+        key: String(upload.key),
+        uploadId: String(upload.uploadId),
+        privateBucket,
+      });
+    } else if (upload.status === 'complete') {
+      addStorageReference(objects, upload.key, privateBucket);
+    }
+  }
+
+  return {
+    objects: [...objects.values()],
+    multipartUploads: [...multipartUploads.values()],
+  };
+}
+
+async function customerStorageReferences(userId) {
+  const [campaigns, content, videos] = await Promise.all([
+    store.getCampaignsByOwner(userId),
+    store.getContentByOwner(userId),
+    typeof store.getVideosByOwner === 'function' ? store.getVideosByOwner(userId) : Promise.resolve([]),
+  ]);
+  return collectCustomerStorageReferences({ campaigns, content, videos });
+}
+
+export async function deleteCustomerStoredObjects(references) {
+  let abortedMultipartUploads = 0;
+  let deletedStorageObjects = 0;
+
+  for (const upload of references.multipartUploads) {
+    await abortMultipartUpload(upload);
+    abortedMultipartUploads += 1;
+  }
+  for (const object of references.objects) {
+    const result = await deleteStoredObject(object.key, { privateBucket: object.privateBucket });
+    if (result.deleted) deletedStorageObjects += 1;
+  }
+
+  return { abortedMultipartUploads, deletedStorageObjects };
+}
+
 export async function deleteCustomerAccount({ userId, password }) {
   const user = await store.findUserById(userId);
   if (!user) throw Object.assign(new Error('User not found.'), { status: 404, code: 'user_not_found' });
@@ -109,7 +173,10 @@ export async function deleteCustomerAccount({ userId, password }) {
     }
   }
 
-  const settingKeys = await connectorSessionKeysForUser(userId);
+  const [settingKeys, storageReferences] = await Promise.all([
+    connectorSessionKeysForUser(userId),
+    customerStorageReferences(userId),
+  ]);
   const client = await db.connect();
   const counts = {};
   const execDelete = async (name, sql, params = [userId]) => {
@@ -165,9 +232,15 @@ export async function deleteCustomerAccount({ userId, password }) {
       [userId],
     );
 
+    const storageCleanup = await deleteCustomerStoredObjects(storageReferences);
     await execDelete('user', 'delete from marketing.users where id = $1');
     await client.query('commit');
-    return { deleted: true, cancelledStripeSubscriptions: activeStripe.length, deletedRecords: counts };
+    return {
+      deleted: true,
+      cancelledStripeSubscriptions: activeStripe.length,
+      deletedRecords: counts,
+      ...storageCleanup,
+    };
   } catch (error) {
     try { await client.query('rollback'); } catch { /* Preserve the original transaction error. */ }
     throw error;
@@ -177,4 +250,3 @@ export async function deleteCustomerAccount({ userId, password }) {
 }
 
 export default deleteCustomerAccount;
-
