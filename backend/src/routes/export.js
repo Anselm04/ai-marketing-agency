@@ -43,9 +43,8 @@ function normalizedKey(key) {
 function isSensitiveKey(key) {
   const normalized = normalizedKey(key);
   return SENSITIVE_KEYS.has(normalized)
-    || normalized.endsWith('clientsecret')
-    || normalized.endsWith('webhooksecret')
-    || normalized.endsWith('signingsecret')
+    || normalized.endsWith('token')
+    || normalized.endsWith('secret')
     || normalized.endsWith('privatekey');
 }
 
