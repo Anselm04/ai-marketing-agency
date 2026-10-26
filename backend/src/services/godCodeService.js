@@ -2,6 +2,7 @@ import store from '../utils/store.js';
 import { hashGodCode } from '../utils/owner.js';
 import { findItem } from '../config/stripeCatalog.js';
 import { grantUserCredits } from './billingPersistence.js';
+import { logger } from '../utils/logger.js';
 
 const REDEEM_FAIL = 'Unable to redeem that code.';
 
@@ -14,6 +15,23 @@ function resolveGrantItem(found) {
 
 function existingGodCodeSubscription(subscriptions = []) {
   return subscriptions.find((entry) => entry.source === 'god-code') || null;
+}
+
+async function restoreConsumedGodCode(found, consumed, userId) {
+  if (!consumed?.id || !found?.hash) return false;
+  // Restore only the code that this redemption attempt consumed. The store-level
+  // update is keyed by the consumed code id, while the ownership fields make the
+  // intended rollback explicit for audit/debugging.
+  if (consumed.redeemedByUserId !== userId && consumed.usedByUserId !== userId) return false;
+  const restored = await store.updateGodCode(consumed.id, {
+    encryptedCode: found.encryptedCode || null,
+    redeemedAt: null,
+    redeemedByUserId: null,
+    isUsed: false,
+    usedAt: null,
+    usedByUserId: null,
+  });
+  return Boolean(restored);
 }
 
 export async function redeemGodCodeForUser(userId, rawCode) {
@@ -56,38 +74,70 @@ export async function redeemGodCodeForUser(userId, rawCode) {
   const creditAdd = kind === 'credits' ? (item.credits || 0) : 0;
   let nextCredits = Number((await store.findUserById(userId))?.profile?.credits || 0);
 
-  if (kind === 'plan') {
-    const grant = {
+  try {
+    if (kind === 'plan') {
+      const grant = {
+        userId,
+        user: userId,
+        plan: item.id,
+        status: 'active',
+        source: 'god-code',
+        godGrant: item.id,
+        lookup_key: item.lookup_key,
+        unlimited: item.id === 'enterprise',
+        accessMode,
+        lifetimeAccess: accessMode === 'lifetime',
+        durationDays,
+        expiresAt,
+      };
+      if (subscription) subscription = await store.updateSubscription(subscription.id, grant);
+      else subscription = await store.createSubscription(grant);
+      if (!subscription) throw new Error('God-code plan grant was not persisted.');
+    } else if (creditAdd > 0) {
+      const creditGrant = await grantUserCredits(userId, creditAdd);
+      if (!creditGrant) throw new Error('God-code credit grant was not persisted.');
+      nextCredits = creditGrant.credits;
+    }
+  } catch (error) {
+    try {
+      await restoreConsumedGodCode(found, consumed, userId);
+    } catch (restoreError) {
+      logger.error('Unable to restore consumed god code after grant failure', {
+        codeId: consumed.id,
+        userId,
+        error: restoreError.message,
+      });
+    }
+    logger.error('God-code redemption failed while granting access', {
+      codeId: consumed.id,
       userId,
-      user: userId,
-      plan: item.id,
-      status: 'active',
-      source: 'god-code',
-      godGrant: item.id,
-      lookup_key: item.lookup_key,
-      unlimited: item.id === 'enterprise',
-      accessMode,
-      lifetimeAccess: accessMode === 'lifetime',
-      durationDays,
-      expiresAt,
-    };
-    if (subscription) subscription = await store.updateSubscription(subscription.id, grant);
-    else subscription = await store.createSubscription(grant);
-  } else if (creditAdd > 0) {
-    const creditGrant = await grantUserCredits(userId, creditAdd);
-    nextCredits = creditGrant.credits;
+      kind,
+      error: error.message,
+    });
+    throw new Error(REDEEM_FAIL);
   }
 
-  const user = await store.findUserById(userId);
-  await store.updateUser(userId, {
-    profile: {
-      ...(user?.profile || {}),
-      godGrant: item.id,
-      godRedeemedAt: now,
-      ...(kind === 'plan' ? { plan: item.id } : {}),
-      ...(kind === 'credits' ? { credits: nextCredits } : {}),
-    },
-  });
+  // The subscription/credit record is the access source of truth. Profile fields
+  // are convenience metadata only; a metadata write must not turn a successful
+  // paid/access grant into a failed redemption or make the one-time code reusable.
+  try {
+    const user = await store.findUserById(userId);
+    await store.updateUser(userId, {
+      profile: {
+        ...(user?.profile || {}),
+        godGrant: item.id,
+        godRedeemedAt: now,
+        ...(kind === 'plan' ? { plan: item.id } : {}),
+        ...(kind === 'credits' ? { credits: nextCredits } : {}),
+      },
+    });
+  } catch (error) {
+    logger.warn('God-code grant succeeded but profile metadata update failed', {
+      codeId: consumed.id,
+      userId,
+      error: error.message,
+    });
+  }
 
   return {
     success: true,
@@ -120,4 +170,4 @@ export async function normalizeSubscriptionAccess(subscription) {
   return subscription;
 }
 
-export { REDEEM_FAIL, existingGodCodeSubscription };
+export { REDEEM_FAIL, existingGodCodeSubscription, restoreConsumedGodCode };
