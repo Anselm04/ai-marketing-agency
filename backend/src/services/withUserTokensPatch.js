@@ -1,12 +1,13 @@
 /**
- * Installs runtime truthfulness patches and adds per-request OAuth user-token
- * overrides. These patches preserve the existing service architecture while
- * preventing fallback/placeholder output from being reported as real work.
+ * Installs runtime truthfulness and safety patches that must be active before
+ * customer routes execute. These patches preserve the existing architecture
+ * while preventing fallback/placeholder output and quota bypasses.
  */
 import socialMediaService from './socialMediaService.js';
 import { applyPublishingTruthPatch } from './publishingTruthPatch.js';
 import { installMetaSocialPublishingPatch } from './metaSocialPublishingPatch.js';
 import { installAutoPostingTruthPatch } from './autoPostingTruthPatch.js';
+import { installCampaignCreationGuard } from './campaignCreationService.js';
 
 // A public/read API or website presence is not proof of an authenticated posting
 // capability. The legacy service used hard-coded `true` values for Hacker News
@@ -18,6 +19,7 @@ socialMediaService.tokens.indiehackers = null;
 installMetaSocialPublishingPatch(socialMediaService);
 applyPublishingTruthPatch(socialMediaService);
 installAutoPostingTruthPatch();
+installCampaignCreationGuard();
 
 if (typeof socialMediaService.withUserTokens !== 'function') {
   socialMediaService.withUserTokens = function withUserTokens(overrides = {}) {
