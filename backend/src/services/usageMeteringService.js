@@ -32,6 +32,20 @@ function normalizeQuantity(value) {
   return quantity;
 }
 
+function publicUsageEvent(row = {}) {
+  return {
+    id: row.id,
+    userId: row.userId ?? row.user_id,
+    metric: row.metric,
+    quantity: Number(row.quantity || 0),
+    provider: row.provider || null,
+    model: row.model || null,
+    costUsd: row.costUsd == null && row.cost_usd == null ? null : Number(row.costUsd ?? row.cost_usd),
+    metadata: row.metadata || {},
+    createdAt: row.createdAt ?? row.created_at,
+  };
+}
+
 export async function recordUsage({
   userId,
   metric,
@@ -75,6 +89,25 @@ export async function recordUsage({
     [userId, metric, normalizedQuantity, provider, model, normalizedCost, JSON.stringify(metadata || {}), createdAt],
   );
   return rows[0] || null;
+}
+
+export async function listUsageEvents(userId) {
+  if (!userId) return [];
+  const db = getPool();
+  if (!db) {
+    return memoryEvents
+      .filter((event) => String(event.userId) === String(userId))
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      .map(publicUsageEvent);
+  }
+  const { rows } = await db.query(
+    `select id, user_id, metric, quantity, provider, model, cost_usd, metadata, created_at
+       from marketing.usage_events
+      where user_id = $1
+      order by created_at asc, id asc`,
+    [userId],
+  );
+  return rows.map(publicUsageEvent);
 }
 
 export async function sumUsage({ userId, metric, since, until = new Date().toISOString() }) {
@@ -178,3 +211,5 @@ export async function closeUsageMetering() {
 export function resetMemoryUsageForTests() {
   memoryEvents.splice(0, memoryEvents.length);
 }
+
+export { publicUsageEvent };
