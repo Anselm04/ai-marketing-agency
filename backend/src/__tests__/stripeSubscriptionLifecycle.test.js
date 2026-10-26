@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { stripeSubscriptionGrant } from '../routes/billing.js';
+import { selectStripeRecord, stripeSubscriptionGrant } from '../routes/billing.js';
 
 describe('Stripe subscription lifecycle sync', () => {
   test('builds an active local entitlement from Stripe subscription metadata', () => {
@@ -45,5 +45,32 @@ describe('Stripe subscription lifecycle sync', () => {
 
   test('returns null when the subscription cannot be correlated to a Marketing user and plan', () => {
     expect(stripeSubscriptionGrant({ id: 'sub_unknown', status: 'active', metadata: {}, items: { data: [] } })).toBeNull();
+  });
+
+  test('never selects a god-code or other non-Stripe grant for Stripe mutation', () => {
+    const records = [
+      { id: 'god-1', source: 'god-code', status: 'active', plan: 'enterprise', lifetimeAccess: true },
+      { id: 'manual-1', source: 'manual', status: 'active', plan: 'growth' },
+      { id: 'stripe-1', source: 'stripe', status: 'active', plan: 'starter', stripeSubscriptionId: 'sub_real' },
+    ];
+
+    expect(selectStripeRecord(records)).toMatchObject({ id: 'stripe-1', stripeSubscriptionId: 'sub_real' });
+    expect(selectStripeRecord(records, { subscriptionId: 'sub_real' })).toMatchObject({ id: 'stripe-1' });
+  });
+
+  test('returns no Stripe record when the user only has non-Stripe access grants', () => {
+    expect(selectStripeRecord([
+      { id: 'god-1', source: 'god-code', status: 'active', plan: 'enterprise' },
+      { id: 'manual-1', source: 'manual', status: 'active', plan: 'growth' },
+    ])).toBeNull();
+  });
+
+  test('prefers the exact Stripe subscription id over another active Stripe record', () => {
+    const records = [
+      { id: 'stripe-old', source: 'stripe', status: 'active', stripeSubscriptionId: 'sub_old', updatedAt: '2026-10-26T10:00:00Z' },
+      { id: 'stripe-new', source: 'stripe', status: 'active', stripeSubscriptionId: 'sub_new', updatedAt: '2026-10-25T10:00:00Z' },
+    ];
+
+    expect(selectStripeRecord(records, { subscriptionId: 'sub_new' })).toMatchObject({ id: 'stripe-new' });
   });
 });
