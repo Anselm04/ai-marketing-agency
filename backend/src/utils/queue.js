@@ -1,70 +1,120 @@
 /**
- * BullMQ Job Queue Service
- * Provides Redis-backed job queues for async processing.
- * Gracefully degrades to in-memory queue if Redis is unavailable.
+ * BullMQ Job Queue Service.
+ * Production background work requires durable Redis-backed queues. In-memory
+ * processing is allowed only outside production so a restart cannot silently
+ * lose paid customer work after an API reports that it was queued.
  */
 
-import { Queue, Worker, Job } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { logger } from './logger.js';
 
 let redisConnection = null;
-let queues = new Map();
-let workers = new Map();
-let inMemoryFallback = new Map();
+const queues = new Map();
+const workers = new Map();
+const inMemoryFallback = new Map();
 let fallbackEnabled = false;
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const USE_REDIS_QUEUE =
-  process.env.NODE_ENV === 'test' ? false : process.env.USE_REDIS_QUEUE !== 'false';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const REDIS_URL = process.env.REDIS_URL || (IS_PRODUCTION ? null : 'redis://localhost:6379');
+const USE_REDIS_QUEUE = process.env.NODE_ENV === 'test' ? false : process.env.USE_REDIS_QUEUE !== 'false';
+const MEMORY_FALLBACK_ALLOWED = !IS_PRODUCTION && process.env.QUEUE_MEMORY_FALLBACK !== 'false';
 const JOB_ATTEMPTS = parseInt(process.env.JOB_ATTEMPTS, 10) || 3;
 const JOB_BACKOFF_MS = parseInt(process.env.JOB_BACKOFF_MS, 10) || 5000;
 
-/**
- * Initialize Redis connection for BullMQ
- */
-function getRedisConnection() {
-  if (!redisConnection && USE_REDIS_QUEUE) {
-    try {
-      redisConnection = new IORedis(REDIS_URL, {
-        maxRetriesPerRequest: null,
-        enableReadyCheck: false,
-        lazyConnect: true,
-        retryStrategy: (times) => {
-          if (times > 3) {
-            logger.warn(`Redis connection failed after ${times} attempts, switching to in-memory fallback`);
-            fallbackEnabled = true;
-            return null;
-          }
-          return Math.min(times * 1000, 3000);
-        },
-      });
-      redisConnection.on('error', (err) => {
-        logger.warn('Redis connection error, enabling in-memory fallback', { error: err.message });
-        fallbackEnabled = true;
-      });
-    } catch (err) {
-      logger.warn('Failed to create Redis connection, using in-memory fallback', { error: err.message });
-      fallbackEnabled = true;
-    }
-  }
-  return redisConnection;
+function queueUnavailable(message, cause = null) {
+  const error = new Error(message);
+  error.code = 'durable_queue_unavailable';
+  error.statusCode = 503;
+  if (cause) error.cause = cause;
+  return error;
 }
 
-/**
- * Get or create a BullMQ queue.
- * Falls back to in-memory array queue if Redis is unavailable.
- */
-export async function getQueue(name) {
-  if (queues.has(name)) {
-    return queues.get(name);
+function getRedisConnection() {
+  if (!USE_REDIS_QUEUE) {
+    if (IS_PRODUCTION) throw queueUnavailable('Production durable queues cannot be disabled. Configure Redis and enable the Redis queue.');
+    return null;
+  }
+  if (!REDIS_URL) {
+    if (IS_PRODUCTION) throw queueUnavailable('REDIS_URL is required for durable production background jobs.');
+    return null;
+  }
+  if (redisConnection) return redisConnection;
+
+  try {
+    redisConnection = new IORedis(REDIS_URL, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: true,
+      lazyConnect: true,
+      retryStrategy: (times) => {
+        if (times > 3) {
+          if (!IS_PRODUCTION) fallbackEnabled = true;
+          return null;
+        }
+        return Math.min(times * 1000, 3000);
+      },
+    });
+    redisConnection.on('error', (err) => {
+      if (!IS_PRODUCTION) fallbackEnabled = true;
+      logger.error('Redis queue connection error', { error: err.message, production: IS_PRODUCTION });
+    });
+    return redisConnection;
+  } catch (error) {
+    if (IS_PRODUCTION) throw queueUnavailable('Unable to create the production Redis queue connection.', error);
+    fallbackEnabled = true;
+    return null;
+  }
+}
+
+function memoryQueue(name) {
+  if (!MEMORY_FALLBACK_ALLOWED) {
+    throw queueUnavailable(`Durable queue '${name}' is unavailable. Production work was not queued in memory.`);
   }
 
-  const redis = getRedisConnection();
+  return {
+    async add(jobName, data, opts = {}) {
+      const job = {
+        id: `${name}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+        name: jobName,
+        data,
+        opts,
+        attempts: 0,
+        maxAttempts: opts.attempts || JOB_ATTEMPTS,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        durable: false,
+      };
+      if (!inMemoryFallback.has(name)) inMemoryFallback.set(name, []);
+      inMemoryFallback.get(name).push(job);
+      logger.warn(`Development in-memory job added to '${name}'`, { jobName });
+      setTimeout(() => processMemoryJob(name, job), 100);
+      return job;
+    },
+    async getJobCounts() {
+      const jobs = inMemoryFallback.get(name) || [];
+      return {
+        waiting: jobs.filter((job) => job.status === 'pending').length,
+        active: jobs.filter((job) => job.status === 'active').length,
+        completed: jobs.filter((job) => job.status === 'completed').length,
+        failed: jobs.filter((job) => job.status === 'failed').length,
+        durable: false,
+      };
+    },
+    async getJobs() { return inMemoryFallback.get(name) || []; },
+    async clean() { inMemoryFallback.set(name, []); },
+    async close() { inMemoryFallback.delete(name); },
+  };
+}
 
-  if (redis && !fallbackEnabled) {
-    try {
-      await redis.connect().catch(() => {});
+export async function getQueue(name) {
+  if (queues.has(name)) return queues.get(name);
+
+  let redis = null;
+  try {
+    redis = getRedisConnection();
+    if (redis && !fallbackEnabled) {
+      if (redis.status === 'wait') await redis.connect();
+      await redis.ping();
       const queue = new Queue(name, {
         connection: redis,
         defaultJobOptions: {
@@ -75,63 +125,20 @@ export async function getQueue(name) {
         },
       });
       queues.set(name, queue);
-      logger.info(`BullMQ queue '${name}' initialized with Redis`);
+      logger.info(`BullMQ queue '${name}' initialized with durable Redis`);
       return queue;
-    } catch (err) {
-      logger.warn(`Failed to initialize BullMQ queue '${name}', falling back to memory`, { error: err.message });
-      fallbackEnabled = true;
     }
+  } catch (error) {
+    if (IS_PRODUCTION) throw queueUnavailable(`Durable production queue '${name}' is unavailable.`, error);
+    fallbackEnabled = true;
+    logger.warn(`Redis queue '${name}' unavailable; development memory fallback enabled`, { error: error.message });
   }
 
-  // In-memory fallback queue
-  const memoryQueue = {
-    async add(jobName, data, opts = {}) {
-      const job = {
-        id: `${name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        name: jobName,
-        data,
-        opts,
-        attempts: 0,
-        maxAttempts: opts.attempts || JOB_ATTEMPTS,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      if (!inMemoryFallback.has(name)) {
-        inMemoryFallback.set(name, []);
-      }
-      inMemoryFallback.get(name).push(job);
-      logger.info(`In-memory job added to '${name}': ${jobName}`);
-      // Auto-process in-memory jobs
-      setTimeout(() => processMemoryJob(name, job), 100);
-      return job;
-    },
-    async getJobCounts() {
-      const jobs = inMemoryFallback.get(name) || [];
-      return {
-        waiting: jobs.filter((j) => j.status === 'pending').length,
-        active: jobs.filter((j) => j.status === 'active').length,
-        completed: jobs.filter((j) => j.status === 'completed').length,
-        failed: jobs.filter((j) => j.status === 'failed').length,
-      };
-    },
-    async getJobs() {
-      return inMemoryFallback.get(name) || [];
-    },
-    async clean() {
-      inMemoryFallback.set(name, []);
-    },
-    async close() {
-      inMemoryFallback.delete(name);
-    },
-  };
-  queues.set(name, memoryQueue);
-  logger.info(`In-memory queue '${name}' initialized`);
-  return memoryQueue;
+  const queue = memoryQueue(name);
+  queues.set(name, queue);
+  return queue;
 }
 
-/**
- * Process an in-memory job using the registered worker processor
- */
 async function processMemoryJob(queueName, job) {
   const processor = workers.get(queueName);
   if (!processor) return;
@@ -141,27 +148,27 @@ async function processMemoryJob(queueName, job) {
     await processor(job);
     job.status = 'completed';
     job.finishedAt = new Date().toISOString();
-    logger.info(`In-memory job completed: ${queueName}/${job.name}`);
-  } catch (err) {
-    job.attempts++;
+  } catch (error) {
+    job.attempts += 1;
     if (job.attempts >= job.maxAttempts) {
       job.status = 'failed';
-      job.failedReason = err.message;
-      logger.error(`In-memory job failed: ${queueName}/${job.name}`, { error: err.message });
+      job.failedReason = error.message;
+      logger.error(`Development in-memory job failed: ${queueName}/${job.name}`, { error: error.message });
     } else {
       job.status = 'pending';
-      const delay = Math.pow(2, job.attempts) * JOB_BACKOFF_MS;
+      const delay = (2 ** job.attempts) * JOB_BACKOFF_MS;
       setTimeout(() => processMemoryJob(queueName, job), delay);
     }
   }
 }
 
-/**
- * Register a worker processor for a queue.
- * Creates a BullMQ Worker if Redis is available, else registers a callback for in-memory processing.
- */
 export function registerWorker(queueName, processor, opts = {}) {
-  const redis = getRedisConnection();
+  let redis = null;
+  try {
+    redis = getRedisConnection();
+  } catch (error) {
+    if (IS_PRODUCTION) throw error;
+  }
   workers.set(queueName, processor);
 
   if (redis && !fallbackEnabled) {
@@ -177,53 +184,50 @@ export function registerWorker(queueName, processor, opts = {}) {
       worker.on('failed', (job, err) => {
         logger.error(`Job failed: ${queueName}/${job?.id}`, { error: err.message, attempts: job?.attemptsMade });
       });
+      worker.on('error', (error) => {
+        logger.error(`Worker error: ${queueName}`, { error: error.message });
+      });
       logger.info(`BullMQ worker registered for '${queueName}'`);
       return worker;
-    } catch (err) {
-      logger.warn(`Failed to create BullMQ worker for '${queueName}', using in-memory fallback`, { error: err.message });
+    } catch (error) {
+      if (IS_PRODUCTION) throw queueUnavailable(`Unable to create durable production worker '${queueName}'.`, error);
+      fallbackEnabled = true;
+      logger.warn(`Worker '${queueName}' using development memory fallback`, { error: error.message });
     }
   }
 
-  // In-memory: already registered callback for processMemoryJob
-  logger.info(`In-memory worker registered for '${queueName}'`);
+  if (!MEMORY_FALLBACK_ALLOWED) {
+    throw queueUnavailable(`Durable production worker '${queueName}' is unavailable.`);
+  }
+  logger.warn(`Development in-memory worker registered for '${queueName}'`);
   return null;
 }
 
-/**
- * Add a job to a queue (async).
- */
 export async function addJob(queueName, jobName, data, opts = {}) {
   const queue = await getQueue(queueName);
   return queue.add(jobName, data, opts);
 }
 
-/**
- * Get queue status counts.
- */
 export async function getQueueStatus(queueName) {
   const queue = await getQueue(queueName);
   return queue.getJobCounts();
 }
 
-/**
- * Graceful shutdown: close all queues and workers.
- */
 export async function closeAllQueues() {
   for (const [name, queue] of queues) {
     try {
       await queue.close();
       logger.info(`Queue '${name}' closed`);
-    } catch (err) {
-      logger.warn(`Error closing queue '${name}'`, { error: err.message });
+    } catch (error) {
+      logger.warn(`Error closing queue '${name}'`, { error: error.message });
     }
   }
   queues.clear();
   if (redisConnection) {
     try {
       await redisConnection.quit();
-      logger.info('Redis connection closed');
-    } catch (err) {
-      logger.warn('Error closing Redis', { error: err.message });
+    } catch (error) {
+      logger.warn('Error closing Redis', { error: error.message });
     }
     redisConnection = null;
   }
@@ -231,9 +235,15 @@ export async function closeAllQueues() {
   inMemoryFallback.clear();
 }
 
-/**
- * Standard queue names used across the application.
- */
+export function queueDurabilityStatus() {
+  return {
+    production: IS_PRODUCTION,
+    redisConfigured: Boolean(REDIS_URL && USE_REDIS_QUEUE),
+    memoryFallbackAllowed: MEMORY_FALLBACK_ALLOWED,
+    fallbackEnabled,
+  };
+}
+
 export const QueueNames = {
   AI_GENERATION: 'ai-generation',
   EMAIL_SEND: 'email-send',
@@ -249,4 +259,4 @@ export const QueueNames = {
   CLEANUP: 'cleanup',
 };
 
-export default { getQueue, registerWorker, addJob, getQueueStatus, closeAllQueues, QueueNames };
+export default { getQueue, registerWorker, addJob, getQueueStatus, closeAllQueues, queueDurabilityStatus, QueueNames };

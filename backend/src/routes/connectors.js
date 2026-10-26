@@ -19,18 +19,29 @@ import {
   consumeOAuthSession,
   revokeTokens,
   getUserConnectors,
-  healthCheckConnector,
   getAllHealthStatus,
-  connectorRequest,
   registerWebhook,
   getWebhooks,
   deleteWebhook,
 } from '../services/appConnector.js';
+import {
+  customerConnectorCapability,
+  executeCustomerConnectorRequest,
+} from '../services/safeConnectorExecutionService.js';
+import {
+  checkUserConnectorHealth,
+  getUserConnectorHealth,
+} from '../services/connectorUserHealthService.js';
 import { logger } from '../utils/logger.js';
 import { videoPlatformCatalog } from '../services/videoPlatformCatalog.js';
 
 const router = express.Router();
 
+const SAFE_CONNECTOR_CODES = new Set([
+  'connector_customer_credentials_unavailable',
+  'connector_customer_auth_required',
+  'connector_url_params_required',
+]);
 
 function connectorClientId(connector) {
   return connector.auth?.clientId
@@ -44,6 +55,44 @@ function connectorClientSecret(connector) {
 
 function callbackUrl(connector) {
   return `${process.env.API_URL || 'http://localhost:3001'}/api/connectors/${connector.id}/callback`;
+}
+
+function canUseServerCredential(user) {
+  return Boolean(user?.isOwner || user?.role === 'admin');
+}
+
+function tenantHealth(userId, connectorId, connected = false) {
+  const userHealth = getUserConnectorHealth(userId, connectorId);
+  if (userHealth.status !== 'unknown') return userHealth;
+  if (connected) {
+    return {
+      ...userHealth,
+      status: 'connected_unverified',
+      detail: 'Customer OAuth token exists; provider probe has not run yet.',
+    };
+  }
+  return getAllHealthStatus()[connectorId] || userHealth;
+}
+
+function publicConnectorFailure(error, fallback = 'The integration operation could not be completed.') {
+  const statusCandidate = Number(error?.statusCode || error?.status);
+  const status = Number.isInteger(statusCandidate) && statusCandidate >= 400 && statusCandidate <= 599
+    ? statusCandidate
+    : 502;
+  const code = SAFE_CONNECTOR_CODES.has(error?.code) ? error.code : 'connector_provider_error';
+  const messages = {
+    connector_customer_credentials_unavailable: 'This integration is not available for customer automation yet.',
+    connector_customer_auth_required: 'Reconnect this integration for your account before trying again.',
+    connector_url_params_required: 'Required integration account or resource identifiers are missing.',
+  };
+  return { status, body: { error: messages[code] || fallback, code } };
+}
+
+function connectorRedirect(frontendUrl, connectorId, code) {
+  const url = new URL('/dashboard/connectors', frontendUrl);
+  url.searchParams.set('connector_error', code);
+  if (connectorId) url.searchParams.set('connector', connectorId);
+  return url.toString();
 }
 
 function buildAuthorizationUrl(connector, state) {
@@ -102,34 +151,27 @@ function normalizeGrantedScopes(tokenData, connector) {
   return connector.auth?.scopes || [];
 }
 
-/**
- * GET /api/connectors
- * List all available connectors with categories.
- */
 router.get('/', authenticate, async (req, res) => {
   const userId = req.user?.id;
   const connected = await getUserConnectors(userId, allConnectors);
   const connectedIds = new Set(connected.map((c) => c.id));
 
-  const connectors = getAllConnectors().map((c) => ({
-    ...c,
-    connected: connectedIds.has(c.id),
-    health: getAllHealthStatus()[c.id] || { status: 'unknown' },
-  }));
-
-  res.json({
-    success: true,
-    categories: connectorCategories,
-    connectors,
-    connected: connected.length,
-    total: connectors.length,
+  const connectors = getAllConnectors().map((c) => {
+    const definition = getConnectorById(c.id);
+    const capability = customerConnectorCapability(definition);
+    const isConnected = connectedIds.has(c.id);
+    return {
+      ...c,
+      connected: isConnected,
+      health: tenantHealth(userId, c.id, isConnected),
+      ...capability,
+      serverCredentialExecutable: capability.serverCredentialManaged && canUseServerCredential(req.user),
+    };
   });
+
+  res.json({ success: true, categories: connectorCategories, connectors, connected: connected.length, total: connectors.length });
 });
 
-/**
- * GET /api/connectors/video-platforms
- * Complete social-video catalog with truthful connection/publishing capability.
- */
 router.get('/video-platforms', authenticate, async (req, res) => {
   const userId = req.user?.id;
   const platforms = await Promise.all(videoPlatformCatalog.map(async (platform) => {
@@ -145,6 +187,7 @@ router.get('/video-platforms', authenticate, async (req, res) => {
       authType: connector?.auth?.type || 'none',
       connected: Boolean(tokens),
       configured,
+      health: connector ? tenantHealth(userId, connector.id, Boolean(tokens)) : { status: 'unavailable' },
       connectable: Boolean(
         connector
         && connector.auth?.type === 'oauth2'
@@ -164,21 +207,10 @@ router.get('/video-platforms', authenticate, async (req, res) => {
   });
 });
 
-/**
- * GET /api/connectors/categories
- * Get connector categories with counts.
- */
-router.get('/categories', authenticate, (req, res) => {
-  res.json({
-    success: true,
-    categories: connectorCategories,
-  });
+router.get('/categories', authenticate, (_req, res) => {
+  res.json({ success: true, categories: connectorCategories });
 });
 
-/**
- * GET /api/connectors/:category
- * Get connectors by category.
- */
 router.get('/category/:category', authenticate, async (req, res) => {
   const { category } = req.params;
   const connectors = getConnectorsByCategory(category);
@@ -189,26 +221,26 @@ router.get('/category/:category', authenticate, async (req, res) => {
   res.json({
     success: true,
     category,
-    connectors: connectors.map((c) => ({
-      id: c.id,
-      name: c.name,
-      icon: c.icon,
-      description: c.description,
-      connected: connectedIds.has(c.id),
-      health: getAllHealthStatus()[c.id] || { status: 'unknown' },
-    })),
+    connectors: connectors.map((c) => {
+      const isConnected = connectedIds.has(c.id);
+      return {
+        id: c.id,
+        name: c.name,
+        icon: c.icon,
+        description: c.description,
+        connected: isConnected,
+        health: tenantHealth(userId, c.id, isConnected),
+        ...customerConnectorCapability(c),
+      };
+    }),
   });
 });
 
-/**
- * GET /api/connectors/:id
- * Get connector details including operations and auth configuration.
- */
-router.get('/:id', authenticate, (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   const connector = getConnectorById(req.params.id);
-  if (!connector) {
-    return res.status(404).json({ error: 'Connector not found' });
-  }
+  if (!connector) return res.status(404).json({ error: 'Connector not found', code: 'connector_not_found' });
+  const capability = customerConnectorCapability(connector);
+  const tokens = connector.auth?.type === 'oauth2' ? await getTokens(req.user?.id, connector.id) : null;
 
   res.json({
     success: true,
@@ -223,189 +255,163 @@ router.get('/:id', authenticate, (req, res) => {
         authorizationUrl: connector.auth?.authorizationUrl || null,
         scopes: connector.auth?.scopes || [],
       },
-      operations: connector.operations.map((op) => ({
-        id: op.id,
-        name: op.name,
-        method: op.method,
-        rateLimit: op.rateLimit,
-      })),
-      health: getAllHealthStatus()[connector.id] || { status: 'unknown' },
+      operations: connector.operations.map((op) => ({ id: op.id, name: op.name, method: op.method, rateLimit: op.rateLimit })),
+      health: tenantHealth(req.user?.id, connector.id, Boolean(tokens)),
+      ...capability,
+      serverCredentialExecutable: capability.serverCredentialManaged && canUseServerCredential(req.user),
     },
   });
 });
 
-/**
- * GET /api/connectors/:id/auth
- * Get OAuth authorization URL for a connector.
- */
 router.get('/:id/auth', authenticate, async (req, res) => {
   const connector = getConnectorById(req.params.id);
-  if (!connector) return res.status(404).json({ error: 'Connector not found' });
-
+  if (!connector) return res.status(404).json({ error: 'Connector not found', code: 'connector_not_found' });
   if (connector.auth?.type !== 'oauth2' || !connector.auth.authorizationUrl) {
     return res.status(400).json({
-      error: 'This platform does not support user OAuth through this connector',
+      error: 'This integration does not support account OAuth through this connector.',
+      code: 'connector_oauth_unavailable',
       authType: connector.auth?.type || 'none',
     });
   }
 
   try {
     const state = await createOAuthSession(req.user?.id, connector.id);
-    res.json({
-      success: true,
-      authorizationUrl: buildAuthorizationUrl(connector, state),
-      connectorId: connector.id,
-      scopes: connector.auth.scopes || [],
-    });
+    res.json({ success: true, authorizationUrl: buildAuthorizationUrl(connector, state), connectorId: connector.id, scopes: connector.auth.scopes || [] });
   } catch (error) {
-    logger.error('OAuth authorization initialization failed', {
-      connectorId: connector.id,
-      error: error.message,
-    });
-    res.status(400).json({ error: error.message });
+    logger.error('OAuth authorization initialization failed', { connectorId: connector.id, error: error.message });
+    res.status(503).json({ error: 'This integration cannot start account authorization right now.', code: 'connector_oauth_start_failed' });
   }
 });
 
-/**
- * GET /api/connectors/:id/callback
- * OAuth callback endpoint for connector authorization.
- */
 router.get('/:id/callback', async (req, res) => {
   const { code, state, error: providerError, error_description: providerErrorDescription } = req.query;
   const connector = getConnectorById(req.params.id);
   const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:3000';
-
-  if (!connector || !state) return res.status(400).json({ error: 'Invalid OAuth callback' });
+  if (!connector || !state) {
+    return res.status(400).json({ error: 'Invalid OAuth callback', code: 'connector_oauth_callback_invalid' });
+  }
 
   try {
     const session = await consumeOAuthSession(state, connector.id);
     if (providerError) {
-      const detail = providerErrorDescription || providerError;
-      return res.redirect(`${frontendUrl}/dashboard/connectors?connector_error=${encodeURIComponent(detail)}`);
+      logger.warn('Connector OAuth provider declined authorization', {
+        connectorId: connector.id,
+        providerError,
+        providerErrorDescription,
+        userId: session.userId,
+      });
+      return res.redirect(connectorRedirect(frontendUrl, connector.id, 'oauth_authorization_declined'));
     }
-    if (!code) throw new Error('Authorization code missing');
+    if (!code) {
+      logger.warn('Connector OAuth callback missing authorization code', { connectorId: connector.id, userId: session.userId });
+      return res.redirect(connectorRedirect(frontendUrl, connector.id, 'oauth_authorization_incomplete'));
+    }
 
     const tokenData = await exchangeAuthorizationCode(connector, code, session);
     if (!tokenData?.access_token) throw new Error('Provider did not return an access token');
-
     await storeTokens(session.userId, connector.id, {
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token,
       expiresAt: tokenData.expires_in ? Date.now() + Number(tokenData.expires_in) * 1000 : null,
       scopes: normalizeGrantedScopes(tokenData, connector),
-      account: {
-        openId: tokenData.open_id || null,
-        userId: tokenData.user_id || null,
-      },
-      metadata: {
-        tokenType: tokenData.token_type || 'Bearer',
-      },
+      account: { openId: tokenData.open_id || null, userId: tokenData.user_id || null },
+      metadata: { tokenType: tokenData.token_type || 'Bearer' },
     });
-
     logger.info(`Connector ${connector.id} connected for user ${session.userId}`);
-    res.redirect(`${frontendUrl}/dashboard/connectors?connector_connected=${encodeURIComponent(connector.id)}`);
+    return res.redirect(`${frontendUrl}/dashboard/connectors?connector_connected=${encodeURIComponent(connector.id)}`);
   } catch (err) {
-    logger.error('OAuth callback failed', { error: err.message, connectorId: connector?.id });
-    res.redirect(`${frontendUrl}/dashboard/connectors?connector_error=${encodeURIComponent(err.message)}`);
+    logger.error('OAuth callback failed', {
+      error: err.message,
+      code: err.code,
+      connectorId: connector?.id,
+    });
+    return res.redirect(connectorRedirect(frontendUrl, connector?.id, 'oauth_exchange_failed'));
   }
 });
 
-/**
- * POST /api/connectors/:id/revoke
- * Revoke connector tokens and disconnect.
- */
 router.post('/:id/revoke', authenticate, async (req, res) => {
   const connector = getConnectorById(req.params.id);
-  if (!connector) {
-    return res.status(404).json({ error: 'Connector not found' });
-  }
-
+  if (!connector) return res.status(404).json({ error: 'Connector not found', code: 'connector_not_found' });
   await revokeTokens(req.user?.id, connector.id, connector);
   logger.info(`Connector ${connector.id} revoked for user ${req.user?.id}`);
-  res.json({ success: true, message: `Disconnected from ${connector.name}` });
+  return res.json({ success: true, message: `Disconnected from ${connector.name}` });
 });
 
-/**
- * POST /api/connectors/:id/:operation
- * Execute a connector operation with authentication.
- */
 router.post('/:id/:operation', authenticate, async (req, res) => {
   const connector = getConnectorById(req.params.id);
-  if (!connector) {
-    return res.status(404).json({ error: 'Connector not found' });
-  }
-
+  if (!connector) return res.status(404).json({ error: 'Connector not found', code: 'connector_not_found' });
   const operation = req.params.operation;
   const op = connector.operations.find((o) => o.id === operation);
-  if (!op) {
-    return res.status(404).json({ error: 'Operation not found' });
-  }
+  if (!op) return res.status(404).json({ error: 'Operation not found', code: 'connector_operation_not_found' });
+
+  const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+  const { urlParams = {}, providerBody, ...inlineProviderBody } = requestBody;
+  const body = providerBody && typeof providerBody === 'object' ? providerBody : inlineProviderBody;
 
   try {
-    const result = await connectorRequest(req.user?.id, connector.id, connector, operation, {
-      body: req.body,
-      params: req.query,
-      urlParams: req.params,
+    const result = await executeCustomerConnectorRequest({
+      userId: req.user?.id,
+      connectorId: connector.id,
+      definition: connector,
+      operation,
+      allowServerCredential: canUseServerCredential(req.user),
+      payload: {
+        body,
+        params: req.query,
+        urlParams,
+      },
     });
-    res.json({ success: true, result });
+    return res.json({ success: true, result });
   } catch (err) {
-    logger.error('Connector operation failed', { error: err.message, connectorId: connector.id, operation });
-    res.status(err.statusCode || 500).json({ error: err.message, detail: err.detail || null });
+    logger.error('Connector operation failed', {
+      error: err.message,
+      code: err.code,
+      connectorId: connector.id,
+      operation,
+      userId: req.user?.id,
+    });
+    const failure = publicConnectorFailure(err);
+    return res.status(failure.status).json(failure.body);
   }
 });
 
-/**
- * GET /api/connectors/:id/health
- * Check connector health status.
- */
 router.get('/:id/health', authenticate, async (req, res) => {
   const connector = getConnectorById(req.params.id);
-  if (!connector) {
-    return res.status(404).json({ error: 'Connector not found' });
-  }
-
-  const health = await healthCheckConnector(connector.id, connector);
-  res.json({ success: true, health });
+  if (!connector) return res.status(404).json({ error: 'Connector not found', code: 'connector_not_found' });
+  const health = await checkUserConnectorHealth(req.user?.id || req.userId, connector);
+  return res.json({
+    success: ['up', 'degraded', 'connected_unverified'].includes(health.status),
+    connectorId: connector.id,
+    health,
+    scope: 'customer-connection',
+  });
 });
 
-/**
- * GET /api/connectors/health/all
- * Get health status for all connectors (admin only).
- */
-router.get('/health/all', authenticate, requireAdmin, (req, res) => {
+router.get('/health/all', authenticate, requireAdmin, (_req, res) => {
   res.json({ success: true, health: getAllHealthStatus() });
 });
 
-/**
- * POST /api/connectors/:id/webhooks
- * Register a webhook for a connector.
- */
+// These legacy local webhook routes are shadowed by the durable webhook registry
+// mounted before this router. They remain for compatibility if this router is
+// ever mounted on its own, but they do not claim provider registration.
 router.post('/:id/webhooks', authenticate, (req, res) => {
   const { url, events, secret } = req.body;
   if (!url || !events || !Array.isArray(events)) {
-    return res.status(400).json({ error: 'URL and events array are required' });
+    return res.status(400).json({ error: 'URL and events array are required', code: 'connector_webhook_invalid' });
   }
-
   const webhook = registerWebhook(req.params.id, req.user?.id, url, events, secret);
-  res.json({ success: true, webhook });
+  return res.json({ success: true, webhook, providerRegistered: false });
 });
 
-/**
- * GET /api/connectors/:id/webhooks
- * List registered webhooks for a connector.
- */
 router.get('/:id/webhooks', authenticate, (req, res) => {
   const webhooks = getWebhooks(req.user?.id, req.params.id);
-  res.json({ success: true, webhooks });
+  res.json({ success: true, webhooks, providerRegistered: false });
 });
 
-/**
- * DELETE /api/connectors/:id/webhooks/:webhookId
- * Delete a webhook registration.
- */
 router.delete('/:id/webhooks/:webhookId', authenticate, (req, res) => {
   const deleted = deleteWebhook(req.params.webhookId);
-  res.json({ success: true, deleted });
+  res.json({ success: true, deleted, providerRegistered: false });
 });
 
+export { connectorRedirect, publicConnectorFailure };
 export default router;

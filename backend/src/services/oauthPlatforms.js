@@ -23,9 +23,11 @@ export const PUBLIC_FRONTEND_BASE = publicFrontendBase();
 export const pkceStore = new Map();
 
 const PKCE_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_META_GRAPH_VERSION = 'v26.0';
 
 export function metaGraphVersion() {
-  return process.env.META_GRAPH_VERSION || 'v21.0';
+  const configured = String(process.env.META_GRAPH_VERSION || '').trim();
+  return /^v\d+\.\d+$/.test(configured) ? configured : DEFAULT_META_GRAPH_VERSION;
 }
 
 /**

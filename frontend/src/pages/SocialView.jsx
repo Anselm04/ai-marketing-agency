@@ -4,6 +4,11 @@ import { ORGANIC_LABELS } from '../config/organic'
 
 const inputCls = 'w-full px-3 py-2 rounded-lg text-sm bg-[#0a0c11] border border-[#c4a35a]/40 text-[#efeae0] focus:outline-none focus:ring-1 focus:ring-[#c4a35a]'
 const PRIORITY_IDS = ['x', 'tiktok', 'instagram', 'facebook', 'linkedin', 'youtube', 'meta', 'google']
+const DIRECT_ORGANIC_PUBLISHERS = new Set(['x', 'facebook', 'instagram', 'linkedin', 'youtube', 'tiktok'])
+
+export function supportsDirectOrganicPublishing(platform) {
+  return DIRECT_ORGANIC_PUBLISHERS.has(String(platform || '').toLowerCase())
+}
 
 export default function SocialView({
   priorityShown, busyPlat, onConnectClick, tokenDraft, setTokenDraft, connectWithToken,
@@ -14,10 +19,10 @@ export default function SocialView({
       <div>
         <h2 className="text-2xl font-bold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Organic social (included)</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          20 networks on your plan: {ORGANIC_LABELS}.
-          Priority platforms support real per-user OAuth when app credentials are set on the server.
-          Until then we stay honest: connect when ready, or paste a token — we never fake Connected.
-          Paid Meta/Google ads are an add-on with a spend cap.
+          Your plan includes native draft generation for 20 network formats: {ORGANIC_LABELS}.
+          Direct API publishing is available only for platforms with a verified publishing adapter and a connected customer account; unsupported formats remain copy/manual-publish workflows.
+          Priority platforms support real per-user OAuth when provider app credentials are configured.
+          Paid Meta/Google ads use the separate managed advertising workflow.
         </p>
       </div>
 
@@ -60,8 +65,8 @@ export default function SocialView({
       </div>
 
       <form onSubmit={generate} className="rounded-lg p-5 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
-        <h3 className="font-semibold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Generate native posts</h3>
-        <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Each network gets its own body. We will not blast one caption to all 20.</p>
+        <h3 className="font-semibold" style={{ color: 'var(--gold-bright)', fontFamily: 'Cormorant Garamond, serif' }}>Generate native drafts</h3>
+        <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Each network format gets its own body. Draft generation for 20 formats does not imply 20 direct publishing APIs.</p>
         <input className={inputCls} placeholder="Product" value={brief.product} onChange={(e) => setBrief({ ...brief, product: e.target.value })} />
         <input className={inputCls} placeholder="Audience" value={brief.audience} onChange={(e) => setBrief({ ...brief, audience: e.target.value })} />
         <textarea className={inputCls + ' min-h-[90px]'} placeholder="Brief — what it is, who it is for, what it must not claim" value={brief.description} onChange={(e) => setBrief({ ...brief, description: e.target.value })} />
@@ -72,7 +77,7 @@ export default function SocialView({
           ))}
         </select>
         <button type="submit" disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: '#c4a35a', color: '#07080b' }}>
-          <Share2 size={16} /> {loading ? 'Writing native posts…' : 'Generate 20-network posts'}
+          <Share2 size={16} /> {loading ? 'Writing native drafts…' : 'Generate 20-format drafts'}
         </button>
       </form>
 
@@ -80,33 +85,37 @@ export default function SocialView({
 
       <div className="space-y-3">
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          Posts in this manual queue do not publish automatically. Connect your account, then choose Publish now for each post when ready.
+          Posts in this manual queue do not publish automatically. Where a verified direct adapter exists, connect your account and choose Publish now. Other formats remain copy/manual-publish only.
         </p>
-        {posts.map((p) => (
-          <article key={p.id} className="rounded-lg p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-widest" style={{ color: 'var(--cyan)' }}>
-              <span>{p.platformName || p.platform} · {p.contentType || 'native'} · {p.status === 'queued' ? 'manual queue' : p.status || 'draft'} · {p.published ? 'live' : 'not published'}</span>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => copyText(p.body, p.id)} style={{ color: 'var(--gold)' }}>{copied === p.id ? 'Copied' : 'Copy'}</button>
-                {!p.published && !['published', 'publishing'].includes(p.status) && (
-                  <button type="button" onClick={() => queue(p.id)} style={{ color: 'var(--gold)' }}>Save to manual queue</button>
-                )}
-                {!p.published && p.status !== 'published' && (
-                  <button type="button" disabled={p.status === 'publishing'} onClick={() => publishOne(p.id)} style={{ color: 'var(--gold)' }} className="inline-flex items-center gap-1 disabled:opacity-50"><Send size={12} /> {p.status === 'publishing' ? 'Publishing…' : 'Publish now'}</button>
-                )}
+        {posts.map((p) => {
+          const directPublishing = supportsDirectOrganicPublishing(p.platform)
+          return (
+            <article key={p.id} className="rounded-lg p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-widest" style={{ color: 'var(--cyan)' }}>
+                <span>{p.platformName || p.platform} · {p.contentType || 'native'} · {p.status === 'queued' ? 'manual queue' : p.status || 'draft'} · {p.published ? 'live' : 'not published'}</span>
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => copyText(p.body, p.id)} style={{ color: 'var(--gold)' }}>{copied === p.id ? 'Copied' : 'Copy'}</button>
+                  {!p.published && !['published', 'publishing'].includes(p.status) && (
+                    <button type="button" onClick={() => queue(p.id)} style={{ color: 'var(--gold)' }}>Save to manual queue</button>
+                  )}
+                  {!p.published && p.status !== 'published' && directPublishing && (
+                    <button type="button" disabled={p.status === 'publishing'} onClick={() => publishOne(p.id)} style={{ color: 'var(--gold)' }} className="inline-flex items-center gap-1 disabled:opacity-50"><Send size={12} /> {p.status === 'publishing' ? 'Publishing…' : 'Publish now'}</button>
+                  )}
+                  {!p.published && p.status !== 'published' && !directPublishing && (
+                    <span style={{ color: 'var(--text-dim)' }}>Manual publish only</span>
+                  )}
+                </div>
               </div>
-            </div>
-            <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>{p.body}</p>
-          </article>
-        ))}
+              <p className="text-sm mt-2 whitespace-pre-wrap" style={{ color: 'var(--text)' }}>{p.body}</p>
+            </article>
+          )
+        })}
         {!posts.length && (
           <p className="text-sm rounded-lg p-4" style={{ color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
-            No drafts yet — describe your product above and generate native posts. Connect a platform and choose Publish now for each post, or copy and paste it yourself.
+            No drafts yet — describe your product above and generate native drafts. Publish directly only where a verified adapter is available, or copy and paste the draft yourself.
           </p>
         )}
       </div>
     </div>
   )
-
 }
-

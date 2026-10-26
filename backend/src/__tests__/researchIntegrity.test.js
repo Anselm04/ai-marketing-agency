@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import trendScanner from '../services/trendScanner.js';
+import trendScanner, { requireRealHypothesis } from '../services/trendScanner.js';
 
 describe('trend research integrity', () => {
   test('failed providers are returned as unavailable rather than fabricated trend metrics', async () => {
@@ -24,5 +24,17 @@ describe('trend research integrity', () => {
       trendScanner.scanGoogleTrends = originalGoogle;
       trendScanner.cache.clear();
     }
+  });
+
+  test('AI fallback text cannot be returned as a trend hypothesis', () => {
+    expect(() => requireRealHypothesis({
+      fallback: true,
+      content: '[AI offline] market-research would invent a prediction',
+    }, 'trend')).toThrow(/could not generate/i);
+  });
+
+  test('only real non-empty AI output can become a labelled hypothesis', () => {
+    expect(requireRealHypothesis({ fallback: false, content: 'Hypothesis: tutorial demand may increase.' }, 'trend'))
+      .toBe('Hypothesis: tutorial demand may increase.');
   });
 });

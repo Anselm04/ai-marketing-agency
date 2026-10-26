@@ -81,6 +81,10 @@ export function useSocket() {
     setNotifications([]);
   }, []);
 
+  const dismissNotification = useCallback((notification) => {
+    setNotifications((prev) => prev.filter((item) => item !== notification));
+  }, []);
+
   const clearSystemAlerts = useCallback(() => {
     setSystemAlerts([]);
   }, []);
@@ -93,6 +97,7 @@ export function useSocket() {
     onlineUsers,
     emit,
     clearNotifications,
+    dismissNotification,
     clearSystemAlerts,
   };
 }

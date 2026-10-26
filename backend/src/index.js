@@ -28,6 +28,8 @@ import settingsRoutes from './routes/settings.js';
 import socialRoutes from './routes/social.js';
 import exportRoutes from './routes/export.js';
 import aiModelsRoutes from './routes/aiModels.js';
+import connectorAdminHealthRoutes from './routes/connectorAdminHealth.js';
+import connectorWebhookRegistryRoutes from './routes/connectorWebhookRegistry.js';
 import connectorsRoutes from './routes/connectors.js';
 import orchestratorRoutes from './routes/orchestrator.js';
 import productsRoutes from './routes/products.js';
@@ -44,6 +46,7 @@ import appforgeIntegrationRoutes from './routes/appforgeIntegration.js';
 import clippingRoutes from './routes/clipping.js';
 import courseFactoryRoutes from './routes/courseFactory.js';
 import courseFactoryMediaRoutes from './routes/courseFactoryMedia.js';
+import courseFactoryExportRoutes from './routes/courseFactoryExports.js';
 import socialVideoRoutes from './routes/socialVideo.js';
 import mediaLibraryRoutes from './routes/mediaLibrary.js';
 import autoPostingRoutes from './routes/autoPosting.js';
@@ -54,6 +57,12 @@ import unsubscribeRoutes from './routes/unsubscribe.js';
 import autoPostingService from './services/autoPostingService.js';
 import { getMarketingEntitlement } from './services/marketingEntitlementService.js';
 import clippingSchedulerService from './services/clippingSchedulerService.js';
+import paidAdvertisingSchedulerService from './services/paidAdvertisingSchedulerService.js';
+import schedulerService from './services/schedulerService.js';
+import { installAnthropicStreaming } from './services/anthropicStreamingService.js';
+import { installBedrockProviderPatch } from './services/bedrockProviderPatch.js';
+import { installAzureOpenAIProviderPatch } from './services/azureProviderPatch.js';
+import { installOrchestratorPersistencePatch } from './services/orchestratorPersistencePatch.js';
 import { mountHealthRoutes } from './utils/systemHealth.js';
 import { hydrateStripeWebhookSecret } from './services/runtimeSecretService.js';
 import './services/withUserTokensPatch.js';
@@ -64,6 +73,11 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { sanitizeBody } from './middleware/sanitize.js';
 import { auditLog } from './middleware/auditLog.js';
+
+installAnthropicStreaming();
+installBedrockProviderPatch();
+installAzureOpenAIProviderPatch();
+installOrchestratorPersistencePatch();
 
 if (process.env.NODE_ENV === 'production' && store.isPostgres?.() !== true) {
   throw new Error(
@@ -186,6 +200,8 @@ app.use('/api/social', socialRoutes);
 app.use('/api/ads', adsRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/ai-models', aiModelsRoutes);
+app.use('/api/connectors', connectorAdminHealthRoutes);
+app.use('/api/connectors', connectorWebhookRegistryRoutes);
 app.use('/api/connectors', connectorsRoutes);
 app.use('/api/orchestrator', orchestratorRoutes);
 app.use('/api/products', productsRoutes);
@@ -201,6 +217,7 @@ app.use('/api/affiliate', affiliateRoutes);
 app.use('/api/clipping', clippingRoutes);
 app.use('/api/course-factory', courseFactoryRoutes);
 app.use('/api/course-factory', courseFactoryMediaRoutes);
+app.use('/api/course-factory', courseFactoryExportRoutes);
 app.use('/api/social-video', socialVideoRoutes);
 app.use('/api/media-library', mediaLibraryRoutes);
 app.use('/api/auto-posting', autoPostingRoutes);
@@ -226,6 +243,10 @@ if (process.env.NODE_ENV !== 'test') {
   httpServer.listen(PORT, '0.0.0.0', () => {
     clippingSchedulerService.start();
     autoPostingService.start();
+    paidAdvertisingSchedulerService.start();
+    schedulerService.start().catch((error) => {
+      logger.error('Durable scheduler failed to start', { error: error.message });
+    });
     logger.info(`Server running on port ${PORT}`, {
       environment: process.env.NODE_ENV,
       frontendDist: fs.existsSync(frontendDist) ? frontendDist : 'none',
@@ -238,6 +259,8 @@ const shutdown = async () => {
   try {
     clippingSchedulerService.stop();
     autoPostingService.stop();
+    paidAdvertisingSchedulerService.stop();
+    schedulerService.stop();
     await store.disconnectDB();
   } finally {
     if (httpServer.listening) {

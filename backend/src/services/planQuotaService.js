@@ -11,6 +11,12 @@ const AI_TOKEN_LIMITS = Object.freeze({
   enterprise: 50_000_000,
 });
 
+const CAMPAIGN_QUOTA_EXEMPT_KINDS = new Set([
+  // Course Factory projects share the campaigns table for legacy storage
+  // compatibility, but they are not marketed/sold as active campaigns.
+  'ai-course-factory',
+]);
+
 export const PLAN_LIMITS = Object.freeze(Object.fromEntries(
   CATALOG.plans.map((plan) => [
     plan.id,
@@ -57,6 +63,11 @@ export function checkQuota({ used = 0, requested = 1, limit }) {
   };
 }
 
+export function countsTowardCampaignQuota(campaign = {}) {
+  if (CAMPAIGN_QUOTA_EXEMPT_KINDS.has(String(campaign.kind || '').trim())) return false;
+  return true;
+}
+
 export async function getUserPlanContext(userId) {
   const user = await store.findUserById(userId);
   if (!user) throw Object.assign(new Error('User not found'), { status: 404, code: 'user_not_found' });
@@ -88,7 +99,10 @@ function quotaError(resource, result, plan) {
 export async function assertCampaignQuota(userId, requested = 1) {
   const context = await getUserPlanContext(userId);
   const campaigns = await store.getCampaignsByOwner(userId);
-  const active = campaigns.filter((campaign) => !['completed', 'archived', 'cancelled', 'canceled'].includes(campaign.status)).length;
+  const active = campaigns.filter((campaign) => (
+    countsTowardCampaignQuota(campaign)
+    && !['completed', 'archived', 'cancelled', 'canceled'].includes(campaign.status)
+  )).length;
   const result = checkQuota({ used: active, requested, limit: context.limits.campaigns });
   if (!result.allowed) throw quotaError('campaigns', result, context.plan);
   return { ...context, quota: result };

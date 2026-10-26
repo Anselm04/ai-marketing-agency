@@ -4,10 +4,20 @@ import { userIdOf } from '../utils/scope.js';
 import { generateDirectResponsePack } from '../services/copyEngine.js';
 import { generateCampaignBundle, MAJOR_SOCIALS } from '../services/marketingEngine.js';
 import { renderShortVideo } from '../services/videoRenderer.js';
-import { remaining, assertLaunchAllowed, DEFAULT_BUDGET, PAID_NETWORKS } from '../services/spendGuard.js';
+import { PAID_NETWORKS } from '../services/spendGuard.js';
 import { openaiStatus } from '../services/openaiService.js';
 
 const router = express.Router();
+
+function publicAiStatus() {
+  const status = openaiStatus();
+  return {
+    configured: status.openaiConfigured === true,
+    provider: status.provider || null,
+    model: status.model || null,
+    status: status.openaiConfigured === true ? 'configured' : 'not_configured',
+  };
+}
 
 function briefFrom(body = {}) {
   const business = String(body.business || body.description || body.brief || '').trim();
@@ -35,129 +45,67 @@ async function loadUser(req) {
   return { uid, user };
 }
 
-async function spendEntries(uid) {
-  return (await store.getAdSpendEntries?.(uid)) || userSpendFallback(uid);
+function managedAdsMigration(res) {
+  return res.status(410).json({
+    error: 'This legacy paid-ad control has been retired. Use the managed paid advertising workflow, which verifies the real provider account, campaign configuration, account currency, provider-side spend controls and live-certification status.',
+    code: 'legacy_paid_ads_retired',
+    replacementPath: '/api/paid-ads',
+    liveLaunchClaimed: false,
+  });
 }
 
-const memSpend = new Map();
-function userSpendFallback(uid) {
-  return memSpend.get(String(uid)) || [];
-}
-function pushSpendFallback(uid, entry) {
-  const k = String(uid);
-  const list = memSpend.get(k) || [];
-  list.push(entry);
-  memSpend.set(k, list);
-  return list;
+function safeRouteFailure(res, error, fallback, code) {
+  const status = Number(error?.status || error?.statusCode);
+  if (Number.isInteger(status) && status >= 400 && status < 500) {
+    return res.status(status).json({ error: error.message || fallback, code: error.code || code });
+  }
+  return res.status(500).json({ error: fallback, code });
 }
 
 router.get('/', async (req, res) => {
   try {
-    const { uid } = await loadUser(req);
-    const campaigns = (await store.getAdCampaigns?.(uid)) || [];
-    res.json({ campaigns, paidNetworks: PAID_NETWORKS });
+    await loadUser(req);
+    return res.json({
+      campaigns: [],
+      paidNetworks: PAID_NETWORKS,
+      legacyPaidAdsRetired: true,
+      replacementPath: '/api/paid-ads',
+      message: 'Paid-ad execution moved to the managed advertising workflow. This legacy route no longer reports locally recorded launches as live campaigns.',
+    });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
+    return safeRouteFailure(res, err, 'Advertising workspace could not be loaded.', 'ads_workspace_failed');
   }
 });
 
 router.get('/ai-status', (_req, res) => {
-  res.json(openaiStatus());
+  res.json(publicAiStatus());
 });
 
-router.get('/budget', async (req, res) => {
-  try {
-    const { uid, user } = await loadUser(req);
-    const entries = await spendEntries(uid);
-    res.json(remaining(user, entries));
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
-  }
-});
-
-router.patch('/budget', async (req, res) => {
-  try {
-    const { uid, user } = await loadUser(req);
-    const dailyMax = Number(req.body?.dailyMax);
-    const monthlyMax = Number(req.body?.monthlyMax);
-    const next = {
-      ...(user.adBudget || {}),
-      ...(Number.isFinite(dailyMax) ? { dailyMax } : {}),
-      ...(Number.isFinite(monthlyMax) ? { monthlyMax } : {}),
-    };
-    const updated = await store.updateUser?.(uid, { adBudget: next }) || { ...user, adBudget: next };
-    const entries = await spendEntries(uid);
-    res.json(remaining(updated, entries));
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
-  }
-});
-
-router.get('/addon', async (req, res) => {
-  try {
-    const { user } = await loadUser(req);
-    res.json({
-      optedIn: !!user.paidAdsAddon,
-      note: 'Paid Meta/Google ads are an add-on. Organic is included in your plan.',
-      defaults: DEFAULT_BUDGET,
-    });
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
-  }
-});
-
-router.post('/addon', async (req, res) => {
-  try {
-    if (!req.body?.confirm) {
-      return res.status(400).json({ error: 'Pass confirm: true to opt in to paid ads add-on.' });
-    }
-    const { uid, user } = await loadUser(req);
-    const updated = await store.updateUser?.(uid, { paidAdsAddon: true }) || { ...user, paidAdsAddon: true };
-    const entries = await spendEntries(uid);
-    res.json(remaining(updated, entries));
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
-  }
-});
-
-router.delete('/addon', async (req, res) => {
-  try {
-    const { uid } = await loadUser(req);
-    await store.updateUser?.(uid, { paidAdsAddon: false });
-    res.json({ optedIn: false, note: 'Paid ads add-on disabled. Organic posting is unchanged.' });
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
-  }
-});
-
-router.post('/launch', async (req, res) => {
-  try {
-    const { uid, user } = await loadUser(req);
-    const amount = Number(req.body?.amount || req.body?.spend || 0);
-    const platform = String(req.body?.platform || '').toLowerCase();
-    if (!PAID_NETWORKS.includes(platform)) {
-      return res.status(400).json({ error: 'platform must be meta or google for paid launch.' });
-    }
-    const entries = await spendEntries(uid);
-    const gate = assertLaunchAllowed(user, entries, amount);
-    if (!gate.ok) return res.status(gate.status).json({ error: gate.error });
-    const entry = { id: `spend_${Date.now()}`, at: new Date().toISOString(), amount: gate.amount, platform, note: req.body?.note || 'launch' };
-    if (store.addAdSpendEntry) await store.addAdSpendEntry(uid, entry);
-    else pushSpendFallback(uid, entry);
-    res.json({ ok: true, entry, remaining: remaining(user, [...entries, entry]), disclaimer: 'Launch recorded against your cap. Live ad-network calls still need OAuth credentials.' });
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
-  }
-});
+// These legacy endpoints previously maintained a separate local/in-memory spend
+// model and could report a successful "launch" without making an ad-network call.
+// They are deliberately retired so there is one authoritative paid-ad workflow.
+router.get('/budget', (_req, res) => managedAdsMigration(res));
+router.patch('/budget', (_req, res) => managedAdsMigration(res));
+router.get('/addon', (_req, res) => managedAdsMigration(res));
+router.post('/addon', (_req, res) => managedAdsMigration(res));
+router.delete('/addon', (_req, res) => managedAdsMigration(res));
+router.post('/launch', (_req, res) => managedAdsMigration(res));
 
 router.post('/generate', async (req, res) => {
   try {
     const { uid } = await loadUser(req);
     const brief = briefFrom(req.body || {});
     const pack = generateDirectResponsePack(brief);
-    res.json({ pack, ownerId: uid, disclaimer: 'Template/AI pack for your brief only. Not published.' });
+    return res.json({
+      pack,
+      ownerId: uid,
+      generationMode: 'deterministic_template',
+      aiGenerated: false,
+      published: false,
+      disclaimer: 'This is a deterministic starter template generated from your brief. It is not claimed as AI-generated or published content.',
+    });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
+    return safeRouteFailure(res, err, 'The starter copy pack could not be generated.', 'ads_template_generation_failed');
   }
 });
 
@@ -183,14 +131,22 @@ router.post('/generate-campaign', async (req, res) => {
         ownerId: uid,
         videoId,
       });
-      video = { videoId, filename: rendered.filename, size: rendered.size, durationSec: rendered.durationSec };
-    } catch (verr) {
-      video = { error: verr.message || 'video render unavailable' };
+      video = { videoId, filename: rendered.filename, size: rendered.size, durationSec: rendered.durationSec, rendered: true };
+    } catch {
+      video = { rendered: false, reason: 'video_render_unavailable' };
     }
-    res.json({ ...bundle, video, disclaimer: 'Campaign artifacts are private to your account. Nothing is published automatically.' });
+    return res.json({
+      ...bundle,
+      video,
+      generationMode: 'deterministic_template',
+      aiGenerated: false,
+      published: false,
+      disclaimer: 'This campaign starter bundle is deterministic template output from your brief. It is not claimed as AI-generated or live-published campaign work.',
+    });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Failed' });
+    return safeRouteFailure(res, err, 'The campaign starter bundle could not be generated.', 'ads_template_campaign_failed');
   }
 });
 
+export { publicAiStatus };
 export default router;

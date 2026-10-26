@@ -17,6 +17,13 @@ import { storeTokens, consumeOAuthSession } from '../services/appConnector.js';
 import { finalizeOAuthAccount } from '../services/organicPublisher.js';
 import { logger } from '../utils/logger.js';
 
+function socialOAuthRedirect(frontend, code, platform = null) {
+  const url = new URL('/social', frontend);
+  url.searchParams.set('oauth_error', code);
+  if (platform) url.searchParams.set('platform', platform);
+  return url.toString();
+}
+
 export function mountSocialPart1(router) {
 router.get('/oauth/status', async (req, res) => {
   const uid = userIdOf(req);
@@ -24,7 +31,6 @@ router.get('/oauth/status', async (req, res) => {
   const byPlat = Object.fromEntries(mine.map((c) => [canonicalPlatform(c.platform), c]));
   const platforms = PRIORITY_OAUTH_PLATFORMS.map((m) => {
     const configured = isOAuthConfigured(m);
-    const creds = getClientCredentials(m);
     const conn = byPlat[m.platform];
     const connected = !!(conn?.tokenSet && conn?.status === 'ready');
     return {
@@ -39,10 +45,10 @@ router.get('/oauth/status', async (req, res) => {
       pageId: conn?.pageId || undefined,
       igUserId: conn?.igUserId || undefined,
       callbackUrl: socialOAuthCallbackUrl(m.platform),
-      envKeys: configured ? undefined : creds.envKeys,
+      adminConfigurationRequired: !configured,
       setupHint: configured
         ? null
-        : 'This platform is not configured by your admin yet. You can generate and copy posts; live Connect needs admin setup or a pasted token.',
+        : 'Live account connection is not enabled for this platform yet. An administrator must configure the provider integration before Connect can be used.',
     };
   });
   res.json({
@@ -57,14 +63,13 @@ router.get('/oauth/:platform/start', async (req, res) => {
   const uid = userIdOf(req);
   const mapping = resolvePlatform(req.params.platform);
   if (!mapping) {
-    return res.status(404).json({ error: 'Unknown OAuth platform', platform: req.params.platform });
+    return res.status(404).json({ error: 'Unknown OAuth platform', code: 'social_oauth_platform_unknown', platform: req.params.platform });
   }
   if (!isOAuthConfigured(mapping)) {
-    const creds = getClientCredentials(mapping);
-    return res.status(400).json({
-      error: `OAuth app credentials missing for ${mapping.label}`,
-      needsConfig: true,
-      envKeys: creds.envKeys,
+    return res.status(503).json({
+      error: `Live account connection is not configured for ${mapping.label} yet.`,
+      code: 'social_oauth_admin_configuration_required',
+      adminConfigurationRequired: true,
       oauthConfigured: false,
       platform: mapping.platform,
       connectorId: mapping.connectorId,
@@ -84,15 +89,16 @@ router.get('/oauth/:platform/start', async (req, res) => {
     });
   } catch (err) {
     if (err.needsConfig || err.code === 'NEEDS_CONFIG') {
-      return res.status(400).json({
-        error: err.message,
-        needsConfig: true,
-        envKeys: err.envKeys || getClientCredentials(mapping).envKeys,
+      logger.warn('Social OAuth provider configuration incomplete', { platform: mapping.platform, error: err.message });
+      return res.status(503).json({
+        error: `Live account connection is not configured for ${mapping.label} yet.`,
+        code: 'social_oauth_admin_configuration_required',
+        adminConfigurationRequired: true,
         oauthConfigured: false,
       });
     }
-    logger.error('OAuth start failed', { error: err.message, platform: mapping.platform });
-    res.status(500).json({ error: 'Could not start OAuth', detail: err.message });
+    logger.error('OAuth start failed', { error: err.message, code: err.code, platform: mapping.platform });
+    res.status(503).json({ error: 'Could not start account authorization right now.', code: 'social_oauth_start_failed' });
   }
 });
 
@@ -101,10 +107,15 @@ router.get('/oauth/:platform/callback', async (req, res) => {
   const mapping = resolvePlatform(req.params.platform);
   const frontend = publicFrontendBase();
   if (error) {
-    return res.redirect(`${frontend}/social?oauth_error=${encodeURIComponent(String(errorDescription || error))}`);
+    logger.warn('Social OAuth provider declined authorization', {
+      platform: mapping?.platform || req.params.platform,
+      providerError: error,
+      providerErrorDescription: errorDescription,
+    });
+    return res.redirect(socialOAuthRedirect(frontend, 'oauth_authorization_declined', mapping?.platform || req.params.platform));
   }
   if (!mapping || !code || !state) {
-    return res.redirect(`${frontend}/social?oauth_error=${encodeURIComponent('invalid_callback')}`);
+    return res.redirect(socialOAuthRedirect(frontend, 'oauth_callback_invalid', mapping?.platform || req.params.platform));
   }
   try {
     const session = await consumeOAuthSession(String(state), mapping.connectorId);
@@ -164,12 +175,12 @@ router.get('/oauth/:platform/callback', async (req, res) => {
     logger.info('Social OAuth connected', { userId, platform: mapping.platform, connectorId: mapping.connectorId });
     return res.redirect(`${frontend}/social?connected=${encodeURIComponent(mapping.platform)}`);
   } catch (err) {
-    logger.error('Social OAuth callback failed', { error: err.message, platform: mapping?.platform });
-    return res.redirect(`${frontend}/social?oauth_error=${encodeURIComponent(err.message || 'oauth_failed')}`);
+    logger.error('Social OAuth callback failed', { error: err.message, code: err.code, platform: mapping?.platform });
+    return res.redirect(socialOAuthRedirect(frontend, 'oauth_exchange_failed', mapping?.platform));
   }
 });
 
-router.get('/networks', (req, res) => {
+router.get('/networks', (_req, res) => {
   res.json({
     included: true,
     charge: 'included',
@@ -221,3 +232,5 @@ router.get('/status', async (req, res) => {
 });
 
 }
+
+export { socialOAuthRedirect };

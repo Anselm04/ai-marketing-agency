@@ -48,7 +48,7 @@ export function ConnectionStatus() {
 }
 
 export function NotificationBell() {
-  const { notifications, clearNotifications, connected } = useSocket();
+  const { notifications, clearNotifications, dismissNotification, connected } = useSocket();
   const [open, setOpen] = useState(false);
   const unreadCount = notifications.length;
 
@@ -88,11 +88,9 @@ export function NotificationBell() {
             ) : (
               notifications.map((n, i) => (
                 <NotificationItem
-                  key={i}
+                  key={n.id || n.createdAt || i}
                   notification={n}
-                  onDismiss={() => {
-                    // Individual dismiss not implemented in this simplified version
-                  }}
+                  onDismiss={() => dismissNotification(n)}
                 />
               ))
             )}
