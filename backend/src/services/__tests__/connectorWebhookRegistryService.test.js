@@ -39,7 +39,7 @@ describe('connector callback registry', () => {
       connectorId: 'discord',
       url: 'https://example.com/webhooks/discord',
       events: ['message.created'],
-      secret: 'secret-value',
+      secret: 'strong-test-signing-secret-value',
     });
 
     expect(webhook).toMatchObject({
