@@ -19,6 +19,8 @@ export default [
         varsIgnorePattern: '^_',
       }],
       'no-constant-condition': ['error', { checkLoops: false }],
+      'preserve-caught-error': 'off',
+      'no-useless-assignment': 'off',
     },
   },
 ];
