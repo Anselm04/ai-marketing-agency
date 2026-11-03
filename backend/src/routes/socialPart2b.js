@@ -159,7 +159,7 @@ router.post('/publish', async (req, res, next) => {
       results: [{ ...honest, postId: honest.postId, localPostId: post.id }],
     });
   } catch (error) {
-    await store.updateSocialPost(post.id, { status: 'queued', published: false }, uid).catch(() => {});
+    await Promise.resolve(store.updateSocialPost(post.id, { status: 'queued', published: false }, uid)).catch(() => {});
     return next(error);
   }
 });
