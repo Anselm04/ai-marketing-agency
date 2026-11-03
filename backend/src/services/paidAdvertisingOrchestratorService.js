@@ -10,6 +10,7 @@ import {
   pauseManagedPaidAdCampaign,
   readManagedPaidAdSpend,
 } from './managedPaidAdsExecutionService.js';
+import { assertAuthorizationCoversBudget } from './paidAdAuthorizationService.js';
 
 function orchestrationError(message, code, cause = null) {
   const error = new Error(message);
@@ -20,6 +21,18 @@ function orchestrationError(message, code, cause = null) {
 }
 
 export async function activateManagedPaidAdBudget(userId, budgetId) {
+  const current = await getPaidAdBudget(userId, budgetId);
+  if (!current) return { error: 'not_found' };
+  try {
+    assertAuthorizationCoversBudget(current.spendAuthorization, current);
+  } catch (error) {
+    return {
+      error: 'authorization_required',
+      authorizationCode: error.code || 'paid_ads_authorization_required',
+      budget: current,
+    };
+  }
+
   const armed = await activatePaidAdBudget(userId, budgetId);
   if (armed.error) return armed;
   const budget = armed.budget;
@@ -85,9 +98,41 @@ export async function reconcileManagedPaidAdBudget(userId, budgetId) {
   if (!current) return null;
   if (!current.providerCampaignId) return current;
 
+  try {
+    assertAuthorizationCoversBudget(current.spendAuthorization, current);
+  } catch (error) {
+    if (current.status !== 'hard_stopped') {
+      try {
+        await pauseManagedPaidAdCampaign(userId, current);
+      } catch (pauseError) {
+        await store.updateContent(current.id, {
+          status: 'provider_pause_failed',
+          hardStopReason: 'authorization_pause_failed',
+          updatedAt: new Date().toISOString(),
+        });
+        throw orchestrationError(
+          'Customer authorization is no longer valid and the provider did not confirm the campaign pause.',
+          'paid_ads_authorization_hard_stop_failed',
+          pauseError,
+        );
+      }
+    }
+    return store.updateContent(current.id, {
+      enabled: false,
+      status: 'hard_stopped',
+      pausedAt: new Date().toISOString(),
+      hardStopReason: error.code || 'paid_ads_authorization_invalid',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   const providerSpend = await readManagedPaidAdSpend(userId, current);
   const spendMinor = Math.max(0, Number(providerSpend.spendMinor) || 0);
-  const exhausted = spendMinor >= Number(current.mediaSpendCapCents || 0);
+  const authorizedCap = Math.min(
+    Number(current.mediaSpendCapCents || 0),
+    Number(current.spendAuthorization?.maxMediaSpendCents || 0),
+  );
+  const exhausted = spendMinor >= authorizedCap;
 
   if (exhausted && current.status !== 'hard_stopped') {
     try {
@@ -101,7 +146,7 @@ export async function reconcileManagedPaidAdBudget(userId, budgetId) {
         updatedAt: new Date().toISOString(),
       });
       throw orchestrationError(
-        'Spend reached the configured limit but the provider did not confirm the campaign pause.',
+        'Spend reached the customer-authorized limit but the provider did not confirm the campaign pause.',
         'paid_ads_hard_stop_failed',
         error,
       );
