@@ -25,12 +25,12 @@ const MODES = [
   {
     id: 'bounded_auto',
     title: 'Automatic within my limits',
-    text: 'TrillionAI may launch, pause and optimise inside the exact caps you approve here.',
+    text: 'TrillionAI may launch, pause and optimise inside your approved total hard cap and monitored daily stop target.',
   },
   {
     id: 'full_auto',
     title: 'Fully automated within my cap',
-    text: 'TrillionAI runs the campaign autonomously, but can never exceed your approved spending envelope.',
+    text: 'TrillionAI runs autonomously inside your approved total hard cap and daily monitoring limit. It cannot increase your total authority by itself.',
   },
 ]
 
@@ -74,7 +74,7 @@ export default function PaidAdAuthorizationPanel({ budget, onAuthorized }) {
       })
       setPassword('')
       setAccepted(false)
-      addToast('Paid advertising limits authorized. TrillionAI cannot exceed this approved envelope.', 'success')
+      addToast('Authorization recorded. Your provider-side total cap cannot be increased without fresh approval; daily spend is monitored against your stop target.', 'success')
       onAuthorized?.(res.data?.budget || budget)
     } catch (err) {
       addToast(err.response?.data?.error || 'Unable to authorize paid advertising.', 'error')
@@ -90,7 +90,7 @@ export default function PaidAdAuthorizationPanel({ budget, onAuthorized }) {
         <div>
           <div className="font-semibold" style={{ color: 'var(--gold-bright)' }}>Your advertising authority</div>
           <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-            Choose how much authority TrillionAI has. It may optimise inside your limits, but it cannot raise these caps without you authorizing the new amount again.
+            Choose how much authority TrillionAI has. It may optimise inside your limits, but it cannot raise your total spending cap without you authorizing the new amount again.
           </p>
         </div>
       </div>
@@ -112,11 +112,11 @@ export default function PaidAdAuthorizationPanel({ budget, onAuthorized }) {
 
       <div>
         <div className="flex justify-between gap-4 text-sm mb-2">
-          <span style={{ color: 'var(--text-muted)' }}>Maximum provider spend per day</span>
+          <span style={{ color: 'var(--text-muted)' }}>Daily automation stop target</span>
           <strong>{money(dailyCap, currency)}</strong>
         </div>
         <input
-          aria-label="Maximum provider spend per day"
+          aria-label="Daily automation stop target"
           type="range"
           min={Math.min(step, mediaCap || step)}
           max={Math.max(step, mediaCap)}
@@ -125,6 +125,9 @@ export default function PaidAdAuthorizationPanel({ budget, onAuthorized }) {
           onChange={(event) => setDailyCap(Number(event.target.value))}
           className="w-full"
         />
+        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+          Your total media cap is set at the advertising provider. The daily stop target is monitored from Meta/Google reported spend and may reflect provider reporting delay; TrillionAI pauses the campaign when reported spend reaches the target.
+        </p>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4 text-sm">
@@ -133,7 +136,7 @@ export default function PaidAdAuthorizationPanel({ budget, onAuthorized }) {
           <strong>{money(fee, currency)}</strong>
         </div>
         <div className="p-3 rounded-lg" style={{ border: '1px solid var(--line)' }}>
-          <div style={{ color: 'var(--text-muted)' }}>Maximum ad spend</div>
+          <div style={{ color: 'var(--text-muted)' }}>Maximum provider media spend</div>
           <strong>{money(mediaCap, currency)}</strong>
         </div>
         <div className="p-3 rounded-lg" style={{ border: '1px solid var(--line)' }}>
@@ -152,7 +155,7 @@ export default function PaidAdAuthorizationPanel({ budget, onAuthorized }) {
 
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-1" />
-        <span>I authorize the limits shown above, understand the separate TrillionAI fee and third-party advertising spend, and understand that results are not guaranteed.</span>
+        <span>I authorize the limits shown above, understand the separate TrillionAI fee and third-party advertising spend, understand the daily stop uses provider-reported spend that can be delayed, and understand that results are not guaranteed.</span>
       </label>
 
       <div className="grid gap-2 md:grid-cols-[1fr_auto]">
