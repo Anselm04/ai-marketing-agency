@@ -39,7 +39,7 @@ describe('connector callback registry', () => {
       connectorId: 'discord',
       url: 'https://example.com/webhooks/discord',
       events: ['message.created'],
-      secret: 'secret-value',
+      secret: 'strong-test-signing-secret-value',
     });
 
     expect(webhook).toMatchObject({
@@ -49,7 +49,7 @@ describe('connector callback registry', () => {
       secretConfigured: true,
     });
     expect(webhook.secretCipher).toBeUndefined();
-    expect(records[0].secretCipher).toBe('encrypted:secret-value');
+    expect(records[0].secretCipher).toBe('encrypted:strong-test-signing-secret-value');
   });
 
   test('only lists the current owner connector registrations', async () => {

@@ -1,9 +1,40 @@
 import request from 'supertest';
 import app from '../index.js';
 import store from '../utils/store.js';
+import clippingAgencyService from '../services/clippingAgencyService.js';
+import { jest } from '@jest/globals';
 
 describe('AI Clipping Agency API', () => {
   let token;
+  let clipPlanSpy;
+
+  beforeAll(() => {
+    // This integration suite verifies campaign routing, scheduling, ownership,
+    // and rights enforcement. A deterministic AI result avoids requiring a
+    // live third-party model in CI; production remains fail-closed on AI errors.
+    clipPlanSpy = jest.spyOn(clippingAgencyService, 'generateClipPlan').mockImplementation(async (input) => ({
+      generatedAt: new Date().toISOString(),
+      aiFallback: false,
+      platforms: input.platforms,
+      clips: Array.from({ length: input.maxClips || 6 }, (_, index) => ({
+        id: `clip-${index + 1}`,
+        title: `Source-backed test clip ${index + 1}`,
+        hook: 'The product saves teams time.',
+        startSeconds: index * 30,
+        endSeconds: (index + 1) * 30,
+        durationSeconds: 30,
+        platforms: input.platforms,
+        caption: 'The product saves teams time.',
+        hashtags: [],
+        status: 'planned',
+        mediaUrl: null,
+      })),
+    }));
+  });
+
+  afterAll(() => {
+    clipPlanSpy.mockRestore();
+  });
 
   beforeAll(async () => {
     const email = `clipping-${Date.now()}@example.com`;

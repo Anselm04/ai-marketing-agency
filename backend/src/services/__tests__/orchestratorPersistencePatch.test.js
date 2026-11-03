@@ -27,12 +27,15 @@ const sharedClassification = { category: 'marketing', complexity: 'medium', urge
 jest.unstable_mockModule('../../utils/store.js', () => ({
   default: { createContent, getContentByOwner, updateContent, deleteContent },
 }));
-jest.unstable_mockModule('../appConnector.js', () => ({ getTokens }));
+jest.unstable_mockModule('../appConnector.js', () => ({ getTokens, getHealthStatus: jest.fn(() => ({ status: 'unknown' })), connectorRequest: jest.fn(), checkRateLimit: jest.fn(() => true) }));
 jest.unstable_mockModule('../connectorUserHealthService.js', () => ({ getUserConnectorHealth }));
 jest.unstable_mockModule('../orchestratorConnectorHealthPatch.js', () => ({ installOrchestratorConnectorHealthPatch }));
 jest.unstable_mockModule('../orchestratorAiFallbackPatch.js', () => ({ installOrchestratorAiFallbackPatch }));
 jest.unstable_mockModule('../connectors/index.js', () => ({
   allConnectors: [{ id: 'connector-a', name: 'Connector A', category: 'crm' }],
+  getConnectorById: jest.fn((connectorId) => (connectorId === 'connector-a'
+    ? { id: 'connector-a', name: 'Connector A', category: 'crm' }
+    : null)),
 }));
 
 const fakeService = {
