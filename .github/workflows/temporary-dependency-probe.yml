@@ -1,0 +1,57 @@
+name: Temporary dependency compatibility probe
+on:
+  push:
+    branches: [feature/customer-authorized-ad-spend-controls]
+permissions:
+  contents: read
+jobs:
+  compatibility-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: marketing_migration_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: migration-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d marketing_migration_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve compatible current tooling and patched transitive dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --save-dev --workspace=backend 'eslint@^10.13.0' 'jest@^30.5.2' 'globals@^16.0.0' '@eslint/js@^10.0.0' --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm pkg set 'overrides.minimatch=11.0.4' 'overrides.glob=14.0.3'
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ls glob minimatch --all > /tmp/marketing-upgrade-tree.txt 2>&1 || true
+          tail -25 /tmp/marketing-upgrade-tree.txt
+          npm audit --json > /tmp/marketing-upgrade-audit.json || true
+          node -e 'const a=require("/tmp/marketing-upgrade-audit.json");console.log("SECURITY_SUMMARY:"+JSON.stringify({counts:a.metadata?.vulnerabilities,packages:Object.keys(a.vulnerabilities||{})}));'
+      - name: Check migration lint
+        shell: bash
+        run: |
+          npm run lint --workspace=backend > /tmp/marketing-upgrade-lint.txt 2>&1 && echo MIGRATION_LINT=PASS || { echo MIGRATION_LINT=FAIL; tail -60 /tmp/marketing-upgrade-lint.txt; }
+      - name: Check migration backend integration tests
+        shell: bash
+        env:
+          MARKETING_MIGRATION_TEST_DATABASE_URL: postgresql://postgres:migration-test-only@127.0.0.1:5432/marketing_migration_test
+        run: |
+          timeout 8m npm test --workspace=backend -- --runInBand --detectOpenHandles --passWithNoTests > /tmp/marketing-upgrade-test.txt 2>&1 && echo MIGRATION_TEST=PASS || { echo MIGRATION_TEST=FAIL; tail -90 /tmp/marketing-upgrade-test.txt; }
+      - name: Emit generated dependency files for reviewed GitHub commit
+        shell: bash
+        run: |
+          echo 'BEGIN_GENERATED_DEPENDENCIES'
+          node -e 'const fs=require("fs");for(const name of ["package.json","backend/package.json","package-lock.json"]){const c=fs.readFileSync(name,"utf8");console.log("FILE_BEGIN:"+name);for(let i=0;i<c.length;i+=6000)console.log("FILE_CHUNK:"+JSON.stringify(c.slice(i,i+6000)));console.log("FILE_END:"+name)}'
+          echo 'END_GENERATED_DEPENDENCIES'
