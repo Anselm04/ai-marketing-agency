@@ -49,7 +49,7 @@ describe('connector callback registry', () => {
       secretConfigured: true,
     });
     expect(webhook.secretCipher).toBeUndefined();
-    expect(records[0].secretCipher).toBe('encrypted:test-secret-value-at-least-16-characters');
+    expect(records[0].secretCipher).toBe('encrypted:strong-test-signing-secret-value');
   });
 
   test('only lists the current owner connector registrations', async () => {
