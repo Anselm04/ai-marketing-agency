@@ -29,7 +29,10 @@ describe('production readiness', () => {
     const store = database();
     const health = await systemHealth(store, true);
     expect(store.checkReadiness).toHaveBeenCalledTimes(1);
-    expect(health.status).toBe('ok');
+    expect(health.readiness.database).toBe(true);
+    // Database readiness alone must not declare the whole system production-ready.
+    // CI does not provision a durable queue, object storage or complete budget guards.
+    expect(health.status).toBe('degraded');
   });
   test.each(['GROQ_API_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'RESEND_API_KEY'])('fails readiness when %s is absent', async (key) => {
     delete process.env[key];

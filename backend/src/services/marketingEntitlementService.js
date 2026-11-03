@@ -30,7 +30,7 @@ function entitlementRank(subscription = {}) {
 
 export function strongestSubscription(subscriptions = []) {
   return subscriptions
-    .filter(activeSubscription)
+    .filter((subscription) => activeSubscription(subscription))
     .slice()
     .sort((a, b) => {
       const left = entitlementRank(a);

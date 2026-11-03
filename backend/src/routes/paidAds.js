@@ -1,5 +1,6 @@
 import express from 'express';
 import Stripe from 'stripe';
+import store from '../utils/store.js';
 import {
   createPaidAdBudget,
   getManagedPaidAdProviders,
@@ -22,6 +23,12 @@ import {
 } from '../services/paidAdvertisingOrchestratorService.js';
 import { validateManagedPaidAdLaunch } from '../services/managedPaidAdsExecutionService.js';
 import { majorToMinor, minorToMajor } from '../services/currencyService.js';
+import {
+  AUTHORIZATION_VERSION,
+  normalizeSpendAuthorization,
+  paidAdAuthorizationModes,
+  summarizeAuthorizedCosts,
+} from '../services/paidAdAuthorizationService.js';
 
 const router = express.Router();
 
@@ -48,6 +55,10 @@ router.get('/', async (req, res) => {
       strictHardStop: true,
       currencyMode: 'provider_account',
       managedProviders: getManagedPaidAdProviders(),
+      authorizationVersion: AUTHORIZATION_VERSION,
+      authorizationModes: paidAdAuthorizationModes,
+      reauthenticationMethods: ['password'],
+      automaticBudgetIncreaseAllowed: false,
       ...paidAdvertisingLimits,
     },
   });
@@ -70,6 +81,12 @@ router.post('/', async (req, res) => {
   try {
     const provider = req.body?.provider;
     const providerAccountId = req.body?.providerAccountId || null;
+    if (req.body?.enabled === true && (!providerAccountId || !req.body?.campaignConfig)) {
+      return res.status(400).json({
+        error: 'A verified advertising account and campaign configuration are required before enabling paid advertising.',
+        code: 'paid_ads_campaign_configuration_required',
+      });
+    }
     let totalBudgetMinor = req.body?.totalBudgetCents;
 
     if (req.body?.totalBudgetMajor != null) {
@@ -95,6 +112,104 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.post('/:id/authorize', async (req, res) => {
+  const budget = await getPaidAdBudget(req.user.id, req.params.id);
+  if (!budget) return res.status(404).json({ error: 'Paid advertising budget not found.' });
+
+  if (req.body?.acceptedAuthorizationTerms !== true) {
+    return res.status(400).json({
+      error: 'Confirm that you understand and authorize the displayed spending limits and cost breakdown.',
+      code: 'paid_ads_authorization_terms_required',
+    });
+  }
+
+  const password = String(req.body?.password || '');
+  if (!password) {
+    return res.status(400).json({
+      error: 'Re-enter your account password to authorize paid advertising.',
+      code: 'paid_ads_reauthentication_required',
+    });
+  }
+
+  const user = await store.findUserById(req.user.id);
+  if (!user?.password) {
+    return res.status(409).json({
+      error: 'This account does not currently have password re-authentication available. Paid advertising cannot be started until a supported strong re-authentication method is configured.',
+      code: 'paid_ads_reauthentication_unavailable',
+    });
+  }
+  if (!(await store.comparePassword(password, user.password))) {
+    return res.status(401).json({
+      error: 'Password confirmation failed.',
+      code: 'paid_ads_reauthentication_failed',
+    });
+  }
+
+  const expectedMajor = minorToMajor(budget.totalBudgetCents, budget.currency);
+  if (Number(req.body?.confirmedTotalBudgetMajor) !== expectedMajor) {
+    return res.status(409).json({
+      error: `Confirm the exact maximum total exposure of ${expectedMajor} ${budget.currency} before starting.`,
+      code: 'paid_ads_total_exposure_confirmation_mismatch',
+    });
+  }
+
+  try {
+    const dailyMediaSpendCapCents = req.body?.dailyMediaSpendCapMajor != null
+      ? majorToMinor(req.body.dailyMediaSpendCapMajor, budget.currency)
+      : Number(req.body?.dailyMediaSpendCapCents);
+    const authorization = normalizeSpendAuthorization({
+      mode: req.body?.mode,
+      totalBudgetCents: budget.totalBudgetCents,
+      mediaSpendCapCents: budget.mediaSpendCapCents,
+      dailyMediaSpendCapCents,
+      currency: budget.currency,
+      confirmedAt: new Date().toISOString(),
+      reauthMethod: 'password',
+    });
+    const costSummary = summarizeAuthorizedCosts({
+      totalBudgetCents: budget.totalBudgetCents,
+      serviceFeeCents: budget.serviceFeeCents,
+      mediaSpendCapCents: budget.mediaSpendCapCents,
+      otherThirdPartyCostsCents: 0,
+      currency: budget.currency,
+    });
+
+    const authorizationEvent = {
+      version: authorization.version,
+      confirmedAt: authorization.confirmedAt,
+      mode: authorization.mode,
+      maxTotalBudgetCents: authorization.maxTotalBudgetCents,
+      maxMediaSpendCents: authorization.maxMediaSpendCents,
+      dailyMediaSpendCapCents: authorization.dailyMediaSpendCapCents,
+      currency: authorization.currency,
+      reauthMethod: authorization.reauthMethod,
+      termsAccepted: true,
+    };
+    const history = Array.isArray(budget.authorizationHistory) ? budget.authorizationHistory : [];
+    const updated = await store.updateContent(budget.id, {
+      spendAuthorization: authorizationEvent,
+      authorizationHistory: [...history, authorizationEvent],
+      authorizedCostSummary: costSummary,
+      enabled: true,
+      status: budget.serviceFeePaidAt ? (budget.providerCampaignId ? 'active' : 'ready') : 'service_fee_required',
+      pausedAt: null,
+      hardStopReason: null,
+      updatedAt: new Date().toISOString(),
+    });
+    return res.json({
+      success: true,
+      budget: updated,
+      authorization: authorizationEvent,
+      costSummary,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      error: error.message || 'Paid advertising authorization is invalid.',
+      code: error.code || 'paid_ads_authorization_invalid',
+    });
+  }
+});
+
 router.patch('/:id', async (req, res) => {
   try {
     if (req.body?.enabled === false) {
@@ -105,6 +220,13 @@ router.patch('/:id', async (req, res) => {
 
     const current = await getPaidAdBudget(req.user.id, req.params.id);
     if (!current) return res.status(404).json({ error: 'Paid advertising budget not found.' });
+
+    if (req.body?.enabled === true && !current.spendAuthorization) {
+      return res.status(409).json({
+        error: 'Authorize the exact spending limits before enabling paid advertising.',
+        code: 'paid_ads_authorization_required',
+      });
+    }
 
     const updates = {};
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'enabled')) updates.enabled = req.body.enabled;
@@ -132,7 +254,12 @@ router.patch('/:id', async (req, res) => {
 router.post('/:id/service-fee-checkout', async (req, res) => {
   const budget = await getPaidAdBudget(req.user.id, req.params.id);
   if (!budget) return res.status(404).json({ error: 'Paid advertising budget not found.' });
-  if (!budget.enabled) return res.status(400).json({ error: 'Enable paid advertising before checkout.' });
+  if (!budget.enabled || !budget.spendAuthorization) {
+    return res.status(400).json({
+      error: 'Authorize the spending limits before checkout.',
+      code: 'paid_ads_authorization_required',
+    });
+  }
   if (budget.serviceFeePaidAt) return res.json({ alreadyPaid: true, budget });
 
   const checkoutPolicy = paidAdServiceFeeCheckoutPolicy(budget.provider);
@@ -215,6 +342,13 @@ router.post('/:id/activate', async (req, res) => {
     if (result.error === 'campaign_configuration_required') {
       return res.status(409).json({ error: 'Select a verified advertising account and complete the campaign configuration before activation.', code: 'paid_ads_campaign_configuration_required', budget: result.budget });
     }
+    if (result.error === 'authorization_required') {
+      return res.status(409).json({
+        error: 'Customer spend authorization is required before activation.',
+        code: result.authorizationCode || 'paid_ads_authorization_required',
+        budget: result.budget,
+      });
+    }
     if (result.error === 'service_fee_required') {
       return res.status(402).json({ error: 'The TrillionAI service fee must be paid before paid advertising can be activated.', code: 'paid_ads_service_fee_required', budget: result.budget });
     }
@@ -226,7 +360,7 @@ router.post('/:id/activate', async (req, res) => {
     }
     return res.json({
       success: true,
-      message: 'Provider campaign launched with the configured provider-side budget controls.',
+      message: 'Provider campaign launched within the customer-authorized spending limits.',
       budget: result.budget,
       provider: result.launch,
     });

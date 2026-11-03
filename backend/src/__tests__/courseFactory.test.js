@@ -12,7 +12,7 @@ describe('Course Factory API', () => {
 
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ email, password: 'SecurePass123!', firstName: 'Course', lastName: 'Creator' });
+      .send({ email, acceptedTerms: true, password: 'SecurePass123!', firstName: 'Course', lastName: 'Creator' });
     token = res.body.token;
     const user = await store.findUserByEmail(email);
     await store.createSubscription({
@@ -26,7 +26,7 @@ describe('Course Factory API', () => {
 
     const otherRes = await request(app)
       .post('/api/auth/register')
-      .send({ email: otherEmail, password: 'SecurePass123!', firstName: 'Other', lastName: 'Creator' });
+      .send({ email: otherEmail, acceptedTerms: true, password: 'SecurePass123!', firstName: 'Other', lastName: 'Creator' });
     otherToken = otherRes.body.token;
     const otherUser = await store.findUserByEmail(otherEmail);
     await store.createSubscription({

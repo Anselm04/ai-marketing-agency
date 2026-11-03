@@ -157,7 +157,7 @@ describe('Social API', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 
-  test('POST /api/social/publish - publishes content', async () => {
+  test('POST /api/social/publish - refuses publishing without an explicit destination', async () => {
     const res = await request(app)
       .post('/api/social/publish')
       .set('Authorization', `Bearer ${authToken}`)
@@ -165,9 +165,8 @@ describe('Social API', () => {
         caption: 'Test post',
         hashtags: ['test', 'marketing'],
       });
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(Array.isArray(res.body.results)).toBe(true);
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('social_platform_required');
   });
 });
 
