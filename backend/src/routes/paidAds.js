@@ -98,7 +98,7 @@ router.post('/', async (req, res) => {
       providerAccountId,
       campaignConfig: req.body?.campaignConfig || null,
       totalBudgetCents: totalBudgetMinor,
-      enabled: false,
+      enabled: req.body?.enabled,
     });
     return res.status(201).json(budget);
   } catch (error) {
@@ -109,6 +109,13 @@ router.post('/', async (req, res) => {
 router.post('/:id/authorize', async (req, res) => {
   const budget = await getPaidAdBudget(req.user.id, req.params.id);
   if (!budget) return res.status(404).json({ error: 'Paid advertising budget not found.' });
+
+  if (req.body?.acceptedAuthorizationTerms !== true) {
+    return res.status(400).json({
+      error: 'Confirm that you understand and authorize the displayed spending limits and cost breakdown.',
+      code: 'paid_ads_authorization_terms_required',
+    });
+  }
 
   const password = String(req.body?.password || '');
   if (!password) {
@@ -170,6 +177,7 @@ router.post('/:id/authorize', async (req, res) => {
       dailyMediaSpendCapCents: authorization.dailyMediaSpendCapCents,
       currency: authorization.currency,
       reauthMethod: authorization.reauthMethod,
+      termsAccepted: true,
     };
     const history = Array.isArray(budget.authorizationHistory) ? budget.authorizationHistory : [];
     const updated = await store.updateContent(budget.id, {
@@ -329,7 +337,11 @@ router.post('/:id/activate', async (req, res) => {
       return res.status(409).json({ error: 'Select a verified advertising account and complete the campaign configuration before activation.', code: 'paid_ads_campaign_configuration_required', budget: result.budget });
     }
     if (result.error === 'authorization_required') {
-      return res.status(409).json({ error: 'Customer spend authorization is required before activation.', code: 'paid_ads_authorization_required', budget: result.budget });
+      return res.status(409).json({
+        error: 'Customer spend authorization is required before activation.',
+        code: result.authorizationCode || 'paid_ads_authorization_required',
+        budget: result.budget,
+      });
     }
     if (result.error === 'service_fee_required') {
       return res.status(402).json({ error: 'The TrillionAI service fee must be paid before paid advertising can be activated.', code: 'paid_ads_service_fee_required', budget: result.budget });
