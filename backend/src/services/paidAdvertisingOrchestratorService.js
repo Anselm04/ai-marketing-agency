@@ -11,6 +11,7 @@ import {
   readManagedPaidAdSpend,
 } from './managedPaidAdsExecutionService.js';
 import { assertAuthorizationCoversBudget } from './paidAdAuthorizationService.js';
+import { applyDailySpendSnapshot, providerLocalDate } from './paidAdDailySpendService.js';
 
 function orchestrationError(message, code, cause = null) {
   const error = new Error(message);
@@ -55,7 +56,7 @@ export async function activateManagedPaidAdBudget(userId, budgetId) {
     });
     return { budget: updated, launch };
   } catch (error) {
-    const updated = await store.updateContent(budget.id, {
+    await store.updateContent(budget.id, {
       status: 'provider_launch_failed',
       providerLaunchError: error.code || 'paid_ads_provider_launch_failed',
       providerPartialResources: error.providerResources || null,
@@ -97,6 +98,7 @@ export async function reconcileManagedPaidAdBudget(userId, budgetId) {
   const current = await getPaidAdBudget(userId, budgetId);
   if (!current) return null;
   if (!current.providerCampaignId) return current;
+  if (current.status === 'daily_capped') return current;
 
   try {
     assertAuthorizationCoversBudget(current.spendAuthorization, current);
@@ -132,6 +134,15 @@ export async function reconcileManagedPaidAdBudget(userId, budgetId) {
     Number(current.mediaSpendCapCents || 0),
     Number(current.spendAuthorization?.maxMediaSpendCents || 0),
   );
+  const currentDate = providerLocalDate(current.providerAccount?.timezone || 'UTC');
+  const daily = applyDailySpendSnapshot({
+    previousProviderTotalCents: current.reportedMediaSpendCents,
+    currentProviderTotalCents: spendMinor,
+    previousDailySpendCents: current.dailyMediaSpendCents,
+    previousDailySpendDate: current.dailySpendDate,
+    currentDate,
+    dailyCapCents: current.spendAuthorization?.dailyMediaSpendCapCents,
+  });
   const exhausted = spendMinor >= authorizedCap;
 
   if (exhausted && current.status !== 'hard_stopped') {
@@ -143,6 +154,8 @@ export async function reconcileManagedPaidAdBudget(userId, budgetId) {
         hardStopReason: 'spend_limit_pause_failed',
         reportedMediaSpendCents: spendMinor,
         remainingMediaBudgetCents: 0,
+        dailySpendDate: daily.dailySpendDate,
+        dailyMediaSpendCents: daily.dailySpendCents,
         updatedAt: new Date().toISOString(),
       });
       throw orchestrationError(
@@ -153,11 +166,48 @@ export async function reconcileManagedPaidAdBudget(userId, budgetId) {
     }
   }
 
-  return recordProviderSpend({
+  if (!exhausted && daily.dailyCapReached) {
+    try {
+      await pauseManagedPaidAdCampaign(userId, current);
+    } catch (error) {
+      await store.updateContent(current.id, {
+        status: 'provider_pause_failed',
+        hardStopReason: 'daily_spend_cap_pause_failed',
+        reportedMediaSpendCents: spendMinor,
+        remainingMediaBudgetCents: Math.max(0, authorizedCap - spendMinor),
+        dailySpendDate: daily.dailySpendDate,
+        dailyMediaSpendCents: daily.dailySpendCents,
+        updatedAt: new Date().toISOString(),
+      });
+      throw orchestrationError(
+        'The customer daily spend cap was reached but the provider did not confirm the campaign pause.',
+        'paid_ads_daily_cap_stop_failed',
+        error,
+      );
+    }
+
+    return store.updateContent(current.id, {
+      reportedMediaSpendCents: spendMinor,
+      remainingMediaBudgetCents: Math.max(0, authorizedCap - spendMinor),
+      status: 'daily_capped',
+      pausedAt: new Date().toISOString(),
+      hardStopReason: 'daily_spend_cap_reached',
+      dailySpendDate: daily.dailySpendDate,
+      dailyMediaSpendCents: daily.dailySpendCents,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  const recorded = await recordProviderSpend({
     userId,
     budgetId,
     spendCents: spendMinor,
     providerCampaignId: current.providerCampaignId,
+  });
+  return store.updateContent(recorded.id, {
+    dailySpendDate: daily.dailySpendDate,
+    dailyMediaSpendCents: daily.dailySpendCents,
+    updatedAt: new Date().toISOString(),
   });
 }
 
