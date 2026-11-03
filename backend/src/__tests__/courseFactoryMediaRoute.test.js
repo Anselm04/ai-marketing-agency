@@ -9,7 +9,7 @@ describe('Course Factory lesson media production API', () => {
     const email = `course-media-${Date.now()}@example.com`;
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ email, password: 'SecurePass123!', firstName: 'Media', lastName: 'Creator' });
+      .send({ email, acceptedTerms: true, password: 'SecurePass123!', firstName: 'Media', lastName: 'Creator' });
     token = res.body.token;
     const user = await store.findUserByEmail(email);
     await store.createSubscription({
