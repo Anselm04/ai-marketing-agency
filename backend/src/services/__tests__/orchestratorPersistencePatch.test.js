@@ -33,6 +33,9 @@ jest.unstable_mockModule('../orchestratorConnectorHealthPatch.js', () => ({ inst
 jest.unstable_mockModule('../orchestratorAiFallbackPatch.js', () => ({ installOrchestratorAiFallbackPatch }));
 jest.unstable_mockModule('../connectors/index.js', () => ({
   allConnectors: [{ id: 'connector-a', name: 'Connector A', category: 'crm' }],
+  getConnectorById: jest.fn((connectorId) => (connectorId === 'connector-a'
+    ? { id: 'connector-a', name: 'Connector A', category: 'crm' }
+    : null)),
 }));
 
 const fakeService = {
