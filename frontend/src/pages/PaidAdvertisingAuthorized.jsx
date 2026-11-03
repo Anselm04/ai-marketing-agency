@@ -5,6 +5,7 @@ import PaidAdAuthorizationPanel from '../components/PaidAdAuthorizationPanel'
 
 export default function PaidAdvertisingAuthorized() {
   const [budgets, setBudgets] = useState([])
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const loadBudgets = async () => {
     const res = await api.get('/paid-ads')
@@ -13,15 +14,18 @@ export default function PaidAdvertisingAuthorized() {
 
   useEffect(() => {
     loadBudgets().catch(() => {})
+    const timer = window.setInterval(() => loadBudgets().catch(() => {}), 5000)
+    return () => window.clearInterval(timer)
   }, [])
 
   const handleAuthorized = (updated) => {
     setBudgets((current) => current.map((item) => item.id === updated.id ? updated : item))
+    setRefreshKey((value) => value + 1)
   }
 
   return (
     <div className="space-y-6">
-      <PaidAdvertising />
+      <PaidAdvertising key={refreshKey} />
 
       {budgets.length > 0 && (
         <section className="space-y-4 max-w-5xl">
