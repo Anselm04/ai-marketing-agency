@@ -27,7 +27,7 @@ const sharedClassification = { category: 'marketing', complexity: 'medium', urge
 jest.unstable_mockModule('../../utils/store.js', () => ({
   default: { createContent, getContentByOwner, updateContent, deleteContent },
 }));
-jest.unstable_mockModule('../appConnector.js', () => ({ getTokens }));
+jest.unstable_mockModule('../appConnector.js', () => ({ getTokens, checkRateLimit: jest.fn(() => true) }));
 jest.unstable_mockModule('../connectorUserHealthService.js', () => ({ getUserConnectorHealth }));
 jest.unstable_mockModule('../orchestratorConnectorHealthPatch.js', () => ({ installOrchestratorConnectorHealthPatch }));
 jest.unstable_mockModule('../orchestratorAiFallbackPatch.js', () => ({ installOrchestratorAiFallbackPatch }));
