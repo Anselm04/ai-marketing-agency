@@ -19,7 +19,8 @@ jobs:
           set -euo pipefail
           npm pkg set 'dependencies.qs=6.17.1' 'overrides.qs=6.17.1'
           npm install --package-lock-only --ignore-scripts --no-fund --no-audit
+          npm audit fix --package-lock-only --ignore-scripts --no-fund || true
           npm audit --omit=dev --audit-level=moderate || true
           echo 'BEGIN_PACKAGE_REPAIRS_JSON'
-          node -e 'const fs=require("fs");for(const name of ["package.json","package-lock.json"]){const c=fs.readFileSync(name,"utf8");console.log("FILE_BEGIN:"+name);for(let i=0;i<c.length;i+=8000)console.log("FILE_CHUNK:"+JSON.stringify(c.slice(i,i+6000)));console.log("FILE_END:"+name)}'
+          node -e 'const fs=require("fs");for(const name of ["package.json","package-lock.json"]){const c=fs.readFileSync(name,"utf8");console.log("FILE_BEGIN:"+name);for(let i=0;i<c.length;i+=6000)console.log("FILE_CHUNK:"+JSON.stringify(c.slice(i,i+6000)));console.log("FILE_END:"+name)}'
           echo 'END_PACKAGE_REPAIRS_JSON'
