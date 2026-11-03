@@ -58,7 +58,7 @@ async function publishOneWithQuota({ userId, platform, content, metadata = {} })
     return honest;
   } finally {
     if (reservation?.id) {
-      await releaseQuotaReservation(reservation.id).catch(() => {});
+      await Promise.resolve(releaseQuotaReservation(reservation.id)).catch(() => {});
     }
   }
 }
