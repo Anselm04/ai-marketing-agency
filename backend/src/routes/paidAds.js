@@ -81,6 +81,12 @@ router.post('/', async (req, res) => {
   try {
     const provider = req.body?.provider;
     const providerAccountId = req.body?.providerAccountId || null;
+    if (req.body?.enabled === true && (!providerAccountId || !req.body?.campaignConfig)) {
+      return res.status(400).json({
+        error: 'A verified advertising account and campaign configuration are required before enabling paid advertising.',
+        code: 'paid_ads_campaign_configuration_required',
+      });
+    }
     let totalBudgetMinor = req.body?.totalBudgetCents;
 
     if (req.body?.totalBudgetMajor != null) {
