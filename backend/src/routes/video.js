@@ -44,7 +44,7 @@ router.post('/storyboard', asyncRoute(async (req, res) => {
 router.post('/thumbnails', asyncRoute(async (req, res) => {
   const { topic, brandColors } = req.body || {};
   if (!String(topic || '').trim()) throw videoInputError('Topic is required.', 'video_topic_required');
-  const result = requireRealVideoAiResult(await videoStudio.suggestThumbnails(String(topic).trim(), String(brandColors || '').trim())));
+  const result = requireRealVideoAiResult(await videoStudio.suggestThumbnails(String(topic).trim(), String(brandColors || '').trim()));
   res.json(result);
 }));
 
