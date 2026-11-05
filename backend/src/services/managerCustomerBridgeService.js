@@ -13,7 +13,7 @@ function endpoint() {
 }
 export async function managerCustomerCommand({userId,operation,payload},request=fetch) {
   if(typeof userId!=='string' && typeof userId!=='number')throw Error('customer_identity_required');
-  const allowed=new Set(['brief.save','brief.confirm','brief.list','growth.preferences','growth.submit','growth.state','growth.assess','growth.review','growth.erase','automation.status','automation.set']);
+  const allowed=new Set(['brief.save','brief.confirm','brief.list','growth.preferences','growth.submit','growth.state','growth.assess','growth.review','growth.erase','automation.status','automation.set','campaign.list','campaign.propose','campaign.review']);
   if(!allowed.has(operation))throw Error('manager_command_not_allowed');
   const {url,secret}=endpoint();
   const sourceUserId=String(userId);
