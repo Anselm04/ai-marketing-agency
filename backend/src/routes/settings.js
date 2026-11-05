@@ -57,8 +57,8 @@ router.post('/growth/reports', async (req, res) => {
   }
   const { period, method, value, note = '' } = req.body || {};
   if (!growthMethods.has(method) || typeof period !== 'string'
-      || (settings.cadence === 'monthly' && !/^\\d{4}-(0[1-9]|1[0-2])$/.test(period))
-      || (settings.cadence === 'weekly' && !/^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$/.test(period))
+      || (settings.cadence === 'monthly' && !/^\d{4}-(0[1-9]|1[0-2])$/.test(period))
+      || (settings.cadence === 'weekly' && !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(period))
       || (method === 'direction' && !['up', 'same', 'down'].includes(value))
       || (method === 'scale' && (!Number.isInteger(value) || value < 1 || value > 5))
       || (method === 'count' && (settings.level !== 'counts' || !Number.isSafeInteger(value) || Math.abs(value) > 1000000))
