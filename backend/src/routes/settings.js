@@ -89,7 +89,7 @@ router.delete('/growth/reports', async (req, res) => {
 router.post('/manager-sync', async (req, res) => {
   try {
     const operation=req.body?.operation;
-    if(!['brief.save','brief.confirm','brief.list','growth.preferences','growth.submit','growth.state','growth.assess','growth.review'].includes(operation)) {
+    if(!['brief.save','brief.confirm','brief.list','growth.preferences','growth.submit','growth.state','growth.assess','growth.review','growth.erase'].includes(operation)) {
       return res.status(400).json({error:'Unsupported Manager coordination request.'});
     }
     const payload=req.body?.payload;
