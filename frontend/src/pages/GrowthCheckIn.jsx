@@ -24,6 +24,8 @@ export default function GrowthCheckIn() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [assessment, setAssessment] = useState(null)
+  const [shareWithManager, setShareWithManager] = useState(false)
+  const [managerSynced, setManagerSynced] = useState(false)
   const [recommendationReviews, setRecommendationReviews] = useState({})
   const [assessmentBusy, setAssessmentBusy] = useState(false)
   const [assessmentError, setAssessmentError] = useState('')
@@ -44,7 +46,16 @@ export default function GrowthCheckIn() {
     try {
       const normalized = settings.level === 'none' ? { ...settings, cadence: 'off' } : settings
       const { data } = await api.put('/settings/growth/preferences', { ...normalized, understoodLimitations: ack })
-      setSettings(data.settings); setActiveSettings(data.settings); setAssessment(null); setForm({method:'direction',value:'same',note:''}); setNotice('Your reporting preferences were saved.')
+      setSettings(data.settings); setActiveSettings(data.settings); setAssessment(null); setManagerSynced(false); setForm({method:'direction',value:'same',note:''})
+      if(shareWithManager){
+        try{
+          await api.post('/settings/manager-sync', {operation:'growth.preferences',payload:{level:data.settings.level,cadence:data.settings.cadence,understoodLimitations:true}})
+          setManagerSynced(data.settings.level!=='none')
+          setNotice('Preferences saved in Marketing and shared with Manager as requested.')
+        }catch{
+          setNotice('Marketing preferences saved. Manager synchronisation is unavailable; no information was sent successfully.')
+        }
+      }else setNotice('Your reporting preferences were saved in Marketing only.')
     } catch (e) { setError(e.response?.data?.error || 'Could not save preferences.') }
     finally { setBusy(false) }
   }
@@ -54,13 +65,20 @@ export default function GrowthCheckIn() {
     try {
       const value = form.method === 'direction' ? form.value : Number(form.value)
       const { data } = await api.post('/settings/growth/reports', { period: currentPeriod(activeSettings.cadence), method: form.method, value, note: form.note })
-      setReports((old) => [...old, data]); setAssessment(null); setNotice('Your private growth update was saved. It is not verified sales or revenue data.')
+      setReports((old) => [...old, data]); setAssessment(null)
+      if(shareWithManager && managerSynced){
+        try{
+          await api.post('/settings/manager-sync',{operation:'growth.submit',payload:{period:data.period,method:data.method,value:data.value,note:data.note||''}})
+          setNotice('Growth update saved and sent to Manager for advisory review. No revenue verification is implied.')
+        }catch{setNotice('Growth update saved in Marketing. Manager did not confirm receipt; please review your connection before using its recommendations.')}
+      }else setNotice('Your private growth update was saved in Marketing only. It is not verified sales or revenue data.')
     } catch (e) { setError(e.response?.data?.error || 'Unable to save growth feedback.') }
     finally { setBusy(false) }
   }
   const requestAssessment = async () => {
     setAssessmentBusy(true); setAssessmentError('')
     try {
+      if(!shareWithManager || !managerSynced){setAssessmentError('To use Manager recommendations, first choose to share your growth feedback and save your privacy preference.');return}
       const { data } = await api.post('/settings/manager-sync', {operation:'growth.assess',payload:{}})
       setAssessment(data); setRecommendationReviews({})
     } catch (e) {
@@ -111,6 +129,7 @@ export default function GrowthCheckIn() {
         </label>}
         <p className="text-sm text-gray-600 dark:text-gray-300">More reliable information can improve recommendations, but does not guarantee more paying customers or revenue. We remain responsible for delivering the marketing service you purchased. You can change your choice later.</p>
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)} className="mt-1"/><span>I understand that limited business results restrict revenue-based measurement and optimisation. I choose my reporting level voluntarily.</span></label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={shareWithManager} onChange={(e)=>{setShareWithManager(e.target.checked);setManagerSynced(false);setAssessment(null)}} className="mt-1"/><span>Optional: also share my selected growth check-ins with TrillionAI Manager so it can suggest improvements. Without this choice the information stays within Marketing. This does not enable paid automation or authorise spending.</span></label>
         <button type="button" disabled={busy || !ack} onClick={save} className="rounded-lg bg-blue-700 text-white px-4 py-2 disabled:opacity-50">Save my preferences</button>
       </section>
       {activeSettings.level !== 'none' && activeSettings.cadence !== 'off' && <section className="p-5 rounded-xl border bg-white dark:bg-gray-800 dark:border-gray-700 space-y-4">
