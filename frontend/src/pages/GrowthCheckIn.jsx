@@ -23,6 +23,10 @@ export default function GrowthCheckIn() {
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
+  const [assessment, setAssessment] = useState(null)
+  const [recommendationReviews, setRecommendationReviews] = useState({})
+  const [assessmentBusy, setAssessmentBusy] = useState(false)
+  const [assessmentError, setAssessmentError] = useState('')
   const [error, setError] = useState('')
   useEffect(() => {
     let live = true
@@ -40,7 +44,7 @@ export default function GrowthCheckIn() {
     try {
       const normalized = settings.level === 'none' ? { ...settings, cadence: 'off' } : settings
       const { data } = await api.put('/settings/growth/preferences', { ...normalized, understoodLimitations: ack })
-      setSettings(data.settings); setActiveSettings(data.settings); setForm({method:'direction',value:'same',note:''}); setNotice('Your reporting preferences were saved.')
+      setSettings(data.settings); setActiveSettings(data.settings); setAssessment(null); setForm({method:'direction',value:'same',note:''}); setNotice('Your reporting preferences were saved.')
     } catch (e) { setError(e.response?.data?.error || 'Could not save preferences.') }
     finally { setBusy(false) }
   }
@@ -50,14 +54,36 @@ export default function GrowthCheckIn() {
     try {
       const value = form.method === 'direction' ? form.value : Number(form.value)
       const { data } = await api.post('/settings/growth/reports', { period: currentPeriod(activeSettings.cadence), method: form.method, value, note: form.note })
-      setReports((old) => [...old, data]); setNotice('Your private growth update was saved. It is not verified sales or revenue data.')
+      setReports((old) => [...old, data]); setAssessment(null); setNotice('Your private growth update was saved. It is not verified sales or revenue data.')
     } catch (e) { setError(e.response?.data?.error || 'Unable to save growth feedback.') }
     finally { setBusy(false) }
+  }
+  const requestAssessment = async () => {
+    setAssessmentBusy(true); setAssessmentError('')
+    try {
+      const { data } = await api.post('/settings/manager-sync', {operation:'growth.assess',payload:{}})
+      setAssessment(data); setRecommendationReviews({})
+    } catch (e) {
+      setAssessmentError(e.response?.data?.error || 'Manager recommendations are unavailable. Your existing marketing tools remain available.')
+    } finally { setAssessmentBusy(false) }
+  }
+  const reviewRecommendation = async (code,decision) => {
+    if(!assessment?.assessmentId) return
+    setAssessmentBusy(true);setAssessmentError('')
+    try {
+      const {data} = await api.post('/settings/manager-sync', {
+        operation:'growth.review',
+        payload:{assessmentId:assessment.assessmentId,code,decision},
+      })
+      setRecommendationReviews(old=>({...old,[code]:data.status}))
+    } catch (e) {
+      setAssessmentError(e.response?.data?.error || 'The recommendation could not be reviewed. Refresh your assessment and try again.')
+    } finally { setAssessmentBusy(false) }
   }
   const clearReports = async () => {
     if (!window.confirm('Delete all your saved growth check-ins? This cannot be undone.')) return
     setBusy(true);setError('');setNotice('')
-    try { await api.delete('/settings/growth/reports');setReports([]);setNotice('Your saved check-ins were deleted.') }
+    try { await api.delete('/settings/growth/reports');setReports([]);setAssessment(null);setNotice('Your saved check-ins were deleted.') }
     catch (e) { setError(e.response?.data?.error || 'Unable to delete check-ins.') }
     finally { setBusy(false) }
   }
@@ -111,6 +137,28 @@ export default function GrowthCheckIn() {
           <button type="submit" disabled={busy} className="rounded-lg bg-blue-700 text-white px-4 py-2 disabled:opacity-50">Save my check-in</button>
         </form>
       </section>}
+      <section className="p-5 rounded-xl border bg-white dark:bg-gray-800 dark:border-gray-700 space-y-3" aria-label="AI Manager recommendations">
+        <div className="flex justify-between gap-2 flex-wrap items-center">
+          <div><h2 className="font-semibold text-lg">Manager's marketing recommendations</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">Optional advice based on results you choose to share. No campaigns or spending are changed automatically.</p></div>
+          <button type="button" disabled={assessmentBusy} onClick={requestAssessment} className="rounded-lg border border-blue-600 text-blue-700 dark:text-blue-300 px-3 py-2 text-sm disabled:opacity-50">Review my results</button>
+        </div>
+        {assessmentError && <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">{assessmentError}</p>}
+        {assessment && <div className="space-y-3" aria-live="polite">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Evidence confidence: {assessment.confidence} · {assessment.reportCount} voluntary check-ins · Revenue verified: no</p>
+          <p className="text-sm">{assessment.message}</p>
+          {(assessment.recommendations || []).map((item) => <article key={item.code} className="p-3 border dark:border-gray-700 rounded-lg space-y-2">
+            <h3 className="font-semibold">{item.title}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-300">{item.reason}</p>
+            {recommendationReviews[item.code]
+              ? <p className="text-sm">Your choice: {recommendationReviews[item.code] === 'declined' ? 'Declined' : 'Approved for planning only — no task has been executed'}</p>
+              : item.requiresCustomerApproval && <div className="flex gap-2 flex-wrap">
+                <button type="button" disabled={assessmentBusy} onClick={()=>reviewRecommendation(item.code,'approve')} className="rounded-lg bg-blue-700 text-white px-3 py-2 text-sm disabled:opacity-50">Approve planning</button>
+                <button type="button" disabled={assessmentBusy} onClick={()=>reviewRecommendation(item.code,'decline')} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50">Not now</button>
+              </div>}
+          </article>)}
+        </div>}
+      </section>
       <section className="p-5 rounded-xl border bg-white dark:bg-gray-800 dark:border-gray-700 space-y-3">
         <div className="flex justify-between gap-3 flex-wrap items-center"><h2 className="font-semibold">Past check-ins ({reports.length})</h2>
         {reports.length>0&&<button type="button" disabled={busy} onClick={clearReports} className="flex items-center gap-1 text-sm text-red-600 disabled:opacity-50"><Trash2 size={15}/> Delete history</button>}</div>
