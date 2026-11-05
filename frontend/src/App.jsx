@@ -13,6 +13,7 @@ import Campaigns from './pages/Campaigns'
 import Analytics from './pages/Analytics'
 import GrowthCheckIn from './pages/GrowthCheckIn'
 import ManagerControls from './pages/ManagerControls'
+import ManagerQuotes from './pages/ManagerQuotes'
 import Legal from './pages/Legal'
 import Social from './pages/Social'
 import ContentStudio from './pages/ContentStudio'
@@ -77,6 +78,7 @@ function AppRoutes() {
         <Route path="analytics" element={<Analytics />} />
         <Route path="growth" element={<GrowthCheckIn />} />
         <Route path="manager" element={<ManagerControls />} />
+        <Route path="manager-quotes" element={<ManagerQuotes />} />
         <Route path="legal" element={<Legal />} />
         <Route path="content" element={<ContentStudio />} />
         <Route path="video" element={<VideoStudio />} />
