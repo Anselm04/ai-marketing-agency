@@ -185,6 +185,13 @@ export default function GrowthCheckIn() {
         {assessmentError && <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">{assessmentError}</p>}
         {assessment && <div className="space-y-3" aria-live="polite">
           <p className="text-xs text-gray-500 dark:text-gray-400">Evidence confidence: {assessment.confidence} · {assessment.reportCount} voluntary check-ins · Revenue verified: no</p>
+          {assessment.marketingSignals && <div className="rounded-lg border dark:border-gray-700 p-3 space-y-1">
+            <h3 className="text-sm font-semibold">Marketing campaign evidence</h3>
+            <p className="text-sm">Campaigns recorded: {assessment.marketingSignals.campaignCount}</p>
+            <p className="text-sm">Campaigns with verified revenue and spend metric provenance: {assessment.marketingSignals.providerVerifiedPairedCampaigns}</p>
+            <p className="text-sm">Leads in your Marketing workspace (not attributed): {assessment.marketingSignals.unattributedLeadCount}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{assessment.marketingSignals.note}</p>
+          </div>}
           <p className="text-sm">{assessment.message}</p>
           {(assessment.recommendations || []).map((item) => <article key={item.code} className="p-3 border dark:border-gray-700 rounded-lg space-y-2">
             <h3 className="font-semibold">{item.title}</h3>
