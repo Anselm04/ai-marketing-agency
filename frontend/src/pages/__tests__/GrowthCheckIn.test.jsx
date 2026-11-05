@@ -3,11 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import GrowthCheckIn from '../GrowthCheckIn'
 
-const get=vi.fn()
-const put=vi.fn()
-const post=vi.fn()
-const del=vi.fn()
-vi.mock('../../services/api',()=>({default:{get,put,post,delete:del}}))
+const mocks=vi.hoisted(()=>({get:vi.fn(),put:vi.fn(),post:vi.fn(),del:vi.fn()}))
+const {get,put,post,del}=mocks
+vi.mock('../../services/api',()=>({default:{get:mocks.get,put:mocks.put,post:mocks.post,delete:mocks.del}}))
 
 beforeEach(()=>{
   get.mockReset();put.mockReset();post.mockReset();del.mockReset()
