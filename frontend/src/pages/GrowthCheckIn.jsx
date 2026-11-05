@@ -98,10 +98,30 @@ export default function GrowthCheckIn() {
       setAssessmentError(e.response?.data?.error || 'The recommendation could not be reviewed. Refresh your assessment and try again.')
     } finally { setAssessmentBusy(false) }
   }
+  const eraseManagerFeedback = async () => {
+    setBusy(true);setError('');setNotice('')
+    try {
+      await api.post('/settings/manager-sync',{operation:'growth.erase',payload:{}})
+      setManagerSynced(false);setAssessment(null)
+      setNotice('Manager confirmed deletion of shared growth reports and measurement preferences.')
+    } catch (e) {
+      setError(e.response?.data?.error || 'Manager could not confirm erasure. Your Marketing data remains under your existing preferences.')
+    } finally { setBusy(false) }
+  }
   const clearReports = async () => {
     if (!window.confirm('Delete all your saved growth check-ins? This cannot be undone.')) return
     setBusy(true);setError('');setNotice('')
-    try { await api.delete('/settings/growth/reports');setReports([]);setAssessment(null);setNotice('Your saved check-ins were deleted.') }
+    try {
+      await api.delete('/settings/growth/reports')
+      setReports([]);setAssessment(null)
+      try {
+        await api.post('/settings/manager-sync',{operation:'growth.erase',payload:{}})
+        setManagerSynced(false)
+        setNotice('Your Marketing growth check-ins were deleted, and Manager confirmed erasure of its growth feedback.')
+      } catch {
+        setNotice('Marketing growth check-ins were deleted. Manager erasure could not be confirmed. Use "Remove Manager feedback" below to retry.')
+      }
+    }
     catch (e) { setError(e.response?.data?.error || 'Unable to delete check-ins.') }
     finally { setBusy(false) }
   }
@@ -179,7 +199,7 @@ export default function GrowthCheckIn() {
         </div>}
       </section>
       <section className="p-5 rounded-xl border bg-white dark:bg-gray-800 dark:border-gray-700 space-y-3">
-        <div className="flex justify-between gap-3 flex-wrap items-center"><h2 className="font-semibold">Past check-ins ({reports.length})</h2>
+        <div className="flex justify-between gap-3 flex-wrap items-center"><h2 className="font-semibold">Past check-ins ({reports.length})</h2><button type="button" disabled={busy} onClick={eraseManagerFeedback} className="text-xs underline text-amber-700 dark:text-amber-300 disabled:opacity-50">Remove Manager feedback</button>
         {reports.length>0&&<button type="button" disabled={busy} onClick={clearReports} className="flex items-center gap-1 text-sm text-red-600 disabled:opacity-50"><Trash2 size={15}/> Delete history</button>}</div>
         {reports.length===0 ? <p className="text-sm text-gray-500">No results shared yet. That's completely fine.</p> : <ul className="space-y-2">{[...reports].reverse().map((r)=><li key={r.period} className="border dark:border-gray-700 rounded-lg p-3 text-sm"><strong>{r.period}</strong> — {r.method==='direction'?r.value:r.method==='scale'?r.value+' out of 5':(r.value>0?'+':'')+r.value+' customers'}<span className="block text-xs text-gray-500">Self-reported, not verified revenue</span></li>)}</ul>}
       </section>
