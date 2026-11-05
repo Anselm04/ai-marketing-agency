@@ -16,6 +16,7 @@ function currentPeriod(cadence) {
 }
 export default function GrowthCheckIn() {
   const [settings, setSettings] = useState(defaultSettings)
+  const [activeSettings, setActiveSettings] = useState(defaultSettings)
   const [reports, setReports] = useState([])
   const [form, setForm] = useState({ method: 'direction', value: 'same', note: '' })
   const [ack, setAck] = useState(false)
@@ -28,6 +29,7 @@ export default function GrowthCheckIn() {
     api.get('/settings/growth').then(({ data }) => {
       if (!live) return
       setSettings(data.settings || defaultSettings)
+      setActiveSettings(data.settings || defaultSettings)
       setReports(data.reports || [])
       setLoading(false)
     }).catch(() => { if (live) { setError('Unable to load growth preferences.'); setLoading(false) } })
@@ -38,7 +40,7 @@ export default function GrowthCheckIn() {
     try {
       const normalized = settings.level === 'none' ? { ...settings, cadence: 'off' } : settings
       const { data } = await api.put('/settings/growth/preferences', { ...normalized, understoodLimitations: ack })
-      setSettings(data.settings); setNotice('Your reporting preferences were saved.')
+      setSettings(data.settings); setActiveSettings(data.settings); setForm({method:'direction',value:'same',note:''}); setNotice('Your reporting preferences were saved.')
     } catch (e) { setError(e.response?.data?.error || 'Could not save preferences.') }
     finally { setBusy(false) }
   }
@@ -47,7 +49,7 @@ export default function GrowthCheckIn() {
     setBusy(true); setError(''); setNotice('')
     try {
       const value = form.method === 'direction' ? form.value : Number(form.value)
-      const { data } = await api.post('/settings/growth/reports', { period: currentPeriod(settings.cadence), method: form.method, value, note: form.note })
+      const { data } = await api.post('/settings/growth/reports', { period: currentPeriod(activeSettings.cadence), method: form.method, value, note: form.note })
       setReports((old) => [...old, data]); setNotice('Your private growth update was saved. It is not verified sales or revenue data.')
     } catch (e) { setError(e.response?.data?.error || 'Unable to save growth feedback.') }
     finally { setBusy(false) }
@@ -85,14 +87,14 @@ export default function GrowthCheckIn() {
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)} className="mt-1"/><span>I understand that limited business results restrict revenue-based measurement and optimisation. I choose my reporting level voluntarily.</span></label>
         <button type="button" disabled={busy || !ack} onClick={save} className="rounded-lg bg-blue-700 text-white px-4 py-2 disabled:opacity-50">Save my preferences</button>
       </section>
-      {settings.level !== 'none' && settings.cadence !== 'off' && <section className="p-5 rounded-xl border bg-white dark:bg-gray-800 dark:border-gray-700 space-y-4">
-        <h2 className="font-semibold text-lg">How did business go this {settings.cadence === 'weekly' ? 'week' : 'month'}?</h2>
+      {activeSettings.level !== 'none' && activeSettings.cadence !== 'off' && <section className="p-5 rounded-xl border bg-white dark:bg-gray-800 dark:border-gray-700 space-y-4">
+        <h2 className="font-semibold text-lg">How did business go this {activeSettings.cadence === 'weekly' ? 'week' : 'month'}?</h2>
         <p className="text-sm text-gray-600 dark:text-gray-300">Compared with a typical {settings.cadence === 'weekly' ? 'week' : 'month'}, what changed? Your answer is self-reported feedback, not independently verified revenue.</p>
         <form onSubmit={report} className="space-y-3">
           <label className="block text-sm">Reporting method
             <select value={form.method} onChange={e => setForm({method:e.target.value,value:e.target.value==='direction'?'same':e.target.value==='scale'?'3':'0',note:form.note})} className="block mt-1 p-2 rounded-lg border dark:bg-gray-900 dark:border-gray-700">
               <option value="direction">More, fewer or about the same</option><option value="scale">Five-point growth scale</option>
-              {settings.level === 'counts' && <option value="count">Change in paying customer numbers</option>}
+              {activeSettings.level === 'counts' && <option value="count">Change in paying customer numbers</option>}
             </select>
           </label>
           {form.method==='direction' ? <fieldset className="flex gap-4 flex-wrap"><legend className="text-sm mb-2">Customer activity</legend>
