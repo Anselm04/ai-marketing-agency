@@ -19,6 +19,9 @@ export default function ManagerControls(){
  const [notice,setNotice]=useState('')
  const [connected,setConnected]=useState(false)
  const [loading,setLoading]=useState(true)
+ const [briefs,setBriefs]=useState([])
+ const [proposals,setProposals]=useState([])
+ const [selectedBrief,setSelectedBrief]=useState('')
  useEffect(()=>{
   let live=true
   api.post('/settings/manager-sync',{operation:'automation.status',payload:{}}).then(({data})=>{
@@ -41,6 +44,37 @@ export default function ManagerControls(){
    setStatus(data);setMode(data.effectiveMode||'manual');setAck(false)
    setNotice('Your preferences were confirmed by Manager. No campaign was published or executed.')
   }catch(e){setError(e.response?.data?.error||'Manager could not confirm the change. Your existing manual tools are unaffected.')}
+  finally{setBusy(false)}
+ }
+ const loadPlanning = async () => {
+  setBusy(true);setError('');setNotice('')
+  try {
+   const [b,p]=await Promise.all([
+    api.post('/settings/manager-sync',{operation:'brief.list',payload:{}}),
+    api.post('/settings/manager-sync',{operation:'campaign.list',payload:{}}),
+   ])
+   const confirmed=(b.data||[]).filter(x=>x.status==='confirmed')
+   setBriefs(confirmed);setProposals(p.data||[]);setSelectedBrief(old=>old||confirmed[0]?.id||'')
+  }catch(e){setError(e.response?.data?.error||'Unable to load your confirmed briefs and proposals.')}
+  finally{setBusy(false)}
+ }
+ const prepareProposal=async()=>{
+  if(!selectedBrief)return
+  setBusy(true);setError('');setNotice('')
+  try {
+   const {data}=await api.post('/settings/manager-sync',{operation:'campaign.propose',payload:{briefId:selectedBrief}})
+   setProposals(old=>[...old,data])
+   setNotice('A draft proposal is ready for review. No campaign has been executed or published.')
+  }catch(e){setError(e.response?.data?.error||'Manager could not prepare this draft proposal. Verify your Manager subscription and permissions.')}
+  finally{setBusy(false)}
+ }
+ const reviewProposal=async(id,decision)=>{
+  setBusy(true);setError('');setNotice('')
+  try{
+   const {data}=await api.post('/settings/manager-sync',{operation:'campaign.review',payload:{id,decision}})
+   setProposals(old=>old.map(x=>x.id===id?data:x))
+   setNotice(decision==='approve'?'Approved for planning only. No campaign has been launched.':'The proposal was declined.')
+  }catch(e){setError(e.response?.data?.error||'Your proposal review could not be saved.')}
   finally{setBusy(false)}
  }
  const togglePlatform=(item)=>{setPlatforms(old=>old.includes(item)?old.filter(x=>x!==item):[...old,item]);setAck(false)}
@@ -72,6 +106,28 @@ export default function ManagerControls(){
     <label className="flex gap-2 items-start text-sm"><input type="checkbox" className="mt-1" checked={ack} onChange={e=>setAck(e.target.checked)}/><span>I understand the difference between guidance and execution and agree to these selected permissions.</span></label>
     <button type="button" disabled={!connected||busy||!ack||(mode!=='manual'&&!platforms.length)} onClick={save} className="rounded-lg px-4 py-2 bg-blue-700 text-white disabled:opacity-50">Save my Manager preferences</button>
    </>}
+  </section>
+  <section className="rounded-xl border bg-white dark:bg-gray-800 dark:border-gray-700 p-5 space-y-4">
+   <h2 className="text-lg font-semibold">Draft campaign proposals</h2>
+   <p className="text-sm text-gray-600 dark:text-gray-300">Manager can organise a proposed campaign from a confirmed brief when your paid automation entitlement is active. Draft proposals do not publish, spend money, or generate final creative assets.</p>
+   <button type="button" disabled={!connected||busy} onClick={loadPlanning} className="rounded-lg px-3 py-2 border border-blue-600 text-blue-700 dark:text-blue-300 disabled:opacity-50">Load my confirmed briefs and proposals</button>
+   {briefs.length>0&&<label className="block text-sm">Choose a confirmed brief
+    <select value={selectedBrief} onChange={e=>setSelectedBrief(e.target.value)} className="block p-2 mt-1 w-full rounded-lg border dark:bg-gray-900 dark:border-gray-700">
+     {briefs.map(b=><option key={b.id} value={b.id}>{b.business} — {b.goal}</option>)}
+    </select>
+   </label>}
+   <button type="button" disabled={busy||!connected||!status.paidManagerAutomationVerified||status.effectiveMode==='manual'||!selectedBrief} onClick={prepareProposal} className="rounded-lg px-4 py-2 bg-blue-700 text-white disabled:opacity-50">Prepare a draft campaign proposal</button>
+   {proposals.map(plan=><article key={plan.id} className="rounded-lg border dark:border-gray-700 p-3 space-y-2">
+    <h3 className="font-semibold">{plan.title}</h3>
+    <p className="text-sm">Goal: {plan.objective}</p>
+    <p className="text-sm">Audience: {plan.targetAudience}</p>
+    <p className="text-sm">Proposed platforms: {plan.platforms?.join(', ')}</p>
+    <p className="text-xs text-gray-500">Status: {plan.status} · Spend authorised: no · Published: no</p>
+    {plan.status==='proposed'&&<div className="flex gap-2 flex-wrap">
+     <button type="button" disabled={busy} onClick={()=>reviewProposal(plan.id,'approve')} className="text-sm rounded-lg px-3 py-2 bg-blue-700 text-white disabled:opacity-50">Approve for planning</button>
+     <button type="button" disabled={busy} onClick={()=>reviewProposal(plan.id,'decline')} className="text-sm rounded-lg px-3 py-2 border disabled:opacity-50">Decline</button>
+    </div>}
+   </article>)}
   </section>
  </div>
 }
