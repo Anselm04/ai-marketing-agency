@@ -23,6 +23,10 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [reviewing, setReviewing] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [coordinateManager, setCoordinateManager] = useState(false);
+  const [managerQuestions, setManagerQuestions] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -53,13 +57,40 @@ export default function Onboarding() {
     });
   }, []);
 
-  const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const update = (key) => (event) => { setReviewing(false); setAcknowledged(false); setForm((current) => ({ ...current, [key]: event.target.value })); };
 
   const save = async (event) => {
     event.preventDefault();
+    if (!reviewing) { setReviewing(true); setAcknowledged(false); return; }
+    if (!acknowledged) { setError('Please confirm the summary before continuing.'); return; }
     setSaving(true);
     setError('');
     try {
+      if (coordinateManager) {
+        const coordinated = await api.post('/settings/manager-sync', {
+          operation: 'brief.save',
+          payload: {
+            business: form.businessDescription,
+            offer: form.primaryOffer,
+            audience: form.targetAudience,
+            goal: form.primaryGoal,
+            channels: [],
+          },
+        });
+        const brief = coordinated.data;
+        if (brief.status === 'needs_clarification') {
+          setManagerQuestions(brief.questions || []);
+          setReviewing(false);
+          setAcknowledged(false);
+          setError('Your Manager needs a little more information before confirming your brief. Please review the questions below.');
+          return;
+        }
+        await api.post('/settings/manager-sync', {
+          operation: 'brief.confirm',
+          payload: { id: brief.id, revision: brief.revision, confirmed: true, acknowledgementVersion: 'customer-brief-v1' },
+        });
+        setManagerQuestions([]);
+      }
       await api.patch('/settings/profile', {
         ...form,
         goals: form.primaryGoal ? [form.primaryGoal] : [],
@@ -123,6 +154,12 @@ export default function Onboarding() {
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
+      {managerQuestions.length > 0 && <section className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-2" aria-label="Clarifying questions">
+        <p className="font-semibold text-amber-900 dark:text-amber-200">A few questions to help us understand your business</p>
+        <ul className="list-disc pl-5 text-sm text-amber-800 dark:text-amber-200">{managerQuestions.map((question,index)=><li key={index}>{question}</li>)}</ul>
+        <p className="text-xs text-amber-800 dark:text-amber-200">Please update the related answers below and review the summary again.</p>
+      </section>}
+
 
       <form onSubmit={save} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -143,13 +180,30 @@ export default function Onboarding() {
           <label className="text-sm text-gray-700 dark:text-gray-200">Timezone<input value={form.timezone} onChange={update('timezone')} className="mt-1 w-full rounded-lg border px-3 py-2 bg-transparent" /></label>
         </div>
 
+        {reviewing && (
+          <section aria-label="Review your marketing brief" className="rounded-xl border-2 border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-950/20 p-4 space-y-3">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Have we understood your business correctly?</h2>
+            <p className="text-sm text-gray-700 dark:text-gray-300">Please review before you pay or generate your first campaign. You can change any answer above. Nothing will publish or spend advertising money automatically.</p>
+            <dl className="grid gap-2 text-sm text-gray-800 dark:text-gray-200">
+              <div><dt className="font-semibold">Business</dt><dd className="whitespace-pre-wrap">{form.company} · {form.industry}</dd></div>
+              <div><dt className="font-semibold">What you sell</dt><dd className="whitespace-pre-wrap">{form.primaryOffer}</dd></div>
+              <div><dt className="font-semibold">Who you want to reach</dt><dd className="whitespace-pre-wrap">{form.targetAudience}</dd></div>
+              <div><dt className="font-semibold">What success means to you</dt><dd className="whitespace-pre-wrap">{form.primaryGoal}</dd></div>
+            </dl>
+            <p className="text-sm text-gray-700 dark:text-gray-300">Accurate information helps tailor your campaign. Results depend on your market, offer and available evidence; increased sales or revenue cannot be guaranteed. You may share customer-growth feedback later without disclosing actual revenue.</p>
+            <label className="flex gap-2 text-sm text-gray-900 dark:text-white items-start"><input type="checkbox" className="mt-1" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> <span>I have reviewed this summary, understand the importance of accurate information and want to continue with these details.</span></label>
+            <label className="flex gap-2 text-sm text-gray-900 dark:text-white items-start"><input type="checkbox" className="mt-1" checked={coordinateManager} onChange={(event)=>setCoordinateManager(event.target.checked)} /> <span>Also send my confirmed brief to TrillionAI Manager for consultation and future coordination. This does not activate paid Manager automation, publish campaigns, or authorise spending. If the connection is unavailable I can choose to continue with Marketing only.</span></label>
+            <button type="button" onClick={() => { setReviewing(false); setAcknowledged(false); setError(''); }} className="text-sm underline text-blue-700 dark:text-blue-300">Edit my answers</button>
+          </section>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           {subscription?.status !== 'active' && <p className="text-sm text-amber-700 dark:text-amber-300">Your business context will be saved first. Then choose a plan before AI generation.</p>}
           {subscription?.status === 'active' && <p className="text-sm text-gray-500 dark:text-gray-400">No ad spend is triggered. The $0 planning budget keeps this first package organic until you explicitly configure paid advertising.</p>}
           <div className="ml-auto flex gap-2">
             {subscription?.status === 'active' && <Link to="/dashboard" className="px-4 py-2 rounded-lg border text-sm">Skip for now</Link>}
-            <button disabled={saving} className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">
-              {saving ? 'Working…' : subscription?.status === 'active' ? 'Save & create first campaign' : 'Save & choose plan'} <ArrowRight size={16} />
+            <button disabled={saving || (reviewing && !acknowledged)} className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">
+              {saving ? 'Working…' : !reviewing ? 'Review my requirements' : subscription?.status === 'active' ? 'Confirm & create first campaign' : 'Confirm & choose plan'} <ArrowRight size={16} />
             </button>
           </div>
         </div>

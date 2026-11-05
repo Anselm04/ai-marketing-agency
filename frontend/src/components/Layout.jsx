@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useLanguage } from '../context/LanguageContext'
 import SearchBar from './SearchBar'
+import CustomerGuide from './CustomerGuide'
 import LanguageSelector from './LanguageSelector'
 import { NotificationBell } from './RealtimeNotifications'
 import {
@@ -31,6 +32,7 @@ const navItems = [
   { path: '/dashboard/translation', icon: Globe, label: 'Translation' },
   { path: '/dashboard/crm', icon: Users, label: 'CRM' },
   { path: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
+  { path: '/dashboard/growth', icon: TrendingUp, label: 'My Growth Check-In' },
   { path: '/dashboard/trends', icon: TrendingUp, label: 'Trends' },
   { path: '/dashboard/legal', icon: Shield, label: 'Legal' },
   { path: '/dashboard/ai-models', icon: Cpu, label: 'AI Models' },
@@ -177,6 +179,7 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+      <CustomerGuide />
     </div>
   )
 }
