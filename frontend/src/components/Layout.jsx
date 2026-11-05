@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useLanguage } from '../context/LanguageContext'
 import SearchBar from './SearchBar'
+import CustomerGuide from './CustomerGuide'
 import LanguageSelector from './LanguageSelector'
 import { NotificationBell } from './RealtimeNotifications'
 import {
@@ -177,6 +178,7 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+      <CustomerGuide />
     </div>
   )
 }
