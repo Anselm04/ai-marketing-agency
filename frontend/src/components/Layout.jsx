@@ -33,6 +33,7 @@ const navItems = [
   { path: '/dashboard/crm', icon: Users, label: 'CRM' },
   { path: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/dashboard/growth', icon: TrendingUp, label: 'My Growth Check-In' },
+  { path: '/dashboard/manager', icon: Bot, label: 'My AI Manager' },
   { path: '/dashboard/trends', icon: TrendingUp, label: 'Trends' },
   { path: '/dashboard/legal', icon: Shield, label: 'Legal' },
   { path: '/dashboard/ai-models', icon: Cpu, label: 'AI Models' },
