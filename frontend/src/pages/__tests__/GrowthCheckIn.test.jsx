@@ -27,7 +27,7 @@ describe('privacy-first customer growth check-in',()=>{
     fireEvent.click(screen.getByLabelText(/Share simple progress/i))
     const save=screen.getByRole('button',{name:'Save my preferences'})
     expect(save.disabled).toBe(true)
-    fireEvent.click(screen.getByRole('checkbox',{name:/I understand that limited information/i}))
+    fireEvent.click(screen.getByRole('checkbox',{name:/I understand that limited business results/i}))
     expect(save.disabled).toBe(false)
     fireEvent.click(save)
     await waitFor(()=>expect(put).toHaveBeenCalledWith('/settings/growth/preferences',expect.objectContaining({level:'summary',cadence:'monthly',understoodLimitations:true})))
