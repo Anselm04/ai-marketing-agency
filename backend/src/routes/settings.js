@@ -3,6 +3,7 @@ import store from '../utils/store.js';
 import { getUserPreferences, saveUserPreferences } from '../services/accountMemoryService.js';
 import { deleteCustomerAccount } from '../services/accountLifecycleService.js';
 import { managerCustomerCommand } from '../services/managerCustomerBridgeService.js';
+import { aggregateCampaignPerformance } from '../services/analyticsProvenanceService.js';
 
 const router = express.Router();
 
@@ -94,7 +95,25 @@ router.post('/manager-sync', async (req, res) => {
     }
     const payload=req.body?.payload;
     if(payload == null || typeof payload!=='object'||Array.isArray(payload))return res.status(400).json({error:'Invalid coordination payload.'});
-    const result=await managerCustomerCommand({userId:req.user.id,operation,payload});
+    let safePayload=payload;
+    if(operation==='growth.assess'){
+      // Derive the evidence summary from Marketing's authenticated records.
+      // Never forward a customer-supplied 'verified' flag or raw revenue amounts.
+      const [campaigns,leads]=await Promise.all([
+        store.getCampaignsByOwner(req.user.id),
+        store.getLeadsByOwner(req.user.id),
+      ]);
+      const aggregate=aggregateCampaignPerformance(campaigns);
+      safePayload={analytics:{
+        campaignCount:campaigns.length,
+        providerVerifiedPairedCampaigns:aggregate.verified.pairedCampaigns,
+        providerVerifiedRevenueCampaigns:aggregate.verified.revenueCampaigns,
+        providerVerifiedSpendCampaigns:aggregate.verified.spendCampaigns,
+        unattributedLeadCount:leads.length,
+        source:'marketing_server_aggregate',
+      }};
+    }
+    const result=await managerCustomerCommand({userId:req.user.id,operation,payload:safePayload});
     return res.json(result);
   } catch(error) {
     const status=error.status===503?503:error.status===400?400:502;
