@@ -11,6 +11,7 @@ import Onboarding from './pages/Onboarding'
 import Agents from './pages/Agents'
 import Campaigns from './pages/Campaigns'
 import Analytics from './pages/Analytics'
+import GrowthCheckIn from './pages/GrowthCheckIn'
 import Legal from './pages/Legal'
 import Social from './pages/Social'
 import ContentStudio from './pages/ContentStudio'
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="products" element={<ProductMarketing />} />
         <Route path="social" element={<Social />} />
         <Route path="analytics" element={<Analytics />} />
+        <Route path="growth" element={<GrowthCheckIn />} />
         <Route path="legal" element={<Legal />} />
         <Route path="content" element={<ContentStudio />} />
         <Route path="video" element={<VideoStudio />} />
