@@ -1,7 +1,6 @@
 {
   "version": 2,
   "buildCommand": "npm run build --workspace=frontend",
-  "installCommand": "npm ci --no-audit --no-fund",
   "outputDirectory": "frontend/dist",
   "rewrites": [
     {
