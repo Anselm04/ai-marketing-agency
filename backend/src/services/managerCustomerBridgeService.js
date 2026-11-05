@@ -1,4 +1,4 @@
-import {createHmac, createHash} from 'node:crypto';
+import {createHmac, createHash, randomUUID} from 'node:crypto';
 
 // Customer data may cross from Marketing to Manager only through this authenticated
 // backend-to-backend path. Never send this secret or endpoint to the browser.
@@ -18,7 +18,7 @@ export async function managerCustomerCommand({userId,operation,payload},request=
   const {url,secret}=endpoint();
   const sourceUserId=String(userId);
   if(!/^[a-zA-Z0-9._:-]{1,120}$/.test(sourceUserId))throw Error('invalid_customer_identity');
-  const id=createHash('sha256').update(JSON.stringify([sourceUserId,operation,payload||{}])).digest('hex');
+  const id=operation==='growth.erase'||operation==='growth.preferences' ? randomUUID() : createHash('sha256').update(JSON.stringify([sourceUserId,operation,payload||{}])).digest('hex');
   const data=JSON.stringify({sourceUserId,operation,requestId:id,payload:payload||{}});
   const timestamp=String(Date.now());
   const signature=createHmac('sha256',secret).update(timestamp+'.').update(data).digest('hex');
