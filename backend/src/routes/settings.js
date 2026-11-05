@@ -2,6 +2,7 @@ import express from 'express';
 import store from '../utils/store.js';
 import { getUserPreferences, saveUserPreferences } from '../services/accountMemoryService.js';
 import { deleteCustomerAccount } from '../services/accountLifecycleService.js';
+import { managerCustomerCommand } from '../services/managerCustomerBridgeService.js';
 
 const router = express.Router();
 
@@ -80,6 +81,25 @@ router.delete('/growth/reports', async (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
   await store.updateUser(req.user.id, { profile: { ...(user.profile || {}), customerGrowthReports: [] } });
   return res.json({ deleted: true });
+});
+
+
+// Explicit customer-triggered coordination only. This endpoint does not grant
+// Manager execution privileges, subscriptions, advertising spend or publishing.
+router.post('/manager-sync', async (req, res) => {
+  try {
+    const operation=req.body?.operation;
+    if(!['brief.save','brief.confirm','brief.list','growth.preferences','growth.submit','growth.state'].includes(operation)) {
+      return res.status(400).json({error:'Unsupported Manager coordination request.'});
+    }
+    const payload=req.body?.payload;
+    if(payload == null || typeof payload!=='object'||Array.isArray(payload))return res.status(400).json({error:'Invalid coordination payload.'});
+    const result=await managerCustomerCommand({userId:req.user.id,operation,payload});
+    return res.json(result);
+  } catch(error) {
+    const status=error.status===503?503:error.status===400?400:502;
+    return res.status(status).json({error:status===503?'Manager coordination is not configured yet. Your existing Marketing tools are unaffected.':'Manager coordination could not be completed. Please retry.',code:error.code||'manager_sync_unavailable'});
+  }
 });
 
 router.get('/profile', async (req, res) => {
