@@ -329,6 +329,7 @@ class AutoPostingService {
       if (this.inFlight.has(plan.id)) continue;
       this.inFlight.add(plan.id);
       try {
+        if (plan.requiresManagerEntitlement === true) await assertManagerOrganicPosting({userId:plan.owner,platformIds:plan.platformIds,requiredMode:'full'});
         const lastMetricsSync = plan.lastMetricsSyncAt ? new Date(plan.lastMetricsSyncAt).getTime() : 0;
         if (plan.aiOptimizationEnabled !== false && now - lastMetricsSync >= 6 * 60 * 60 * 1000) {
           const sync = await socialPerformanceSyncService.syncPlan(plan);
