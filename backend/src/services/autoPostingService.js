@@ -354,11 +354,13 @@ class AutoPostingService {
         });
         await this.runPlan(plan);
       } catch (error) {
+        const revoked=plan.requiresManagerEntitlement===true && error.message==='manager_publishing_not_authorized';
         await store.updateContent(plan.id, {
-          status: 'attention_required',
+          ...(revoked ? {enabled:false} : {}),
+          status: revoked ? 'paused_permission_revoked' : 'attention_required',
           lastError: error.message,
           lastErrorAt: new Date().toISOString(),
-          nextRunAt: this.nextRunAt(plan, now),
+          nextRunAt: revoked ? null : this.nextRunAt(plan, now),
           updatedAt: new Date().toISOString(),
         });
         logger.error('Auto-posting plan failed', { planId: plan.id, error: error.message });
