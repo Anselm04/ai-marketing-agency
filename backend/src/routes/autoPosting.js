@@ -1,5 +1,6 @@
 
 import express from 'express';
+import {createHash} from 'node:crypto';
 import store from '../utils/store.js';
 import autoPostingService, { CADENCE_LIMITS } from '../services/autoPostingService.js';
 import { videoPlatformCatalog } from '../services/videoPlatformCatalog.js';
@@ -91,9 +92,19 @@ router.post('/manager-start', async (req, res, next) => {
     if(assets.length!==normalized.sourceAssetIds.length)return res.status(404).json({error:'Some selected source media is missing or not owned by your account.'});
     const platforms=await validatePlatforms(owner,normalized.platformIds);
     if(platforms.unavailable.length)return res.status(409).json({error:'Connect each selected social account before starting.',unavailable:platforms.unavailable});
+    const fingerprint=createHash('sha256').update(JSON.stringify({
+      proposalId:proposal.id,assets:[...normalized.sourceAssetIds].sort(),platforms:[...normalized.platformIds].sort(),
+      cadence:normalized.cadence,postsPerPeriod:normalized.postsPerPeriod,timezone:normalized.timezone,
+    })).digest('hex');
     const result=await withEcosystemLock('manager-organic:'+owner+':'+requestId,async()=>{
       const found=(await store.getContentByOwner(owner)).find(x=>x.kind==='auto_post_plan'&&x.managerRequestId===requestId);
-      if(found)return {plan:found,created:false};
+      if(found){
+        if(found.managerRequestFingerprint!==fingerprint){
+          const error=new Error('The request ID was already used with different publishing settings.');
+          error.status=409;throw error;
+        }
+        return {plan:found,created:false};
+      }
       // Re-check at the persistence boundary. Approval may have been revoked
       // while the media or platform connections were checked.
       await assertManagerOrganicPosting({userId:owner,platformIds:normalized.platformIds,requiredMode:'full'});
@@ -104,6 +115,7 @@ router.post('/manager-start', async (req, res, next) => {
         requiresManagerEntitlement:true,
         managerProposalId:proposal.id,
         managerRequestId:requestId,
+        managerRequestFingerprint:fingerprint,
         managerPublishingConsentAt:new Date(now).toISOString(),
         status:'running',completedPosts:0,rotationIndex:0,
         nextRunAt:autoPostingService.nextRunAt(normalized,now),
