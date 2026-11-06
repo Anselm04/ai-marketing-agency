@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3, Brain, CalendarClock, CheckCircle2, Clock3, Eye, Film,
   Image as ImageIcon, MousePointer2, Pause, Play, RefreshCw, Sparkles,
@@ -44,6 +44,14 @@ export default function AutoPosting() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [syncingPlanId, setSyncingPlanId] = useState(null)
+  const [managerStatus, setManagerStatus] = useState(null)
+  const [managerProposals, setManagerProposals] = useState([])
+  const [managerProposalId, setManagerProposalId] = useState('')
+  const [managerConsent, setManagerConsent] = useState(false)
+  const [mediaRights, setMediaRights] = useState(false)
+  const [automatedAcknowledgement, setAutomatedAcknowledgement] = useState(false)
+  const [managerStarting, setManagerStarting] = useState(false)
+  const managerRequestKey = useRef(null)
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     enabled: true,
@@ -110,6 +118,20 @@ export default function AutoPosting() {
 
   useEffect(() => {
     load()
+    let active = true
+    Promise.all([
+      api.post('/settings/manager-sync', { operation: 'automation.status', payload: {} }),
+      api.post('/settings/manager-sync', { operation: 'campaign.list', payload: {} }),
+    ]).then(([permissions, proposals]) => {
+      if (!active) return
+      setManagerStatus(permissions.data)
+      const approved = (proposals.data || []).filter(p => p.status === 'approved_for_production')
+      setManagerProposals(approved)
+      setManagerProposalId(approved[0]?.id || '')
+    }).catch(() => {
+      if (active) setManagerStatus(null)
+    })
+    return () => { active = false }
   }, [])
 
   const cadenceConfig = CADENCE[form.cadence]
@@ -164,6 +186,42 @@ export default function AutoPosting() {
       }
     } finally {
       setSaving(false)
+    }
+  }
+
+  const startManagerPlan = async () => {
+    setError('')
+    if (!managerConsent || !mediaRights || !automatedAcknowledgement) {
+      setError('Please confirm content rights and your authorisation for automatic organic publishing.')
+      return
+    }
+    if (!managerProposalId || !form.sourceAssetIds.length || !form.platformIds.length) {
+      setError('Choose an approved Manager proposal, source media and connected social destinations.')
+      return
+    }
+    setManagerStarting(true)
+    try {
+      managerRequestKey.current ||= crypto.randomUUID()
+      await api.post('/auto-posting/manager-start', {
+        ...form,
+        campaignProposalId: managerProposalId,
+        managerPublishingConsent: true,
+        contentRightsConfirmed: true,
+        acknowledgeAutomatedPublishing: true,
+        startImmediately: false,
+      }, { headers: { 'Idempotency-Key': managerRequestKey.current } })
+      managerRequestKey.current = null
+      setManagerConsent(false)
+      setMediaRights(false)
+      setAutomatedAcknowledgement(false)
+      await load()
+    } catch (err) {
+      const unavailable = err.response?.data?.unavailable
+      setError(Array.isArray(unavailable) && unavailable.length
+        ? unavailable.map(p => p.platformId + ': ' + p.reason).join(' · ')
+        : err.response?.data?.error || 'Unable to start Manager-managed posting.')
+    } finally {
+      setManagerStarting(false)
     }
   }
 
@@ -518,6 +576,32 @@ export default function AutoPosting() {
           <Sparkles size={16} />
           {saving ? 'Saving automation…' : 'Create automated posting plan'}
         </button>
+      </section>
+
+      <section className="rounded-xl border border-blue-200 bg-white p-5 dark:border-blue-900 dark:bg-gray-800 space-y-4">
+        <div className="flex items-center gap-2"><Brain size={20} className="text-blue-600" /><h3 className="font-semibold text-lg">Premium Manager-controlled posting</h3></div>
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          Use the content and social platforms selected above with a customer-approved Manager proposal.
+          The scheduler creates organic posts only while your separate Manager subscription, chosen platforms
+          and full automation permission remain valid. No paid advertising spend is authorised.
+        </p>
+        {!managerStatus?.paidManagerAutomationVerified || managerStatus?.effectiveMode !== 'full'
+          ? <p className="text-sm text-gray-500">Requires an active, verified Manager subscription with full automation and approved organic publishing permissions.</p>
+          : <>
+            <label className="block text-sm">Approved campaign proposal
+              <select value={managerProposalId} onChange={e => {setManagerProposalId(e.target.value);managerRequestKey.current=null}} className="mt-1 w-full rounded-lg border p-2 dark:border-gray-700 dark:bg-gray-900">
+                {managerProposals.map(plan => <option key={plan.id} value={plan.id}>{plan.title}</option>)}
+              </select>
+            </label>
+            {managerProposals.length === 0 && <p className="text-sm text-gray-500">Confirm and approve a proposal in My AI Manager before enabling this feature.</p>}
+            <p className="text-xs text-gray-500">Conservative Manager cadence limits: maximum 2 posts/day, 7/week or 20/month. Your plan's own usage allowance may be lower. First publication is scheduled for a later eligible time.</p>
+            <label className="flex gap-2 text-sm items-start"><input type="checkbox" checked={mediaRights} onChange={e => setMediaRights(e.target.checked)} className="mt-1" /> I own or have permission to publish the selected source media.</label>
+            <label className="flex gap-2 text-sm items-start"><input type="checkbox" checked={managerConsent} onChange={e => setManagerConsent(e.target.checked)} className="mt-1" /> I authorise Manager to publish organic content to only my selected connected platforms, within these limits.</label>
+            <label className="flex gap-2 text-sm items-start"><input type="checkbox" checked={automatedAcknowledgement} onChange={e => setAutomatedAcknowledgement(e.target.checked)} className="mt-1" /> I understand posting will happen automatically until I pause, cancel or revoke permission, and that results are not guaranteed.</label>
+            <button type="button" onClick={startManagerPlan} disabled={managerStarting || !managerConsent || !mediaRights || !automatedAcknowledgement || !managerProposalId || !form.sourceAssetIds.length || !form.platformIds.length} className="inline-flex rounded-lg bg-blue-700 px-4 py-2 text-white text-sm disabled:opacity-50">
+              {managerStarting ? 'Checking permissions…' : 'Activate my Manager organic posting plan'}
+            </button>
+          </>}
       </section>
 
       <section className="space-y-3">
