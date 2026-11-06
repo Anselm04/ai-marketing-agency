@@ -54,6 +54,9 @@ describe('Customer-approved premium organic posting',()=>{
   const twice=await request(app).post('/auto-posting/manager-start').send(valid).set('Idempotency-Key','manager-post-request-123')
   expect(twice.status).toBe(200)
   expect(store.createContent).toHaveBeenCalledTimes(1)
+  const competing=await request(app).post('/auto-posting/manager-start').send(valid).set('Idempotency-Key','different-request-key-789')
+  expect(competing.status).toBe(409)
+  expect(store.createContent).toHaveBeenCalledTimes(1)
  })
  test('rejects a proposal not approved by the customer',async()=>{
   proposal.mockResolvedValueOnce([{id:valid.campaignProposalId,status:'proposed',platforms:['facebook']}])
