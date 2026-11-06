@@ -22,6 +22,7 @@ export default function ManagerControls(){
  const [briefs,setBriefs]=useState([])
  const [proposals,setProposals]=useState([])
  const [selectedBrief,setSelectedBrief]=useState('')
+ const [draftResults,setDraftResults]=useState({})
  useEffect(()=>{
   let live=true
   api.post('/settings/manager-sync',{operation:'automation.status',payload:{}}).then(({data})=>{
@@ -77,6 +78,15 @@ export default function ManagerControls(){
   }catch(e){setError(e.response?.data?.error||'Your proposal review could not be saved.')}
   finally{setBusy(false)}
  }
+ const createDraft=async(id)=>{
+  setBusy(true);setError('');setNotice('')
+  try{
+   const {data}=await api.post('/campaigns/from-manager-proposal',{id})
+   setDraftResults(old=>({...old,[id]:data.campaign?.id||'created'}))
+   setNotice(data.created?'Marketing saved a new campaign draft. Review it before any publishing.':'This approved proposal already has a saved draft.')
+  }catch(e){setError(e.response?.data?.error||'Could not create a Marketing draft. Check your Manager permissions and campaign allowance.')}
+  finally{setBusy(false)}
+ }
  const togglePlatform=(item)=>{setPlatforms(old=>old.includes(item)?old.filter(x=>x!==item):[...old,item]);setAck(false)}
  return <div className="max-w-3xl mx-auto space-y-5 text-gray-900 dark:text-gray-100">
   <div className="flex gap-3 items-start">
@@ -123,6 +133,10 @@ export default function ManagerControls(){
     <p className="text-sm">Audience: {plan.targetAudience}</p>
     <p className="text-sm">Proposed platforms: {plan.platforms?.join(', ')}</p>
     <p className="text-xs text-gray-500">Status: {plan.status} · Spend authorised: no · Published: no</p>
+    {plan.status==='approved_for_production'&&<div className="flex flex-wrap items-center gap-2">
+      <button type="button" disabled={busy||!status.paidManagerAutomationVerified||status.effectiveMode==='manual'} onClick={()=>createDraft(plan.id)} className="rounded-lg bg-blue-700 px-3 py-2 text-white text-sm disabled:opacity-50">Create an unpublished Marketing draft</button>
+      {draftResults[plan.id]&&<Link to="/dashboard/campaigns" className="text-sm text-blue-700 dark:text-blue-300 underline">Review my draft campaigns</Link>}
+    </div>}
     {plan.status==='proposed'&&<div className="flex gap-2 flex-wrap">
      <button type="button" disabled={busy} onClick={()=>reviewProposal(plan.id,'approve')} className="text-sm rounded-lg px-3 py-2 bg-blue-700 text-white disabled:opacity-50">Approve for planning</button>
      <button type="button" disabled={busy} onClick={()=>reviewProposal(plan.id,'decline')} className="text-sm rounded-lg px-3 py-2 border disabled:opacity-50">Decline</button>
