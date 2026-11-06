@@ -79,10 +79,13 @@ router.post('/manager-start', async (req, res, next) => {
       publishingSettings:{},aiOptimizationEnabled:input.aiOptimizationEnabled===true,
     });
     if(!normalized.sourceAssetIds.length||!normalized.platformIds.length)return res.status(400).json({error:'Choose your media and at least one approved social platform.'});
+    if(normalized.postsPerPeriod>({daily:2,weekly:7,monthly:20}[normalized.cadence]))return res.status(400).json({error:'This automated cadence exceeds the current safe per-period limit.'});
     await assertManagerOrganicPosting({userId:owner,platformIds:normalized.platformIds,requiredMode:'full'});
     const proposals=await managerCustomerCommand({userId:owner,operation:'campaign.list',payload:{}});
     const proposal=Array.isArray(proposals)&&proposals.find(p=>p.id===input.campaignProposalId&&p.status==='approved_for_production');
     if(!proposal || normalized.platformIds.some(id=>!proposal.platforms?.includes(id)))return res.status(403).json({error:'A customer-approved Manager proposal is required for these platforms.'});
+    normalized.name=String(proposal.title||'Approved customer marketing plan').slice(0,120);
+    normalized.campaignBrief=[proposal.objective,proposal.offer,proposal.targetAudience].filter(Boolean).join(' | ').slice(0,3000);
     const content=await store.getContentByOwner(owner);
     const assets=content.filter(x=>x.owner===owner&&x.kind==='media_asset'&&normalized.sourceAssetIds.includes(String(x.id)));
     if(assets.length!==normalized.sourceAssetIds.length)return res.status(404).json({error:'Some selected source media is missing or not owned by your account.'});
