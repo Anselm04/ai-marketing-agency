@@ -98,7 +98,8 @@ export default function ManagerQuotes(){
     <p className="text-sm">{q.scopeDisclosure}</p>
     <p className="text-xs text-gray-500">Valid until {new Date(q.expiresAt).toLocaleDateString('en-NZ')} · Payment verified: {q.paymentVerified?'Yes':'No'}</p>
     <p className="text-xs text-gray-500">No work is authorised by preparing this quote. Checkout and subscription activation require separately verified payment.</p>
-    {q.status==='offered'&&q.purchaseUrl&&<a target="_blank" rel="noopener noreferrer" className="inline-block rounded-lg bg-blue-700 text-white px-4 py-2 text-sm" href={q.purchaseUrl}>Review secure checkout</a>}
+    {q.checkoutReady===false&&<p className="text-sm text-amber-700 dark:text-amber-300">{q.checkoutMessage||'Checkout is not available until your Manager billing identity has been securely verified.'}</p>}
+    {q.status==='offered'&&q.checkoutReady===true&&q.purchaseUrl&&<a target="_blank" rel="noopener noreferrer" className="inline-block rounded-lg bg-blue-700 text-white px-4 py-2 text-sm" href={q.purchaseUrl}>Review secure checkout</a>}
    </article>)}
   </section>
  </div>
