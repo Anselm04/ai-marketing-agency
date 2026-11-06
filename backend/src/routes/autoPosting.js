@@ -1,11 +1,15 @@
 
 import express from 'express';
+import {createHash} from 'node:crypto';
 import store from '../utils/store.js';
 import autoPostingService, { CADENCE_LIMITS } from '../services/autoPostingService.js';
 import { videoPlatformCatalog } from '../services/videoPlatformCatalog.js';
 import { getTokens } from '../services/appConnector.js';
 import autoPostingAnalyticsService from '../services/autoPostingAnalyticsService.js';
 import socialPerformanceSyncService from '../services/socialPerformanceSyncService.js';
+import {assertManagerOrganicPosting} from '../services/managerOrganicPermissionService.js';
+import {managerCustomerCommand} from '../services/managerCustomerBridgeService.js';
+import {withEcosystemLock} from '../services/ecosystemLock.js';
 
 const router = express.Router();
 
@@ -55,6 +59,78 @@ router.get('/', async (req, res) => {
     .filter((item) => item.kind === 'auto_post_plan')
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json({ plans });
+});
+
+// Premium organic automation. A customer must select owned source media, approved
+// destinations and a reviewed Manager proposal. The scheduler revalidates
+// subscription and platform scope at each run. No paid advertisements.
+router.post('/manager-start', async (req, res, next) => {
+  try {
+    const owner=ownerId(req);
+    const input=req.body||{};
+    if(input.managerPublishingConsent!==true||input.contentRightsConfirmed!==true
+      ||input.acknowledgeAutomatedPublishing!==true
+      ||typeof input.campaignProposalId!=='string'||!/^[a-f0-9-]{36}$/i.test(input.campaignProposalId)){
+      return res.status(400).json({error:'Confirm the approved campaign, media rights and automatic organic publishing permissions.'});
+    }
+    const requestId=String(req.headers['idempotency-key']||'');
+    if(!/^[a-zA-Z0-9_-]{16,120}$/.test(requestId))return res.status(400).json({error:'A unique request ID is required.'});
+    const normalized=autoPostingService.normalizePlan({
+      ...input,enabled:true,startImmediately:false,
+      publishingSettings:{},aiOptimizationEnabled:input.aiOptimizationEnabled===true,
+    });
+    if(!normalized.sourceAssetIds.length||!normalized.platformIds.length)return res.status(400).json({error:'Choose your media and at least one approved social platform.'});
+    if(normalized.postsPerPeriod>({daily:2,weekly:7,monthly:20}[normalized.cadence]))return res.status(400).json({error:'This automated cadence exceeds the current safe per-period limit.'});
+    await assertManagerOrganicPosting({userId:owner,platformIds:normalized.platformIds,requiredMode:'full'});
+    const proposals=await managerCustomerCommand({userId:owner,operation:'campaign.list',payload:{}});
+    const proposal=Array.isArray(proposals)&&proposals.find(p=>p.id===input.campaignProposalId&&p.status==='approved_for_production');
+    if(!proposal || normalized.platformIds.some(id=>!proposal.platforms?.includes(id)))return res.status(403).json({error:'A customer-approved Manager proposal is required for these platforms.'});
+    normalized.name=String(proposal.title||'Approved customer marketing plan').slice(0,120);
+    normalized.campaignBrief=[proposal.objective,proposal.offer,proposal.targetAudience].filter(Boolean).join(' | ').slice(0,3000);
+    const content=await store.getContentByOwner(owner);
+    const assets=content.filter(x=>x.owner===owner&&x.kind==='media_asset'&&normalized.sourceAssetIds.includes(String(x.id)));
+    if(assets.length!==normalized.sourceAssetIds.length)return res.status(404).json({error:'Some selected source media is missing or not owned by your account.'});
+    const platforms=await validatePlatforms(owner,normalized.platformIds);
+    if(platforms.unavailable.length)return res.status(409).json({error:'Connect each selected social account before starting.',unavailable:platforms.unavailable});
+    const fingerprint=createHash('sha256').update(JSON.stringify({
+      proposalId:proposal.id,assets:[...normalized.sourceAssetIds].sort(),platforms:[...normalized.platformIds].sort(),
+      cadence:normalized.cadence,postsPerPeriod:normalized.postsPerPeriod,timezone:normalized.timezone,
+    })).digest('hex');
+    const result=await withEcosystemLock('manager-organic:'+owner+':'+requestId,async()=>{
+      const found=(await store.getContentByOwner(owner)).find(x=>x.kind==='auto_post_plan'&&x.managerRequestId===requestId);
+      if(found){
+        if(found.managerRequestFingerprint!==fingerprint){
+          const error=new Error('The request ID was already used with different publishing settings.');
+          error.status=409;throw error;
+        }
+        return {plan:found,created:false};
+      }
+      const active=(await store.getContentByOwner(owner)).find(x=>x.kind==='auto_post_plan'
+        && x.requiresManagerEntitlement===true && x.managerProposalId===proposal.id && x.enabled===true);
+      if(active){
+        const error=new Error('An active Manager posting schedule already exists for this campaign proposal.');
+        error.status=409;throw error;
+      }
+      // Re-check at the persistence boundary. Approval may have been revoked
+      // while the media or platform connections were checked.
+      await assertManagerOrganicPosting({userId:owner,platformIds:normalized.platformIds,requiredMode:'full'});
+      const now=Date.now();
+      const plan=await store.createContent({
+        kind:'auto_post_plan',owner,...normalized,
+        source:'trillionai_manager_customer',
+        requiresManagerEntitlement:true,
+        managerProposalId:proposal.id,
+        managerRequestId:requestId,
+        managerRequestFingerprint:fingerprint,
+        managerPublishingConsentAt:new Date(now).toISOString(),
+        status:'running',completedPosts:0,rotationIndex:0,
+        nextRunAt:autoPostingService.nextRunAt(normalized,now),
+        recentRuns:[],createdAt:new Date(now).toISOString(),updatedAt:new Date(now).toISOString(),
+      });
+      return {plan,created:true};
+    });
+    return res.status(result.created?201:200).json({...result,paidAdvertisingAuthorized:false,requiresManagerEntitlement:true});
+  } catch(error){next(error)}
 });
 
 router.post('/', async (req, res) => {

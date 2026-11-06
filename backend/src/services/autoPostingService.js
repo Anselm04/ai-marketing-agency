@@ -10,6 +10,7 @@ import { releaseQuotaReservation, settleUsageReservation } from './quotaReservat
 import { logger } from '../utils/logger.js';
 import autoPostingAnalyticsService from './autoPostingAnalyticsService.js';
 import socialPerformanceSyncService from './socialPerformanceSyncService.js';
+import {assertManagerOrganicPosting} from './managerOrganicPermissionService.js';
 
 const CADENCE_LIMITS = { daily: 12, weekly: 50, monthly: 120 };
 const PERIOD_MS = {
@@ -172,6 +173,7 @@ class AutoPostingService {
 
   async runPlan(plan) {
     if (!plan || !plan.enabled) throw new Error('Auto-posting plan is disabled');
+    if (plan.requiresManagerEntitlement === true) await assertManagerOrganicPosting({userId:plan.owner,platformIds:plan.platformIds,requiredMode:'full'});
     if (!plan.sourceAssetIds || !plan.sourceAssetIds.length) throw new Error('Auto-posting plan has no selected source media');
     if (!plan.platformIds || !plan.platformIds.length) throw new Error('Auto-posting plan has no selected platforms');
 
@@ -221,6 +223,8 @@ class AutoPostingService {
         createdAt: generatedVideo.generatedAt,
       });
 
+      // Verify immediately before the irreversible external publication too.
+      if (plan.requiresManagerEntitlement === true) await assertManagerOrganicPosting({userId:plan.owner,platformIds:plan.platformIds,requiredMode:'full'});
       const results = await userVideoPublisherService.publishMany({
         userId: plan.owner,
         platformIds: plan.platformIds,
@@ -325,6 +329,7 @@ class AutoPostingService {
       if (this.inFlight.has(plan.id)) continue;
       this.inFlight.add(plan.id);
       try {
+        if (plan.requiresManagerEntitlement === true) await assertManagerOrganicPosting({userId:plan.owner,platformIds:plan.platformIds,requiredMode:'full'});
         const lastMetricsSync = plan.lastMetricsSyncAt ? new Date(plan.lastMetricsSyncAt).getTime() : 0;
         if (plan.aiOptimizationEnabled !== false && now - lastMetricsSync >= 6 * 60 * 60 * 1000) {
           const sync = await socialPerformanceSyncService.syncPlan(plan);
@@ -350,11 +355,13 @@ class AutoPostingService {
         });
         await this.runPlan(plan);
       } catch (error) {
+        const revoked=plan.requiresManagerEntitlement===true && error.message==='manager_publishing_not_authorized';
         await store.updateContent(plan.id, {
-          status: 'attention_required',
+          ...(revoked ? {enabled:false} : {}),
+          status: revoked ? 'paused_permission_revoked' : 'attention_required',
           lastError: error.message,
           lastErrorAt: new Date().toISOString(),
-          nextRunAt: this.nextRunAt(plan, now),
+          nextRunAt: revoked ? null : this.nextRunAt(plan, now),
           updatedAt: new Date().toISOString(),
         });
         logger.error('Auto-posting plan failed', { planId: plan.id, error: error.message });
