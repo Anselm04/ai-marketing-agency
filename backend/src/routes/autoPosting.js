@@ -105,6 +105,12 @@ router.post('/manager-start', async (req, res, next) => {
         }
         return {plan:found,created:false};
       }
+      const active=(await store.getContentByOwner(owner)).find(x=>x.kind==='auto_post_plan'
+        && x.requiresManagerEntitlement===true && x.managerProposalId===proposal.id && x.enabled===true);
+      if(active){
+        const error=new Error('An active Manager posting schedule already exists for this campaign proposal.');
+        error.status=409;throw error;
+      }
       // Re-check at the persistence boundary. Approval may have been revoked
       // while the media or platform connections were checked.
       await assertManagerOrganicPosting({userId:owner,platformIds:normalized.platformIds,requiredMode:'full'});
