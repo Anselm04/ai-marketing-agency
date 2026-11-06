@@ -75,7 +75,7 @@ router.post('/manager-start', async (req, res, next) => {
     const requestId=String(req.headers['idempotency-key']||'');
     if(!/^[a-zA-Z0-9_-]{16,120}$/.test(requestId))return res.status(400).json({error:'A unique request ID is required.'});
     const normalized=autoPostingService.normalizePlan({
-      ...input,enabled:true,startImmediately:input.startImmediately===true,
+      ...input,enabled:true,startImmediately:false,
       publishingSettings:{},aiOptimizationEnabled:input.aiOptimizationEnabled===true,
     });
     if(!normalized.sourceAssetIds.length||!normalized.platformIds.length)return res.status(400).json({error:'Choose your media and at least one approved social platform.'});
