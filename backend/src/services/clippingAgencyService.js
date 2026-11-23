@@ -1,5 +1,6 @@
 import { generateAgentResponse } from './openaiService.js';
 import userVideoPublisherService from './userVideoPublisherService.js';
+import { annotateClipEvidence } from './clipEvidence.js';
 
 const DEFAULT_PLATFORMS = ['TikTok', 'Instagram', 'YouTube'];
 const MIN_VERIFIED_OBSERVATIONS = 3;
@@ -157,7 +158,11 @@ class ClippingAgencyService {
       throw clippingError('The AI provider returned an invalid or empty clip plan. No generic clip plan was substituted.');
     }
 
-    const clips = rawClips.map((clip, index) => normalizeClip(clip, index, platforms, input.sourceDurationSeconds));
+    const clips = annotateClipEvidence(
+      rawClips.map((clip, index) => normalizeClip(clip, index, platforms, input.sourceDurationSeconds)),
+      input.transcript,
+      { sourceDurationSeconds: input.sourceDurationSeconds },
+    );
     return { generatedAt: new Date().toISOString(), aiFallback: false, platforms, clips };
   }
 
