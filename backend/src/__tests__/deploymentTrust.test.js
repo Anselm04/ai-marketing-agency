@@ -9,7 +9,7 @@ const workflow = fs.readFileSync(
 describe('production deployment trust and billing hold', () => {
   test('deployment remains disabled under the owner-approved production hold', () => {
     // Require a real job-level condition, not a commented-out historical expression.
-    expect(workflow).toMatch(/^  deploy:\s*\n(?:    #[^\n]*\n)*    if: \$\{\{ false \}\}$/m);
+    expect(workflow).toMatch(/^ {2}deploy:\s*\n(?: {4}#[^\n]*\n)* {4}if: \$\{\{ false \}\}$/m);
   });
 
   test('the workflow cannot deploy unless explicitly changed and reviewed', () => {
