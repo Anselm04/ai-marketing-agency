@@ -134,10 +134,33 @@ class ClippingAutomationService {
             continue;
           }
 
+          // Refresh authorisation immediately before an external side effect.
+          // A consent or rights revocation during transcription/rendering must win.
+          const currentCampaign = (await store.getCampaigns()).find(
+            (candidate) => String(candidate.id) === String(campaign.id),
+          );
+          if (!currentCampaign) {
+            throw Object.assign(new Error('Campaign no longer exists'), { code: 'CAMPAIGN_NOT_FOUND' });
+          }
+          assertRunnable(currentCampaign);
+          if (currentCampaign.status !== 'running') {
+            throw Object.assign(new Error('Campaign is no longer running'), { code: 'CAMPAIGN_NOT_RUNNING' });
+          }
+          if (currentCampaign.autonomous?.humanApprovalRequiredBeforeFirstPublish === true) {
+            throw Object.assign(new Error('Publication approval is required'), { code: 'PUBLISH_APPROVAL_REQUIRED' });
+          }
+          // A clip already handed to a provider must be independently reconciled,
+          // not posted again on stale campaign state.
+          const latestClip = currentCampaign.clipPlan?.clips?.find(
+            (candidate) => String(candidate.id) === String(clip.id),
+          );
+          if (latestClip && ['submitted', 'publishing', 'published'].includes(latestClip.status)) {
+            throw Object.assign(new Error('Publish attempt requires independent reconciliation'), { code: 'PUBLISH_RECONCILIATION_REQUIRED' });
+          }
           const results = await clippingAgencyService.publishClip(
-            campaignOwnerId(campaign),
+            campaignOwnerId(currentCampaign),
             clip,
-            campaign.publishingSettings || {},
+            currentCampaign.publishingSettings || {},
           );
           const accepted = results.some((result) => result?.success === true);
           const confirmedPublished = results.some(
